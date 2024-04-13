@@ -1,0 +1,32 @@
+import { Schema, Context, type, ArraySchema } from "@colyseus/schema";
+
+class Player extends Schema {
+  @type("number") playerId: number;
+  @type("string") name: string;
+  @type("number") hp: number;
+  @type("number") attack: number;
+  @type("number") gold: number;
+  @type("number") xp: number;
+  @type("number") level: number;
+  @type("string") sessionId: string;
+  @type("number") defense: number;
+  @type("number") attackSpeed: number;
+}
+
+class Item extends Schema {
+  @type("number") itemId: number;
+  @type("string") name: string;
+  @type("string") description: string;
+  @type("number") price: number;
+  @type("string") affectedStat: string;
+  @type("number") affectedValue: number;
+}
+
+
+
+export class DraftState extends Schema {
+  @type(Player) player: Player;
+  @type([Item]) shop: ArraySchema<Item> = new ArraySchema<Item>();
+}
+
+
