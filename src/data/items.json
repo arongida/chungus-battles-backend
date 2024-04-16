@@ -4,7 +4,7 @@
     "name": "sword",
     "description": "Adds 2 damage",
     "price": 5,
-    "affectedStat": "damage",
+    "affectedStat": "attack",
     "affectedValue": 2
   },
   {
@@ -20,7 +20,7 @@
     "name": "armor",
     "description": "Increases defense by 2",
     "price": 5,
-    "affectedStat": "armor",
+    "affectedStat": "defense",
     "affectedValue": 2
   }
 ]

@@ -19,9 +19,8 @@ export class DraftRoom extends Room<DraftState> {
   onCreate(options: any) {
     this.setState(new DraftState());
 
-    this.onMessage("die", (client, message) => {
-      this.state.player.hp = 0;
-      console.log("die", this.state.player.hp);
+    this.onMessage("buy", (client, message) => {
+      this.buyItem(message.itemId, client);
     });
 
     this.onMessage("live", (client, message) => {
@@ -110,6 +109,20 @@ export class DraftRoom extends Room<DraftState> {
     for (let i = 0; i < newShopSize; i++) {
       console.log("item: ", this.items[i]);
       this.state.shop.push(new Item(this.items[i]))
+    }
+  }
+
+  private buyItem(itemId: number, client: Client) {
+    const item = this.state.shop.find((item) => item.itemId === itemId);
+    if (this.state.player.gold < item.price) {
+      this.send(client, "error", "Not enough gold!");
+      return;
+    }
+    if (item) {
+      this.state.player.gold -= item.price;
+
+      (this.state.player as any)[item.affectedStat] += item.affectedValue;
+      this.state.shop = this.state.shop.filter((item) => item.itemId !== itemId);
     }
   }
 }
