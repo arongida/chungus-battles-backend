@@ -13,7 +13,7 @@ export class Player extends Schema {
   @type("number") attackSpeed: number;
 }
 
-class Item extends Schema {
+export class Item extends Schema {
   @type("number") itemId: number;
   @type("string") name: string;
   @type("string") description: string;
@@ -27,6 +27,8 @@ class Item extends Schema {
 export class DraftState extends Schema {
   @type(Player) player: Player = new Player();
   @type([Item]) shop: ArraySchema<Item> = new ArraySchema<Item>();
+  @type("number") shopSize: number = 3;
 }
+
 
 

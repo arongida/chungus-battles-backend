@@ -1,7 +1,8 @@
 import { Room, Client } from "@colyseus/core";
-import { DraftState, Player } from "./schema/DraftState";
+import { DraftState, Player, Item } from "./schema/DraftState";
 import playersJson from "../data/players.json";
 import defaultPlayer from "../data/default-player.json";
+import itemsJson from "../data/items.json";
 import fs from 'fs';
 import path from 'path'
 // import { Player }  from "./schema/player";
@@ -10,6 +11,7 @@ export class DraftRoom extends Room<DraftState> {
 
   player: Player;
   players: Player[];
+  items: Item[];
 
 
   maxClients = 1;
@@ -34,24 +36,25 @@ export class DraftRoom extends Room<DraftState> {
 
   onJoin(client: Client, options: any) {
     console.log(client.sessionId, "joined!");
-    console.log("name", options.name);
-    console.log("player id", options.playerId);
+    console.log("name: ", options.name);
+    console.log("player id: ", options.playerId);
 
     if (!options.name) throw new Error("Name is required!");
     if (!options.playerId) throw new Error("Player ID is required!");
 
+    //read players from json and find player by playerId
     this.players = playersJson as Player[];
-    console.log("players", this.players);
-
     this.player = this.players.find((player) => player.playerId === options.playerId);
 
+    //if player already exists, check if player is already playing
     if (this.player) {
 
       if (this.player.sessionId !== "") throw new Error("Player already playing!");
       this.player.sessionId = client.sessionId;
-      
+
     } else {
 
+      //handle new player
       const newPlayer = defaultPlayer;
       defaultPlayer.playerId = options.playerId;
       defaultPlayer.name = options.name;
@@ -62,11 +65,12 @@ export class DraftRoom extends Room<DraftState> {
 
     //set room state from joined player
     this.state.player.assign(this.player);
+    this.updateShop(this.state.shopSize);
 
     //save player to json
     const dirPath = path.join(__dirname, '../data/players.json');
     fs.writeFileSync(dirPath, JSON.stringify(playersJson));
-    
+
   }
 
   onLeave(client: Client, consented: boolean) {
@@ -84,4 +88,12 @@ export class DraftRoom extends Room<DraftState> {
 
   // }
 
+  private updateShop(newShopSize: number) {
+    this.items = itemsJson as Item[];
+    console.log("items: ", this.items);
+    for (let i = 0; i < newShopSize; i++) {
+      console.log("item: ", this.items[i]);
+      this.state.shop.push(new Item(this.items[i]))
+    }
+  }
 }
