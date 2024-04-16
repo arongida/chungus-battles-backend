@@ -115,7 +115,7 @@ export class DraftRoom extends Room<DraftState> {
   private buyItem(itemId: number, client: Client) {
     const item = this.state.shop.find((item) => item.itemId === itemId);
     if (this.state.player.gold < item.price) {
-      this.send(client, "error", "Not enough gold!");
+      client.send("error", "Not enough gold!");
       return;
     }
     if (item) {

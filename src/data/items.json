@@ -2,7 +2,7 @@
   {
     "itemId": 1,
     "name": "sword",
-    "description": "Adds 2 damage",
+    "description": "Increases attack by 2",
     "price": 5,
     "affectedStat": "attack",
     "affectedValue": 2
