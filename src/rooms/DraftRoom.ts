@@ -29,6 +29,11 @@ export class DraftRoom extends Room<DraftState> {
       console.log("live", this.state.player.hp);
     });
 
+    this.onMessage("reconnect", (client, message) => {
+      this.state.player.hp = 40;
+      console.log("live", this.state.player.hp);
+    });
+
     //this.setSimulationInterval((deltaTime) => this.update(deltaTime));
 
 
@@ -73,11 +78,22 @@ export class DraftRoom extends Room<DraftState> {
 
   }
 
-  onLeave(client: Client, consented: boolean) {
-    this.player.sessionId = "";
-    console.log(client.sessionId, "left!");
-    const dirPath = path.join(__dirname, '../data/players.json');
-    fs.writeFileSync(dirPath, JSON.stringify(playersJson));
+  async onLeave(client: Client, consented: boolean) {
+    try {
+      if (consented) {
+        throw new Error("consented leave");
+      }
+
+      // allow disconnected client to reconnect into this room until 20 seconds
+      await this.allowReconnection(client, 20);
+      console.log("client reconnected!");
+
+    } catch (e) {
+      this.player.sessionId = "";
+      console.log(client.sessionId, "left!");
+      const dirPath = path.join(__dirname, '../data/players.json');
+      fs.writeFileSync(dirPath, JSON.stringify(playersJson));
+    }
   }
 
   onDispose() {
