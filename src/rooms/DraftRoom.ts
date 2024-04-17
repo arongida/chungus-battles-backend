@@ -23,14 +23,9 @@ export class DraftRoom extends Room<DraftState> {
       this.buyItem(message.itemId, client);
     });
 
-    this.onMessage("live", (client, message) => {
-      this.state.player.hp = 10;
-      console.log("live", this.state.player.hp);
-    });
-
-    this.onMessage("reconnect", (client, message) => {
-      this.state.player.hp = 40;
-      console.log("live", this.state.player.hp);
+    this.onMessage("buyXp", (client, message) => {
+      this.buyXp(4, 4, client);
+    
     });
 
     //this.setSimulationInterval((deltaTime) => this.update(deltaTime));
@@ -123,6 +118,26 @@ export class DraftRoom extends Room<DraftState> {
 
       (this.state.player as any)[item.affectedStat] += item.affectedValue;
       this.state.shop = this.state.shop.filter((item) => item.itemId !== itemId);
+    }
+  }
+
+  private buyXp(xp: number, price: number, client: Client) {
+    if (this.state.player.gold < price) {
+      client.send("error", "Not enough gold!");
+      return;
+    }
+    this.state.player.gold -= price;
+    this.state.player.xp += xp;
+    console.log("xp: ", this.state.player.xp);
+    this.checkLevelUp();
+  }
+
+  private checkLevelUp() {
+    if (this.state.player.xp >= this.state.player.maxXp) {
+      this.state.player.level++;
+      this.state.player.maxXp += this.state.player.level * 2;
+      this.state.player.xp = 0;
+      console.log("Level up!");
     }
   }
 }

@@ -11,6 +11,7 @@ export class Player extends Schema {
   @type("string") sessionId: string;
   @type("number") defense: number;
   @type("number") attackSpeed: number;
+  @type("number") maxXp: number;
 }
 
 export class Item extends Schema {
