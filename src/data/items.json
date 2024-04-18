@@ -22,5 +22,29 @@
     "price": 5,
     "affectedStat": "defense",
     "affectedValue": 2
+  },
+  {
+    "itemId": 4,
+    "name": "big sword",
+    "description": "Increases attack by 4",
+    "price": 10,
+    "affectedStat": "attack",
+    "affectedValue": 4
+  },
+  {
+    "itemId": 5,
+    "name": "big dagger",
+    "description": "Increases attack speed by 0.4",
+    "price": 10,
+    "affectedStat": "attackSpeed",
+    "affectedValue": 0.4
+  },
+  {
+    "itemId": 6,
+    "name": "armor",
+    "description": "Increases defense by 4",
+    "price": 10,
+    "affectedStat": "defense",
+    "affectedValue": 4
   }
 ]
