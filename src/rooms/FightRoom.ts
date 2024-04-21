@@ -1,5 +1,6 @@
 import { Room, Client } from "@colyseus/core";
-import { FightState, Player } from "./schema/FightState";
+import { FightState } from "./schema/FightState";
+import { Player } from "./schema/PlayerSchema";
 
 export class FightRoom extends Room<FightState> {
   maxClients = 1;

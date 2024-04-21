@@ -1,5 +1,6 @@
 import { Room, Client } from "@colyseus/core";
-import { DraftState, Player, Item } from "./schema/DraftState";
+import { DraftState, Item } from "./schema/DraftState";
+import { Player } from "./schema/PlayerSchema";
 import playersJson from "../data/players.json";
 import defaultPlayer from "../data/default-player.json";
 import itemsJson from "../data/items.json";
