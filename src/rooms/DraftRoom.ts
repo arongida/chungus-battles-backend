@@ -25,7 +25,7 @@ export class DraftRoom extends Room<DraftState> {
 
     this.onMessage("buyXp", (client, message) => {
       this.buyXp(4, 4, client);
-    
+
     });
 
     //this.setSimulationInterval((deltaTime) => this.update(deltaTime));
@@ -134,10 +134,19 @@ export class DraftRoom extends Room<DraftState> {
 
   private checkLevelUp() {
     if (this.state.player.xp >= this.state.player.maxXp) {
-      this.state.player.level++;
-      this.state.player.maxXp += this.state.player.level * 2;
-      this.state.player.xp = 0;
-      console.log("Level up!");
+      this.levelUp(this.state.player.xp - this.state.player.maxXp);
     }
+  }
+
+  private levelUp(leftoverXp: number = 0) {
+    this.state.player.level++;
+    this.state.player.maxXp += this.state.player.level * 2;
+    this.state.player.xp = leftoverXp;
+
+    this.state.player.hp += 10;
+    this.state.player.attack += 1;
+    this.state.player.defense += 1;
+    this.state.player.attackSpeed += 0.1;
+    console.log("Level up!");
   }
 }
