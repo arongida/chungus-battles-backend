@@ -1,8 +1,11 @@
 import { Room, Client } from "@colyseus/core";
-import { FightState } from "./schema/FightState";
+import { FightState, Player } from "./schema/FightState";
 
 export class FightRoom extends Room<FightState> {
-  maxClients = 2;
+  maxClients = 1;
+  player: Player;
+  players: Player[];
+
 
   onCreate (options: any) {
     this.setState(new FightState());
@@ -19,11 +22,43 @@ export class FightRoom extends Room<FightState> {
     console.log("name", options.name);
     console.log("player id", options.playerId);
 
+    if (!options.playerId) throw new Error("Player ID is required!");
+
+    //TODO: read players from json and find player by playerId
+    //read players from json and find player by playerId
+    //this.players = playersJson as Player[];
+    this.player = this.players.find((player) => player.playerId === options.playerId);
+
+    //if player already exists, check if player is already playing
+    if (this.player) {
+
+      if (this.player.sessionId !== "") throw new Error("Player already playing!");
+      this.player.sessionId = client.sessionId;
+
+    } else {
+
+      
+    }
+
+    //set room state from joined player
+    this.state.player.assign(this.player);
+
 
   }
 
-  onLeave (client: Client, consented: boolean) {
-    console.log(client.sessionId, "left!");
+  async onLeave(client: Client, consented: boolean) {
+    try {
+      if (consented) {
+        throw new Error("consented leave");
+      }
+
+      // allow disconnected client to reconnect into this room until 20 seconds
+      await this.allowReconnection(client, 20);
+      console.log("client reconnected!");
+
+    } catch (e) {
+      console.log(client.sessionId, "left!");
+    }
   }
 
   onDispose() {

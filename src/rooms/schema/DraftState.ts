@@ -12,6 +12,7 @@ export class Player extends Schema {
   @type("number") defense: number;
   @type("number") attackSpeed: number;
   @type("number") maxXp: number;
+  @type("number") round: number;
 }
 
 export class Item extends Schema {
