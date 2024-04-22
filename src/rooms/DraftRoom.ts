@@ -1,19 +1,11 @@
 import { Room, Client } from "@colyseus/core";
-import { DraftState, Item } from "./schema/DraftState";
-import { Player } from "./schema/PlayerSchema";
-import playersJson from "../data/players.json";
-import defaultPlayer from "../data/default-player.json";
-import itemsJson from "../data/items.json";
-import fs from 'fs';
-import path from 'path'
-// import { Player }  from "./schema/player";
+import { DraftState } from "./schema/DraftState";
+import { Item } from "./schema/ItemSchema";
+import { createNewPlayer } from "../db/Player";
+import { getAllItems } from "../db/Item";
+import { getPlayer, updatePlayer } from "../db/Player";
 
 export class DraftRoom extends Room<DraftState> {
-
-  player: Player;
-  players: Player[];
-  items: Item[];
-
 
   maxClients = 1;
 
@@ -34,7 +26,7 @@ export class DraftRoom extends Room<DraftState> {
 
   }
 
-  onJoin(client: Client, options: any) {
+  async onJoin(client: Client, options: any) {
     console.log(client.sessionId, "joined!");
     console.log("name: ", options.name);
     console.log("player id: ", options.playerId);
@@ -42,35 +34,24 @@ export class DraftRoom extends Room<DraftState> {
     if (!options.name) throw new Error("Name is required!");
     if (!options.playerId) throw new Error("Player ID is required!");
 
-    //read players from json and find player by playerId
-    this.players = playersJson as Player[];
-    this.player = this.players.find((player) => player.playerId === options.playerId);
+
+    const findPlayer = await getPlayer(options.playerId);
+    console.log("findPlayer: ", findPlayer);
 
     //if player already exists, check if player is already playing
-    if (this.player) {
+    if (findPlayer) {
 
-      if (this.player.sessionId !== "") throw new Error("Player already playing!");
-      this.player.sessionId = client.sessionId;
-
+      if (findPlayer.sessionId !== "") throw new Error("Player already playing!");
+      this.state.player.assign(findPlayer);
+      this.state.player.sessionId = client.sessionId;
     } else {
 
-      //handle new player
-      const newPlayer = defaultPlayer;
-      defaultPlayer.playerId = options.playerId;
-      defaultPlayer.name = options.name;
-      defaultPlayer.sessionId = client.sessionId;
-      playersJson.push(newPlayer);
-      this.player = newPlayer as Player;
+      const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId);
+      this.state.player.assign(newPlayer);
     }
 
     //set room state from joined player
-    this.state.player.assign(this.player);
-    this.updateShop(this.state.shopSize);
-
-    //save player to json
-    const dirPath = path.join(__dirname, '../data/players.json');
-    fs.writeFileSync(dirPath, JSON.stringify(playersJson));
-
+    await this.updateShop(this.state.shopSize);
   }
 
   async onLeave(client: Client, consented: boolean) {
@@ -84,10 +65,12 @@ export class DraftRoom extends Room<DraftState> {
       console.log("client reconnected!");
 
     } catch (e) {
-      this.player.sessionId = "";
+
+      //save player state to db
+      this.state.player.sessionId = "";
+      const updatedPlayer = await updatePlayer(this.state.player);
+      console.log("updatedPlayer: ", updatedPlayer);
       console.log(client.sessionId, "left!");
-      const dirPath = path.join(__dirname, '../data/players.json');
-      fs.writeFileSync(dirPath, JSON.stringify(playersJson));
     }
   }
 
@@ -99,13 +82,14 @@ export class DraftRoom extends Room<DraftState> {
 
   // }
 
-  private updateShop(newShopSize: number) {
-    this.items = itemsJson as Item[];
-    console.log("items: ", this.items);
-    for (let i = 0; i < newShopSize; i++) {
-      console.log("item: ", this.items[i]);
-      this.state.shop.push(new Item(this.items[i]))
-    }
+  private async updateShop(newShopSize: number) {
+    const itemQueryResults = await getAllItems(newShopSize);
+    const items = itemQueryResults;
+    items.forEach((item) => {
+      const newItem = new Item();
+      newItem.assign(item);
+      this.state.shop.push(newItem);
+    });
   }
 
   private buyItem(itemId: number, client: Client) {

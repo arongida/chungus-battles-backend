@@ -1,11 +1,13 @@
 import { Room, Client } from "@colyseus/core";
 import { FightState } from "./schema/FightState";
 import { Player } from "./schema/PlayerSchema";
+import { MongoClient, ServerApiVersion } from 'mongodb';
 
 export class FightRoom extends Room<FightState> {
   maxClients = 1;
   player: Player;
   players: Player[];
+  //mongoClient: MongoClient;
 
 
   onCreate (options: any) {
@@ -20,7 +22,6 @@ export class FightRoom extends Room<FightState> {
 
   onJoin (client: Client, options: any) {
     console.log(client.sessionId, "joined!");
-    console.log("name", options.name);
     console.log("player id", options.playerId);
 
     if (!options.playerId) throw new Error("Player ID is required!");

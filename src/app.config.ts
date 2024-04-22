@@ -7,6 +7,7 @@ import { playground } from "@colyseus/playground";
  */
 import { FightRoom } from "./rooms/FightRoom";
 import { DraftRoom } from "./rooms/DraftRoom";
+import { getNextPlayerId } from "./db/Player";
 
 export default config({
 
@@ -24,8 +25,9 @@ export default config({
          * Bind your custom express routes here:
          * Read more: https://expressjs.com/en/starter/basic-routing.html
          */
-        app.get("/hello_world", (req, res) => {
-            res.send("It's time to kick ass and chew bubblegum!");
+        app.get("/playerid", async (req, res) => {
+            const playerId = await getNextPlayerId();
+            res.status(200).send({ playerId: playerId });
         });
 
         /**

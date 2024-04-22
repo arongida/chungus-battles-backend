@@ -9,6 +9,15 @@
  * See: https://docs.colyseus.io/server/api/#constructor-options
  */
 import { listen } from "@colyseus/tools";
+import mongoose from "mongoose";
+
+/**
+ * Connect to MongoDB
+ */
+
+mongoose.connect(process.env.DB_CONNECTION_STRING, {
+  autoIndex: true,
+});
 
 // Import Colyseus config
 import app from "./app.config";
