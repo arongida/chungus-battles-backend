@@ -51,3 +51,11 @@ export async function getNextPlayerId(): Promise<number> {
   const lastPlayer = await dbPlayerSchema.findOne().sort({ playerId: -1 }).limit(1).lean();
   return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
+
+export async function getSameRoundPlayer(round: number): Promise<Player> {
+  //const playerSchema = await dbPlayerSchema.find({ round: round }).lean().select({ _id: 0, __v: 0 });
+  const randomPlayerWithSameTurn = await dbPlayerSchema.aggregate([{ $match: { round: round } }, { $sample: { size: 1 } }]);
+  const enemyPlayerObject = randomPlayerWithSameTurn[0];
+  console.log("enemyPlayerObject", enemyPlayerObject);
+  return enemyPlayerObject as unknown as Player;
+}

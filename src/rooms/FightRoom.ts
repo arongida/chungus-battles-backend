@@ -1,7 +1,6 @@
 import { Room, Client } from "@colyseus/core";
 import { FightState } from "./schema/FightState";
-import { Player } from "./schema/PlayerSchema";
-import { getPlayer, updatePlayer } from "../db/Player";
+import { getPlayer, getSameRoundPlayer, updatePlayer } from "../db/Player";
 
 export class FightRoom extends Room<FightState> {
   maxClients = 1;
@@ -32,6 +31,8 @@ export class FightRoom extends Room<FightState> {
     if (this.state.player.sessionId !== "") throw new Error("Player already playing!");
     this.state.player.sessionId = client.sessionId;
 
+    //get enemy
+    await this.getRandomEnemy();
   }
 
   async onLeave(client: Client, consented: boolean) {
@@ -48,13 +49,18 @@ export class FightRoom extends Room<FightState> {
       //save player state to db
       this.state.player.sessionId = "";
       const updatedPlayer = await updatePlayer(this.state.player);
-      console.log("updatedPlayer: ", updatedPlayer);
       console.log(client.sessionId, "left!");
     }
   }
 
   onDispose() {
     console.log("room", this.roomId, "disposing...");
+  }
+
+  async getRandomEnemy() {
+    if (this.state.enemy.playerId) return;
+    const enemy = await getSameRoundPlayer(this.state.player.round);
+    this.state.enemy.assign(enemy);
   }
 
   // update(deltaTime) {

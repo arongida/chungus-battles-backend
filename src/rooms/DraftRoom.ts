@@ -9,7 +9,7 @@ export class DraftRoom extends Room<DraftState> {
 
   maxClients = 1;
 
-  onCreate(options: any) {
+  async onCreate(options: any) {
     this.setState(new DraftState());
 
     this.onMessage("buy", (client, message) => {
@@ -20,6 +20,9 @@ export class DraftRoom extends Room<DraftState> {
       this.buyXp(4, 4, client);
 
     });
+
+    //set room shop
+    await this.updateShop(this.state.shopSize);
 
     //this.setSimulationInterval((deltaTime) => this.update(deltaTime));
 
@@ -49,9 +52,6 @@ export class DraftRoom extends Room<DraftState> {
       const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId);
       this.state.player.assign(newPlayer);
     }
-
-    //set room state from joined player
-    await this.updateShop(this.state.shopSize);
   }
 
   async onLeave(client: Client, consented: boolean) {
@@ -69,7 +69,6 @@ export class DraftRoom extends Room<DraftState> {
       //save player state to db
       this.state.player.sessionId = "";
       const updatedPlayer = await updatePlayer(this.state.player);
-      console.log("updatedPlayer: ", updatedPlayer);
       console.log(client.sessionId, "left!");
     }
   }
