@@ -112,7 +112,6 @@ export class DraftRoom extends Room<DraftState> {
     }
     this.state.player.gold -= price;
     this.state.player.xp += xp;
-    console.log("xp: ", this.state.player.xp);
     this.checkLevelUp();
   }
 
@@ -131,6 +130,5 @@ export class DraftRoom extends Room<DraftState> {
     this.state.player.attack += 1;
     this.state.player.defense += 1;
     this.state.player.attackSpeed += 0.1;
-    console.log("Level up!");
   }
 }

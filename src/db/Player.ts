@@ -29,7 +29,7 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
     name: name,
     hp: 100,
     attack: 10,
-    gold: 10,
+    gold: 100,
     xp: 0,
     level: 1,
     sessionId: sessionId,
