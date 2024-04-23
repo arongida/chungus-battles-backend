@@ -10,10 +10,10 @@ const ItemSchema = new Schema({
   affectedValue: Number,
 });
 
-export const dbItemSchema = mongoose.model('Item', ItemSchema);
+export const itemModel = mongoose.model('Item', ItemSchema);
 
 
 export async function getAllItems(newShopSize: number): Promise<{}[]> {
-  const itemSchemaArray = await dbItemSchema.find().lean().limit(newShopSize).select({ _id: 0, __v: 0});
+  const itemSchemaArray = await itemModel.find().lean().limit(newShopSize).select({ _id: 0, __v: 0});
   return itemSchemaArray;
 }

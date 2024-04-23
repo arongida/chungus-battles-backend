@@ -16,10 +16,10 @@ const PlayerSchema = new Schema({
   round: Number,
 });
 
-export const dbPlayerSchema = mongoose.model('Player', PlayerSchema);
+export const playerModel = mongoose.model('Player', PlayerSchema);
 
 export async function getPlayer(playerId: number): Promise<Player> {
-  const playerSchema = await dbPlayerSchema.findOne({ playerId: playerId }).lean().select({ _id: 0, __v: 0 });
+  const playerSchema = await playerModel.findOne({ playerId: playerId }).lean().select({ _id: 0, __v: 0 });
   return playerSchema as unknown as Player;
 }
 
@@ -38,24 +38,23 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
     maxXp: 12,
     round: 1
   });
-  await dbPlayerSchema.create(newPlayer).catch((err) => console.error(err));
+  await playerModel.create(newPlayer).catch((err) => console.error(err));
   return newPlayer;
 }
 
 export async function updatePlayer(player: Player): Promise<Player> {
-  await dbPlayerSchema.updateOne({ playerId: player.playerId }, player).catch((err) => console.error(err));
+  await playerModel.updateOne({ playerId: player.playerId }, player).catch((err) => console.error(err));
   return player;
 }
 
 export async function getNextPlayerId(): Promise<number> {
-  const lastPlayer = await dbPlayerSchema.findOne().sort({ playerId: -1 }).limit(1).lean();
+  const lastPlayer = await playerModel.findOne().sort({ playerId: -1 }).limit(1).lean();
   return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
 
 export async function getSameRoundPlayer(round: number): Promise<Player> {
   //const playerSchema = await dbPlayerSchema.find({ round: round }).lean().select({ _id: 0, __v: 0 });
-  const randomPlayerWithSameTurn = await dbPlayerSchema.aggregate([{ $match: { round: round } }, { $sample: { size: 1 } }]);
+  const randomPlayerWithSameTurn = await playerModel.aggregate([{ $match: { round: round } }, { $sample: { size: 1 } }]);
   const enemyPlayerObject = randomPlayerWithSameTurn[0];
-  console.log("enemyPlayerObject", enemyPlayerObject);
   return enemyPlayerObject as unknown as Player;
 }
