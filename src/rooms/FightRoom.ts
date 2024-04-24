@@ -9,6 +9,7 @@ export class FightRoom extends Room<FightState> {
   battleStarted = false;
   playerAttackInterval: Delayed;
   enemyAttackInterval: Delayed;
+  playerMaxHp: number;
 
 
   onCreate(options: any) {
@@ -44,6 +45,10 @@ export class FightRoom extends Room<FightState> {
     //get enemy
     await this.getRandomEnemy();
 
+    //save original player hp
+    this.playerMaxHp = this.state.player.hp;
+
+    //start battle after 5 seconds
     this.clock.setTimeout(async () => {
       this.broadcast("combat_log", "The battle begins!");
       this.battleStarted = true;
@@ -86,19 +91,36 @@ export class FightRoom extends Room<FightState> {
     //check for battle end
     if (this.battleStarted) {
       if (this.state.player.hp <= 0 || this.state.enemy.hp <= 0) {
-        this.broadcast("combat_log", "The battle has ended!");
-        this.broadcast("combat_log", `${this.state.player.hp <= 0 ? this.state.enemy.name : this.state.player.name} wins!`);
 
         //set state and clear intervals
         this.battleStarted = false;
         this.playerAttackInterval.clear();
         this.enemyAttackInterval.clear();
+
+        this.broadcast("combat_log", "The battle has ended!");
+
+        const won = this.state.player.hp > 0 && this.state.enemy.hp <= 0;
+        this.handleReward(won);
+
+        this.broadcast("combat_log", `${!won ? "unlucky :(" : "GG EZ"} !`);
+
+
+
+        //reset player hp
+        this.state.player.hp = this.playerMaxHp;
+        this.state.player.round++;
+
+        //tell client to end battle
+        this.broadcast("combat_log", "The battle will end in 5 seconds...");
+        this.clock.setTimeout(() => {
+          this.broadcast("end_battle", "The battle has ended!");
+        }, 5000);
       }
     }
   }
 
   //start attack loop for player and enemy, they run at different intervals according to their attack speed
-  async startBattle(){
+  async startBattle() {
     this.playerAttackInterval = this.clock.setInterval(() => {
       this.attack(this.state.player, this.state.enemy);
     }, (1 / this.state.player.attackSpeed) * 1000);
@@ -114,4 +136,15 @@ export class FightRoom extends Room<FightState> {
     defender.hp -= damage;
     this.broadcast("combat_log", `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
   }
+
+  handleReward(won: boolean) {
+    if (won) {
+      this.state.player.gold += this.state.player.round * 4;
+      this.state.player.xp += this.state.player.round * 4;
+    } else {
+      this.state.player.gold += this.state.player.round * 2;
+      this.state.player.xp += this.state.player.round * 2;
+    }
+  }
+
 }

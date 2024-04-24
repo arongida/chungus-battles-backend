@@ -39,7 +39,6 @@ export class DraftRoom extends Room<DraftState> {
 
 
     const findPlayer = await getPlayer(options.playerId);
-    console.log("findPlayer: ", findPlayer);
 
     //if player already exists, check if player is already playing
     if (findPlayer) {
