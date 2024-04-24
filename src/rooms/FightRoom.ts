@@ -3,6 +3,7 @@ import { FightState } from "./schema/FightState";
 import { getPlayer, getSameRoundPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { Delayed } from "colyseus";
+import { delay, FightResultTypes } from "../utils/utils";
 
 export class FightRoom extends Room<FightState> {
   maxClients = 1;
@@ -10,7 +11,7 @@ export class FightRoom extends Room<FightState> {
   playerAttackInterval: Delayed;
   enemyAttackInterval: Delayed;
   playerMaxHp: number;
-
+  fightResult: FightResultTypes;
 
   onCreate(options: any) {
     this.setState(new FightState());
@@ -34,12 +35,14 @@ export class FightRoom extends Room<FightState> {
     if (!options.playerId) throw new Error("Player ID is required!");
 
     //get player from db
+    await delay(1000, this.clock);
     const player = await getPlayer(options.playerId);
     if (!player) throw new Error("Player not found!");
     this.state.player.assign(player);
 
     // check if player is already playing
     if (this.state.player.sessionId !== "") throw new Error("Player already playing!");
+    if (this.state.player.lives <= 0) throw new Error("Player has no lives left!");
     this.state.player.sessionId = client.sessionId;
 
     //get enemy
@@ -49,6 +52,7 @@ export class FightRoom extends Room<FightState> {
     this.playerMaxHp = this.state.player.hp;
 
     //start battle after 5 seconds
+    this.broadcast("combat_log", "The battle will begin in 5 seconds...");
     this.clock.setTimeout(async () => {
       this.broadcast("combat_log", "The battle begins!");
       this.battleStarted = true;
@@ -70,6 +74,9 @@ export class FightRoom extends Room<FightState> {
     } catch (e) {
       //save player state to db
       this.state.player.sessionId = "";
+      //set player for next round
+      this.state.player.hp = this.playerMaxHp;
+      this.state.player.round++;
       const updatedPlayer = await updatePlayer(this.state.player);
       console.log(client.sessionId, "left!");
     }
@@ -98,23 +105,8 @@ export class FightRoom extends Room<FightState> {
         this.enemyAttackInterval.clear();
 
         this.broadcast("combat_log", "The battle has ended!");
+        this.handleFightEnd();
 
-        const won = this.state.player.hp > 0 && this.state.enemy.hp <= 0;
-        this.handleReward(won);
-
-        this.broadcast("combat_log", `${!won ? "unlucky :(" : "GG EZ"} !`);
-
-
-
-        //reset player hp
-        this.state.player.hp = this.playerMaxHp;
-        this.state.player.round++;
-
-        //tell client to end battle
-        this.broadcast("combat_log", "The battle will end in 5 seconds...");
-        this.clock.setTimeout(() => {
-          this.broadcast("end_battle", "The battle has ended!");
-        }, 5000);
       }
     }
   }
@@ -137,14 +129,58 @@ export class FightRoom extends Room<FightState> {
     this.broadcast("combat_log", `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
   }
 
-  handleReward(won: boolean) {
-    if (won) {
-      this.state.player.gold += this.state.player.round * 4;
-      this.state.player.xp += this.state.player.round * 4;
+  handleFightEnd() {
+    if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
+      this.broadcast("combat_log", "It's a draw!");
+      this.fightResult = FightResultTypes.DRAW;
+    } else if (this.state.player.hp <= 0) {
+      this.broadcast("combat_log", "YOU loose!");
+      this.fightResult = FightResultTypes.LOSE;
     } else {
-      this.state.player.gold += this.state.player.round * 2;
-      this.state.player.xp += this.state.player.round * 2;
+      this.broadcast("combat_log", "YOU win!");
+      this.fightResult = FightResultTypes.WIN;
+    }
+
+    switch (this.fightResult) {
+      case FightResultTypes.WIN:
+        this.handleWin();
+        break;
+      case FightResultTypes.LOSE:
+        this.handleLose();
+        break;
+      case FightResultTypes.DRAW:
+        this.handleDraw();
+        break;
     }
   }
 
+  handleWin() {
+    this.state.player.gold += this.state.player.round * 4;
+    this.state.player.xp += this.state.player.round * 4;
+    this.state.player.wins++;
+    this.broadcast("end_battle", "The battle has ended!");
+    if (this.state.player.wins >= 10) {
+      this.broadcast("game_over", "You have won the game!");
+    }
+  }
+
+  handleLose() {
+    this.state.player.gold += this.state.player.round * 2;
+    this.state.player.xp += this.state.player.round * 2;
+    this.state.player.lives--;
+    if (this.state.player.lives <= 0) {
+      this.broadcast("game_over", "You have lost the game!");
+    } else {
+      this.broadcast("end_battle", "The battle has ended!");
+    }
+  }
+
+  handleDraw() {
+    this.state.player.gold += this.state.player.round * 2;
+    this.state.player.xp += this.state.player.round * 2;
+    this.broadcast("end_battle", "The battle has ended!");
+
+  }
+
 }
+

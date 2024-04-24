@@ -14,6 +14,11 @@ const PlayerSchema = new Schema({
   attackSpeed: Number,
   maxXp: Number,
   round: Number,
+  lives: Number,
+  wins: Number,
+  talents: [{
+    type: Number
+  }]
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
@@ -36,13 +41,17 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
     defense: 0,
     attackSpeed: 1,
     maxXp: 12,
-    round: 1
+    round: 1,
+    lives: 3,
+    wins: 0,
+    talents: []
   });
   await playerModel.create(newPlayer).catch((err) => console.error(err));
   return newPlayer;
 }
 
 export async function updatePlayer(player: Player): Promise<Player> {
+  
   await playerModel.updateOne({ playerId: player.playerId }, player).catch((err) => console.error(err));
   return player;
 }
@@ -59,7 +68,7 @@ export async function getSameRoundPlayer(round: number): Promise<Player> {
   }
 
   const randomPlayerWithSameTurn = await playerModel.aggregate([{ $match: { round: round } }, { $sample: { size: 1 } }]);
-  const [ enemyPlayerObject ] = randomPlayerWithSameTurn;
+  const [enemyPlayerObject] = randomPlayerWithSameTurn;
   if (!enemyPlayerObject) {
     return await getSameRoundPlayer(round - 1);
   }

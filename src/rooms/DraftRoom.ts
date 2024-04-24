@@ -1,9 +1,13 @@
 import { Room, Client } from "@colyseus/core";
 import { DraftState } from "./schema/DraftState";
 import { Item } from "./schema/ItemSchema";
+import { Talent } from "./schema/TalentSchema";
 import { createNewPlayer } from "../db/Player";
 import { getAllItems } from "../db/Item";
 import { getPlayer, updatePlayer } from "../db/Player";
+import { Player } from "./schema/PlayerSchema";
+import { delay } from "../utils/utils";
+import { getTalents, seedTalents } from "../db/Talent";
 
 export class DraftRoom extends Room<DraftState> {
 
@@ -16,14 +20,18 @@ export class DraftRoom extends Room<DraftState> {
       this.buyItem(message.itemId, client);
     });
 
-    this.onMessage("buyXp", (client, message) => {
+    this.onMessage("buy_xp", (client, message) => {
       this.buyXp(4, 4, client);
 
     });
 
-    //set room shop
-    await this.updateShop(this.state.shopSize);
+    this.onMessage("select_talent", (client, message) => {
+      this.selectTalent(message.talentId);
+    });
 
+    //set room shop and talents
+    await this.updateShop(this.state.shopSize);
+    await this.updateTalents(2);
     //this.setSimulationInterval((deltaTime) => this.update(deltaTime));
 
 
@@ -38,14 +46,17 @@ export class DraftRoom extends Room<DraftState> {
     if (!options.playerId) throw new Error("Player ID is required!");
 
 
+    await delay(1000, this.clock);
     const findPlayer = await getPlayer(options.playerId);
 
     //if player already exists, check if player is already playing
     if (findPlayer) {
 
       if (findPlayer.sessionId !== "") throw new Error("Player already playing!");
+      if (findPlayer.lives <= 0) throw new Error("Player has no lives left!");
       this.state.player.assign(findPlayer);
       this.state.player.sessionId = client.sessionId;
+      this.checkLevelUp();
     } else {
 
       const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId);
@@ -67,6 +78,10 @@ export class DraftRoom extends Room<DraftState> {
 
       //save player state to db
       this.state.player.sessionId = "";
+      console.log("trying to convert");
+      const playerObject = this.state.player.toJSON();
+      playerObject.talents = [];
+      console.log(playerObject);
       const updatedPlayer = await updatePlayer(this.state.player);
       console.log(client.sessionId, "left!");
     }
@@ -90,6 +105,16 @@ export class DraftRoom extends Room<DraftState> {
     });
   }
 
+  private async updateTalents(newTalentSize: number) {
+    const talents = await getTalents(newTalentSize);
+    talents.forEach((talent) => {
+      const newTalent = new Talent();
+      newTalent.assign(talent);
+      this.state.availableTalents.push(newTalent);
+    });
+
+  }
+
   private buyItem(itemId: number, client: Client) {
     const item = this.state.shop.find((item) => item.itemId === itemId);
     if (this.state.player.gold < item.price) {
@@ -101,6 +126,15 @@ export class DraftRoom extends Room<DraftState> {
 
       (this.state.player as any)[item.affectedStat] += item.affectedValue;
       this.state.shop = this.state.shop.filter((item) => item.itemId !== itemId);
+    }
+  }
+
+  private selectTalent(talentId: number) {
+    const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
+
+    if (talent) {
+      this.state.player.talents.push(talent);
+      this.state.availableTalents.clear();
     }
   }
 
