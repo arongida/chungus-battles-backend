@@ -31,7 +31,7 @@ export class DraftRoom extends Room<DraftState> {
 
     //set room shop and talents
     await this.updateShop(this.state.shopSize);
-    await this.updateTalents(2);
+    
     //this.setSimulationInterval((deltaTime) => this.update(deltaTime));
 
 
@@ -56,12 +56,15 @@ export class DraftRoom extends Room<DraftState> {
       if (findPlayer.lives <= 0) throw new Error("Player has no lives left!");
       this.state.player.assign(findPlayer);
       this.state.player.sessionId = client.sessionId;
+      
       this.checkLevelUp();
     } else {
 
       const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId);
       this.state.player.assign(newPlayer);
     }
+
+    if (this.state.player.round === 1) await this.updateTalents(2);
   }
 
   async onLeave(client: Client, consented: boolean) {
@@ -78,10 +81,6 @@ export class DraftRoom extends Room<DraftState> {
 
       //save player state to db
       this.state.player.sessionId = "";
-      console.log("trying to convert");
-      const playerObject = this.state.player.toJSON();
-      playerObject.talents = [];
-      console.log(playerObject);
       const updatedPlayer = await updatePlayer(this.state.player);
       console.log(client.sessionId, "left!");
     }
@@ -133,7 +132,7 @@ export class DraftRoom extends Room<DraftState> {
     const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
 
     if (talent) {
-      this.state.player.talents.push(talent);
+      this.state.player.talentIds.push(talent.talentId);
       this.state.availableTalents.clear();
     }
   }
@@ -151,6 +150,7 @@ export class DraftRoom extends Room<DraftState> {
   private checkLevelUp() {
     if (this.state.player.xp >= this.state.player.maxXp) {
       this.levelUp(this.state.player.xp - this.state.player.maxXp);
+      this.updateTalents(2);
     }
   }
 
@@ -163,5 +163,6 @@ export class DraftRoom extends Room<DraftState> {
     this.state.player.attack += 1;
     this.state.player.defense += 1;
     this.state.player.attackSpeed += 0.1;
+
   }
 }

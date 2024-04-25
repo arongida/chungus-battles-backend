@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 
-const TalentSchema = new Schema({
+export const talentMongooseSchema = new Schema({
   talentId: Number,
   name: String,
   description: String,
@@ -9,7 +9,7 @@ const TalentSchema = new Schema({
   class: String
 });
 
-export const talentModel = mongoose.model('Talent', TalentSchema);
+export const talentModel = mongoose.model('Talent', talentMongooseSchema);
 
 export async function seedTalents(): Promise<void> {
 
@@ -35,6 +35,6 @@ export async function seedTalents(): Promise<void> {
 }
 
 export async function getTalents(selectionSize: number): Promise<{}[]> {
-  const talentSchemaArray = await talentModel.find().lean().limit(selectionSize).select({ _id: 0, __v: 0 });
+  const talentSchemaArray = await talentModel.find().lean().limit(selectionSize);
   return talentSchemaArray;
 }
