@@ -39,6 +39,7 @@ export class FightRoom extends Room<FightState> {
     const player = await getPlayer(options.playerId);
     if (!player) throw new Error("Player not found!");
     this.state.player.assign(player);
+    console.log("player", this.state.player.toJSON());
 
     // check if player is already playing
     if (this.state.player.sessionId !== "") throw new Error("Player already playing!");

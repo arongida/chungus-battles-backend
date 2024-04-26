@@ -1,5 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import { Player } from '../rooms/schema/PlayerSchema';
+import { getAllTalents } from './Talent';
+import { Talent } from '../rooms/schema/TalentSchema';
 
 const PlayerSchema = new Schema({
   playerId: Number,
@@ -16,14 +18,25 @@ const PlayerSchema = new Schema({
   round: Number,
   lives: Number,
   wins: Number,
-  talentIds: [Number]
+  talents: [Number]
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
 
-export async function getPlayer(playerId: number): Promise<Player> {
+export async function getPlayer(playerId: number): Promise<{}> {
   const playerSchema = await playerModel.findOne({ playerId: playerId }).lean().select({ _id: 0, __v: 0 });
-  return playerSchema as unknown as Player;
+  const talents = await getAllTalents() as unknown as Talent[];
+  
+  const returnedPlayerWithoutTalentObjects = playerSchema as unknown as Player;
+  
+  const filteredTalents =  talents.filter((talent) => playerSchema.talents.includes(talent.talentId));
+
+  console.log("filtered talents" , filteredTalents);
+  console.log("returned player" , returnedPlayerWithoutTalentObjects);
+
+  // returnedPlayerWithoutTalentObjects.talents = new ArraySchema<Talent>();
+
+  return { ...returnedPlayerWithoutTalentObjects, talents: filteredTalents };
 }
 
 export async function createNewPlayer(playerId: number, name: string, sessionId: string): Promise<Player> {
@@ -42,7 +55,7 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
     round: 1,
     lives: 3,
     wins: 0,
-    talentIds: []
+    talents: []
   });
   await newPlayer.save().catch((err) => console.error(err));
   return newPlayer.toObject() as unknown as Player;
@@ -50,7 +63,18 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
 
 export async function updatePlayer(player: Player): Promise<Player> {
   let playerObject = player.toJSON();
-  await playerModel.findOneAndUpdate({ playerId: player.playerId }, playerObject).catch((err) => console.error(err));
+  let newPlayerObject = {...playerObject, talents: [0]};
+  newPlayerObject = { ...playerObject, talents: [] };
+
+  const foundPlayerModel = await playerModel.findOne({ playerId: player.playerId });
+
+  foundPlayerModel.set(newPlayerObject);
+
+  playerObject.talents.forEach((talent) => {
+    foundPlayerModel.talents.push(talent.talentId);
+  });
+
+  await foundPlayerModel.save().catch((err) => console.error(err));
   return player;
 }
 

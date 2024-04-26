@@ -34,7 +34,12 @@ export async function seedTalents(): Promise<void> {
 
 }
 
-export async function getTalents(selectionSize: number): Promise<{}[]> {
+export async function getNumberOfTalents(selectionSize: number): Promise<{}[]> {
   const talentSchemaArray = await talentModel.find().lean().limit(selectionSize);
+  return talentSchemaArray;
+}
+
+export async function getAllTalents(): Promise<{}[]> {
+  const talentSchemaArray = await talentModel.find().lean();
   return talentSchemaArray;
 }

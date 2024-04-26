@@ -7,7 +7,7 @@ import { getAllItems } from "../db/Item";
 import { getPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { delay } from "../utils/utils";
-import { getTalents, seedTalents } from "../db/Talent";
+import { getNumberOfTalents, seedTalents } from "../db/Talent";
 
 export class DraftRoom extends Room<DraftState> {
 
@@ -52,8 +52,8 @@ export class DraftRoom extends Room<DraftState> {
     //if player already exists, check if player is already playing
     if (findPlayer) {
 
-      if (findPlayer.sessionId !== "") throw new Error("Player already playing!");
-      if (findPlayer.lives <= 0) throw new Error("Player has no lives left!");
+      // if (findPlayer.sessionId !== "") throw new Error("Player already playing!");
+      // if (findPlayer.lives <= 0) throw new Error("Player has no lives left!");
       this.state.player.assign(findPlayer);
       this.state.player.sessionId = client.sessionId;
       
@@ -105,7 +105,7 @@ export class DraftRoom extends Room<DraftState> {
   }
 
   private async updateTalents(newTalentSize: number) {
-    const talents = await getTalents(newTalentSize);
+    const talents = await getNumberOfTalents(newTalentSize);
     talents.forEach((talent) => {
       const newTalent = new Talent();
       newTalent.assign(talent);
@@ -132,7 +132,7 @@ export class DraftRoom extends Room<DraftState> {
     const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
 
     if (talent) {
-      this.state.player.talentIds.push(talent.talentId);
+      this.state.player.talents.push(talent);
       this.state.availableTalents.clear();
     }
   }
