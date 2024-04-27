@@ -13,7 +13,7 @@ const ItemSchema = new Schema({
 export const itemModel = mongoose.model('Item', ItemSchema);
 
 
-export async function getAllItems(newShopSize: number): Promise<{}[]> {
+export async function getNumberOfItems(newShopSize: number): Promise<{}[]> {
   const itemSchemaArray = await itemModel.find().lean().limit(newShopSize).select({ _id: 0, __v: 0});
   return itemSchemaArray;
 }

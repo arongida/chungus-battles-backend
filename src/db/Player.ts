@@ -23,20 +23,11 @@ const PlayerSchema = new Schema({
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
 
-export async function getPlayer(playerId: number): Promise<{}> {
+export async function getPlayer(playerId: number): Promise<Player> {
   const playerSchema = await playerModel.findOne({ playerId: playerId }).lean().select({ _id: 0, __v: 0 });
-  const talents = await getAllTalents() as unknown as Talent[];
-  
-  const returnedPlayerWithoutTalentObjects = playerSchema as unknown as Player;
-  
-  const filteredTalents =  talents.filter((talent) => playerSchema.talents.includes(talent.talentId));
 
-  console.log("filtered talents" , filteredTalents);
-  console.log("returned player" , returnedPlayerWithoutTalentObjects);
 
-  // returnedPlayerWithoutTalentObjects.talents = new ArraySchema<Talent>();
-
-  return { ...returnedPlayerWithoutTalentObjects, talents: filteredTalents };
+  return playerSchema as unknown as Player;
 }
 
 export async function createNewPlayer(playerId: number, name: string, sessionId: string): Promise<Player> {

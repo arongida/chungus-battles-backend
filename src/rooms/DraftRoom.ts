@@ -3,7 +3,7 @@ import { DraftState } from "./schema/DraftState";
 import { Item } from "./schema/ItemSchema";
 import { Talent } from "./schema/TalentSchema";
 import { createNewPlayer } from "../db/Player";
-import { getAllItems } from "../db/Item";
+import { getNumberOfItems } from "../db/Item";
 import { getPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { delay } from "../utils/utils";
@@ -95,7 +95,7 @@ export class DraftRoom extends Room<DraftState> {
   // }
 
   private async updateShop(newShopSize: number) {
-    const itemQueryResults = await getAllItems(newShopSize);
+    const itemQueryResults = await getNumberOfItems(newShopSize);
     const items = itemQueryResults;
     items.forEach((item) => {
       const newItem = new Item();

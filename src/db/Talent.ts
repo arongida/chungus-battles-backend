@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { Talent } from '../rooms/schema/TalentSchema';
 
 
 export const talentMongooseSchema = new Schema({
@@ -42,4 +43,9 @@ export async function getNumberOfTalents(selectionSize: number): Promise<{}[]> {
 export async function getAllTalents(): Promise<{}[]> {
   const talentSchemaArray = await talentModel.find().lean();
   return talentSchemaArray;
+}
+
+export async function getTalentsById(talentIds: number[]): Promise<{}[]> {
+  const talentSchema = await talentModel.find({ talentId: { $in: talentIds } }).lean().select({ _id: 0, __v: 0 });
+  return talentSchema;
 }

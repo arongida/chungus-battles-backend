@@ -4,6 +4,8 @@ import { getPlayer, getSameRoundPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { Delayed } from "colyseus";
 import { delay, FightResultTypes } from "../utils/utils";
+import { getTalentsById } from "../db/Talent";
+import { Talent } from "./schema/TalentSchema";
 
 export class FightRoom extends Room<FightState> {
   maxClients = 1;
@@ -38,8 +40,17 @@ export class FightRoom extends Room<FightState> {
     await delay(1000, this.clock);
     const player = await getPlayer(options.playerId);
     if (!player) throw new Error("Player not found!");
-    this.state.player.assign(player);
-    console.log("player", this.state.player.toJSON());
+    // this.state.player.assign(player);
+    // console.log("player", this.state.player.toJSON());
+
+    //get player talent info
+    // const talents = await getTalentsById(player.talents);
+    // console.log("talents: ", talents);
+    // talents.forEach((talent) => {
+    //   const newTalent = new Talent();
+    //   newTalent.assign(talent);
+    //   this.state.player.talents.push(newTalent);
+    // });
 
     // check if player is already playing
     if (this.state.player.sessionId !== "") throw new Error("Player already playing!");
