@@ -7,7 +7,7 @@ import { getNumberOfItems } from "../db/Item";
 import { getPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { delay } from "../utils/utils";
-import { getNumberOfTalents, seedTalents } from "../db/Talent";
+import { getNumberOfTalents, getTalentsById } from "../db/Talent";
 
 export class DraftRoom extends Room<DraftState> {
 
@@ -47,16 +47,18 @@ export class DraftRoom extends Room<DraftState> {
 
 
     await delay(1000, this.clock);
-    const findPlayer = await getPlayer(options.playerId);
+    const foundPlayer = await getPlayer(options.playerId);
 
     //if player already exists, check if player is already playing
-    if (findPlayer) {
+    if (foundPlayer) {
 
-      // if (findPlayer.sessionId !== "") throw new Error("Player already playing!");
-      // if (findPlayer.lives <= 0) throw new Error("Player has no lives left!");
-      this.state.player.assign(findPlayer);
+      if (foundPlayer.sessionId !== "") throw new Error("Player already playing!");
+      if (foundPlayer.lives <= 0) throw new Error("Player has no lives left!");
+
+      await this.setUpState(foundPlayer);
       this.state.player.sessionId = client.sessionId;
       
+      //check levelup after battle
       this.checkLevelUp();
     } else {
 
@@ -112,6 +114,19 @@ export class DraftRoom extends Room<DraftState> {
       this.state.availableTalents.push(newTalent);
     });
 
+  }
+
+  //get player, enemy and talents from db and map them to the room state
+  private async setUpState(player: Player) {
+    //get player talent info
+    const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
+    const newPlayer = new Player(player);
+
+    this.state.player.assign(newPlayer);
+    player.talents.forEach(talentId => {
+      const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
+      this.state.player.talents.push(newTalent);
+    });
   }
 
   private buyItem(itemId: number, client: Client) {

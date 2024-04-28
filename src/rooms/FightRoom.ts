@@ -38,30 +38,18 @@ export class FightRoom extends Room<FightState> {
 
     //get player from db
     await delay(1000, this.clock);
-    const player = await getPlayer(options.playerId);
+    let player = await getPlayer(options.playerId);
     if (!player) throw new Error("Player not found!");
-    // this.state.player.assign(player);
-    // console.log("player", this.state.player.toJSON());
 
-    //get player talent info
-    // const talents = await getTalentsById(player.talents);
-    // console.log("talents: ", talents);
-    // talents.forEach((talent) => {
-    //   const newTalent = new Talent();
-    //   newTalent.assign(talent);
-    //   this.state.player.talents.push(newTalent);
-    // });
+    //set up player state
+    await this.setUpState(player);
 
     // check if player is already playing
     if (this.state.player.sessionId !== "") throw new Error("Player already playing!");
     if (this.state.player.lives <= 0) throw new Error("Player has no lives left!");
     this.state.player.sessionId = client.sessionId;
 
-    //get enemy
-    await this.getRandomEnemy();
 
-    //save original player hp
-    this.playerMaxHp = this.state.player.hp;
 
     //start battle after 5 seconds
     this.broadcast("combat_log", "The battle will begin in 5 seconds...");
@@ -99,9 +87,7 @@ export class FightRoom extends Room<FightState> {
   }
 
   async getRandomEnemy() {
-    if (this.state.enemy.playerId) return;
-    const enemy = await getSameRoundPlayer(this.state.player.round);
-    this.state.enemy.assign(enemy);
+
   }
 
   //this is running all the time 
@@ -132,6 +118,34 @@ export class FightRoom extends Room<FightState> {
     this.enemyAttackInterval = this.clock.setInterval(() => {
       this.attack(this.state.enemy, this.state.player);
     }, (1 / this.state.enemy.attackSpeed) * 1000);
+  }
+
+  //get player, enemy and talents from db and map them to the room state
+  async setUpState(player: Player) {
+    const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
+    const newPlayer = new Player(player);
+
+    this.state.player.assign(newPlayer);
+
+    player.talents.forEach(talentId => {
+      const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
+      this.state.player.talents.push(newTalent);
+    });
+
+    //save original player hp
+    this.playerMaxHp = this.state.player.hp;
+
+    //if enemy state is already set, skip it
+    if (this.state.enemy.playerId) return;
+
+    let enemy = await getSameRoundPlayer(this.state.player.round);
+    const enemyTalents = await getTalentsById(enemy.talents as unknown as number[]) as Talent[];
+    const newEnemyObject = new Player(enemy);
+    this.state.enemy.assign(newEnemyObject);
+    enemy.talents.forEach(talentId => {
+      const newTalent = new Talent(enemyTalents.find(talent => talent.talentId === talentId as unknown as number));
+      this.state.enemy.talents.push(newTalent);
+    });
   }
 
 
