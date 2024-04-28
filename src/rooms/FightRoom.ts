@@ -10,9 +10,8 @@ import { Talent } from "./schema/TalentSchema";
 export class FightRoom extends Room<FightState> {
   maxClients = 1;
   battleStarted = false;
-  playerAttackInterval: Delayed;
-  enemyAttackInterval: Delayed;
-  playerMaxHp: number;
+  activatedTimers: Delayed[] = [];
+  playerInitialStats: { hp: number, attack: number, defense: number, attackSpeed: number };
   fightResult: FightResultTypes;
 
   onCreate(options: any) {
@@ -75,7 +74,8 @@ export class FightRoom extends Room<FightState> {
       //save player state to db
       this.state.player.sessionId = "";
       //set player for next round
-      this.state.player.hp = this.playerMaxHp;
+      this.state.player.hp = this.playerInitialStats.hp;
+      this.state.player.attack = this.playerInitialStats.attack;
       this.state.player.round++;
       const updatedPlayer = await updatePlayer(this.state.player);
       console.log(client.sessionId, "left!");
@@ -99,8 +99,8 @@ export class FightRoom extends Room<FightState> {
 
         //set state and clear intervals
         this.battleStarted = false;
-        this.playerAttackInterval.clear();
-        this.enemyAttackInterval.clear();
+
+        this.activatedTimers.forEach(timer => timer.clear());
 
         this.broadcast("combat_log", "The battle has ended!");
         this.handleFightEnd();
@@ -111,13 +111,45 @@ export class FightRoom extends Room<FightState> {
 
   //start attack loop for player and enemy, they run at different intervals according to their attack speed
   async startBattle() {
-    this.playerAttackInterval = this.clock.setInterval(() => {
-      this.attack(this.state.player, this.state.enemy);
-    }, (1 / this.state.player.attackSpeed) * 1000);
 
-    this.enemyAttackInterval = this.clock.setInterval(() => {
+    //start player attack loop
+    this.activatedTimers.push(this.clock.setInterval(() => {
+      this.attack(this.state.player, this.state.enemy);
+    }, (1 / this.state.player.attackSpeed) * 1000));
+
+    //start player skills loops
+    this.state.player.talents.forEach(talent => {
+      this.activatedTimers.push(this.clock.setInterval(() => {
+        if (talent.talentId === 1) {
+          this.state.player.hp -= 3;
+          this.state.player.attack += 1;
+          this.broadcast("combat_log", `${this.state.player.name} uses Rage!`);
+        } else if (talent.talentId === 2) {
+          this.state.player.gold += 1;
+          this.broadcast("combat_log", `${this.state.player.name} uses Greed!\nGold: ${this.state.player.gold}`);
+        }
+      }, (1 / 0.5) * 1000));
+    });
+
+
+    //start enemy attack loop
+    this.activatedTimers.push(this.clock.setInterval(() => {
       this.attack(this.state.enemy, this.state.player);
-    }, (1 / this.state.enemy.attackSpeed) * 1000);
+    }, (1 / this.state.enemy.attackSpeed) * 1000));
+
+    //start enemy skills loops
+    this.state.enemy.talents.forEach(talent => {
+      this.activatedTimers.push(this.clock.setInterval(() => {
+        if (talent.talentId === 1) {
+          this.state.enemy.hp -= 3;
+          this.state.enemy.attack += 1;
+          this.broadcast("combat_log", `${this.state.enemy.name} uses Rage!`);
+        } else if (talent.talentId === 2) {
+          this.state.player.gold -= 1;
+          this.broadcast("combat_log", `${this.state.enemy.name} uses Greed! (enemies decrease your gold)\nGold: ${this.state.player.gold}`);
+        }
+      }, (1 / 0.5) * 1000));
+    });
   }
 
   //get player, enemy and talents from db and map them to the room state
@@ -132,8 +164,8 @@ export class FightRoom extends Room<FightState> {
       this.state.player.talents.push(newTalent);
     });
 
-    //save original player hp
-    this.playerMaxHp = this.state.player.hp;
+    //save original player stats
+    this.playerInitialStats = { hp: this.state.player.hp, attack: this.state.player.attack, defense: this.state.player.defense, attackSpeed: this.state.player.attackSpeed };
 
     //if enemy state is already set, skip it
     if (this.state.enemy.playerId) return;
