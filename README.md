@@ -27,3 +27,7 @@ npm start
 ## License
 
 MIT
+
+## Items
+# types
+- rarity
