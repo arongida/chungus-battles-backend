@@ -40,8 +40,9 @@ export async function seedTalents(): Promise<void> {
 
 }
 
-export async function getNumberOfTalents(selectionSize: number): Promise<{}[]> {
-  const talentSchemaArray = await talentModel.find().lean().limit(selectionSize);
+export async function getRandomTalents(selectionSize: number, level: number): Promise<{}[]> {
+  // const talentSchemaArray = await talentModel.find().lean().limit(selectionSize);
+  const talentSchemaArray = await talentModel.aggregate([{ $match: { level: {$lte:level} } }, { $sample: { size: selectionSize } }]);
   return talentSchemaArray;
 }
 
