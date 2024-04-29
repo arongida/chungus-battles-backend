@@ -1,5 +1,4 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { Talent } from '../rooms/schema/TalentSchema';
 
 
 export const talentMongooseSchema = new Schema({
@@ -7,7 +6,9 @@ export const talentMongooseSchema = new Schema({
   name: String,
   description: String,
   levelRequirement: Number,
-  class: String
+  class: String,
+  level: Number,
+  activationRate: Number
 });
 
 export const talentModel = mongoose.model('Talent', talentMongooseSchema);
@@ -21,13 +22,17 @@ export async function seedTalents(): Promise<void> {
       description: 'Loose health to gain attack',
       levelRequirement: 1,
       class: 'Warrior',
+      level: 1,
+      activationRate: 0.5
     },
     {
       talentId: 2,
       name: 'Greed',
       description: 'Gain gold',
       levelRequirement: 1,
-      class: 'Merchant'
+      class: 'Merchant',
+      level: 1,
+      activationRate: 0.5
     }
   ];
 

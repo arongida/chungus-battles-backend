@@ -31,7 +31,7 @@ export class DraftRoom extends Room<DraftState> {
 
     //set room shop and talents
     await this.updateShop(this.state.shopSize);
-    
+
     //this.setSimulationInterval((deltaTime) => this.update(deltaTime));
 
 
@@ -57,7 +57,7 @@ export class DraftRoom extends Room<DraftState> {
 
       await this.setUpState(foundPlayer);
       this.state.player.sessionId = client.sessionId;
-      
+
       //check levelup after battle
       this.checkLevelUp();
     } else {
@@ -125,7 +125,10 @@ export class DraftRoom extends Room<DraftState> {
     this.state.player.assign(newPlayer);
     player.talents.forEach(talentId => {
       const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
-      this.state.player.talents.push(newTalent);
+      const findTalent = this.state.player.talents.find(talent => talent.talentId === newTalent.talentId);
+      if (findTalent) findTalent.level++;
+      else this.state.player.talents.push(newTalent);
+
     });
   }
 
@@ -147,7 +150,9 @@ export class DraftRoom extends Room<DraftState> {
     const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
 
     if (talent) {
-      this.state.player.talents.push(talent);
+      const foundTalent = this.state.player.talents.find((talent) => talent.talentId === talentId);
+      if (foundTalent) foundTalent.level++;
+      else this.state.player.talents.push(talent);
       this.state.availableTalents.clear();
     }
   }

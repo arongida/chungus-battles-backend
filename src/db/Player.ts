@@ -1,7 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import { Player } from '../rooms/schema/PlayerSchema';
-import { getAllTalents } from './Talent';
-import { Talent } from '../rooms/schema/TalentSchema';
 
 const PlayerSchema = new Schema({
   playerId: Number,
@@ -62,7 +60,9 @@ export async function updatePlayer(player: Player): Promise<Player> {
   foundPlayerModel.set(newPlayerObject);
 
   playerObject.talents.forEach((talent) => {
-    foundPlayerModel.talents.push(talent.talentId);
+    for (let i = 0; i < talent.level; i++) {
+      foundPlayerModel.talents.push(talent.talentId);
+    }
   });
 
   await foundPlayerModel.save().catch((err) => console.error(err));

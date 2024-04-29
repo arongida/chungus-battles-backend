@@ -121,14 +121,14 @@ export class FightRoom extends Room<FightState> {
     this.state.player.talents.forEach(talent => {
       this.activatedTimers.push(this.clock.setInterval(() => {
         if (talent.talentId === 1) {
-          this.state.player.hp -= 3;
-          this.state.player.attack += 1;
-          this.broadcast("combat_log", `${this.state.player.name} uses Rage!`);
+          this.state.player.hp -= 3 * talent.level;
+          this.state.player.attack += 1 * talent.level;
+          this.broadcast("combat_log", `${this.state.player.name} uses Rage (lv ${talent.level})!`);
         } else if (talent.talentId === 2) {
-          this.state.player.gold += 1;
-          this.broadcast("combat_log", `${this.state.player.name} uses Greed!\nGold: ${this.state.player.gold}`);
+          this.state.player.gold += 1 * talent.level;
+          this.broadcast("combat_log", `${this.state.player.name} uses Greed (lv ${talent.level})!\nGold: ${this.state.player.gold}`);
         }
-      }, (1 / 0.5) * 1000));
+      }, (1 / talent.activationRate) * 1000));
     });
 
 
@@ -141,14 +141,14 @@ export class FightRoom extends Room<FightState> {
     this.state.enemy.talents.forEach(talent => {
       this.activatedTimers.push(this.clock.setInterval(() => {
         if (talent.talentId === 1) {
-          this.state.enemy.hp -= 3;
-          this.state.enemy.attack += 1;
-          this.broadcast("combat_log", `${this.state.enemy.name} uses Rage!`);
+          this.state.enemy.hp -= 3 * talent.level;
+          this.state.enemy.attack += 1 * talent.level;
+          this.broadcast("combat_log", `${this.state.enemy.name} uses Rage (lv ${talent.level})!`);
         } else if (talent.talentId === 2) {
-          this.state.player.gold -= 1;
-          this.broadcast("combat_log", `${this.state.enemy.name} uses Greed! (enemies decrease your gold)\nGold: ${this.state.player.gold}`);
+          this.state.player.gold -= 1 * talent.level;
+          this.broadcast("combat_log", `${this.state.enemy.name} uses Greed (lv ${talent.level}) (enemies decrease your gold)\nGold: ${this.state.player.gold}`);
         }
-      }, (1 / 0.5) * 1000));
+      }, (1 / talent.activationRate) * 1000));
     });
   }
 
@@ -161,7 +161,9 @@ export class FightRoom extends Room<FightState> {
 
     player.talents.forEach(talentId => {
       const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
-      this.state.player.talents.push(newTalent);
+      const findTalent = this.state.player.talents.find(talent => talent.talentId === newTalent.talentId);
+      if (findTalent) findTalent.level++;
+      else this.state.player.talents.push(newTalent);
     });
 
     //save original player stats
@@ -176,7 +178,9 @@ export class FightRoom extends Room<FightState> {
     this.state.enemy.assign(newEnemyObject);
     enemy.talents.forEach(talentId => {
       const newTalent = new Talent(enemyTalents.find(talent => talent.talentId === talentId as unknown as number));
-      this.state.enemy.talents.push(newTalent);
+      const findTalent = this.state.enemy.talents.find(talent => talent.talentId === newTalent.talentId);
+      if (findTalent) findTalent.level++;
+      else this.state.enemy.talents.push(newTalent);
     });
   }
 
