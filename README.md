@@ -29,5 +29,5 @@ npm start
 MIT
 
 ## Items
-# types
-- rarity
+### types
+#### rarity
