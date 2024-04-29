@@ -7,7 +7,7 @@ export class DraftState extends Schema {
   @type(Player) player: Player = new Player();
   @type([Item]) shop: ArraySchema<Item> = new ArraySchema<Item>();
   @type([Talent]) availableTalents: ArraySchema<Talent> = new ArraySchema<Talent>();
-  @type("number") shopSize: number = 5;
+  @type("number") shopSize: number = 6;
 }
 
 

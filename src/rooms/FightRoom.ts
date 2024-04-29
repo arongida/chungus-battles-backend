@@ -109,7 +109,7 @@ export class FightRoom extends Room<FightState> {
     }
   }
 
-  //start attack loop for player and enemy, they run at different intervals according to their attack speed
+  //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
   async startBattle() {
 
     //start player attack loop

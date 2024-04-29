@@ -20,6 +20,10 @@ export class DraftRoom extends Room<DraftState> {
       this.buyItem(message.itemId, client);
     });
 
+    this.onMessage("refresh_shop", (client, message) => {
+      this.refreshShop(client);
+    });
+
     this.onMessage("buy_xp", (client, message) => {
       this.buyXp(4, 4, client);
 
@@ -29,8 +33,7 @@ export class DraftRoom extends Room<DraftState> {
       this.selectTalent(message.talentId);
     });
 
-    //set room shop and talents
-    await this.updateShop(this.state.shopSize);
+    
 
     //this.setSimulationInterval((deltaTime) => this.update(deltaTime));
 
@@ -66,7 +69,9 @@ export class DraftRoom extends Room<DraftState> {
       this.state.player.assign(newPlayer);
     }
 
+    //set room shop and talents
     if (this.state.player.round === 1) await this.updateTalents(2);
+    if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
   }
 
   async onLeave(client: Client, consented: boolean) {
@@ -97,7 +102,8 @@ export class DraftRoom extends Room<DraftState> {
   // }
 
   private async updateShop(newShopSize: number) {
-    const itemQueryResults = await getNumberOfItems(newShopSize);
+    const itemQueryResults = await getNumberOfItems(newShopSize, this.state.player.level);
+    console.log(itemQueryResults);
     const items = itemQueryResults;
     items.forEach((item) => {
       const newItem = new Item();
@@ -130,6 +136,8 @@ export class DraftRoom extends Room<DraftState> {
       else this.state.player.talents.push(newTalent);
 
     });
+
+    
   }
 
   private buyItem(itemId: number, client: Client) {
@@ -144,6 +152,16 @@ export class DraftRoom extends Room<DraftState> {
       (this.state.player as any)[item.affectedStat] += item.affectedValue;
       this.state.shop = this.state.shop.filter((item) => item.itemId !== itemId);
     }
+  }
+
+  private async refreshShop(client: Client) {
+    if (this.state.player.gold < 2) {
+      client.send("error", "Not enough gold!");
+      return;
+    }
+    this.state.player.gold -= 2;
+    this.state.shop.clear();
+    await this.updateShop(this.state.shopSize);
   }
 
   private selectTalent(talentId: number) {
