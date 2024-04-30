@@ -52,7 +52,7 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
 
 export async function updatePlayer(player: Player): Promise<Player> {
   let playerObject = player.toJSON();
-  let newPlayerObject = {...playerObject, talents: [0]};
+  let newPlayerObject = { ...playerObject, talents: [0] };
   newPlayerObject = { ...playerObject, talents: [] };
 
   const foundPlayerModel = await playerModel.findOne({ playerId: player.playerId });
@@ -74,16 +74,16 @@ export async function getNextPlayerId(): Promise<number> {
   return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
 
-export async function getSameRoundPlayer(round: number): Promise<Player> {
+export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
 
   if (round <= 0) {
     return null;
   }
 
-  const randomPlayerWithSameTurn = await playerModel.aggregate([{ $match: { round: round } }, { $sample: { size: 1 } }]);
+  const randomPlayerWithSameTurn = await playerModel.aggregate([{ $match: { round: round, playerId: { $ne: playerId } } }, { $sample: { size: 1 } }]);
   const [enemyPlayerObject] = randomPlayerWithSameTurn;
   if (!enemyPlayerObject) {
-    return await getSameRoundPlayer(round - 1);
+    return await getSameRoundPlayer(round - 1, playerId);
   }
   return enemyPlayerObject as unknown as Player;
 }

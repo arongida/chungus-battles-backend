@@ -6,9 +6,13 @@ const ItemSchema = new Schema({
   name: String,
   description: String,
   price: Number,
-  affectedStat: String,
-  affectedValue: Number,
-  levelRequirement: Number
+  levelRequirement: Number,
+  affectedStats: {
+    hp: Number,
+    attack: Number,
+    defense: Number,
+    attackSpeed: Number,
+  }
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);

@@ -1,6 +1,6 @@
 import { Room, Client } from "@colyseus/core";
 import { DraftState } from "./schema/DraftState";
-import { Item } from "./schema/ItemSchema";
+import { AffectedStats, Item } from "./schema/ItemSchema";
 import { Talent } from "./schema/TalentSchema";
 import { createNewPlayer } from "../db/Player";
 import { getNumberOfItems } from "../db/Item";
@@ -106,8 +106,12 @@ export class DraftRoom extends Room<DraftState> {
     const itemQueryResults = await getNumberOfItems(newShopSize, this.state.player.level);
     const items = itemQueryResults;
     items.forEach((item) => {
+      
+      let newItemObject = item as Item;
+      let affectedStats = newItemObject.affectedStats;
+      newItemObject.affectedStats = new AffectedStats(affectedStats);    
       const newItem = new Item();
-      newItem.assign(item);
+      newItem.assign(newItemObject);
       this.state.shop.push(newItem);
     });
   }
@@ -115,6 +119,8 @@ export class DraftRoom extends Room<DraftState> {
   private async updateTalents() {
     this.state.availableTalents.clear();
     
+    console.log("remaining talent points: ", this.state.remainingTalentPoints);
+
     if (this.state.remainingTalentPoints <= 0) return;
 
     const talents = await getRandomTalents(2, this.state.player.level);
@@ -155,7 +161,14 @@ export class DraftRoom extends Room<DraftState> {
     if (item) {
       this.state.player.gold -= item.price;
 
-      (this.state.player as any)[item.affectedStat] += item.affectedValue;
+
+      console.log("item hp: ", item.affectedStats.hp);
+      console.log("palyer hp: ", this.state.player.hp); 
+      this.state.player.hp += item.affectedStats.hp;
+      this.state.player.attack += item.affectedStats.attack;
+      this.state.player.defense += item.affectedStats.defense;
+      this.state.player.attackSpeed += item.affectedStats.attackSpeed;
+      
       this.state.shop = this.state.shop.filter((item) => item.itemId !== itemId);
     }
   }

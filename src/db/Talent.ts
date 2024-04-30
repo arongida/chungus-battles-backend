@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
 
 export const talentMongooseSchema = new Schema({
@@ -23,7 +23,7 @@ export async function seedTalents(): Promise<void> {
       levelRequirement: 1,
       class: 'Warrior',
       level: 1,
-      activationRate: 0.5
+      activationRate: 0.5,
     },
     {
       talentId: 2,
@@ -32,7 +32,7 @@ export async function seedTalents(): Promise<void> {
       levelRequirement: 1,
       class: 'Merchant',
       level: 1,
-      activationRate: 0.5
+      activationRate: 0.5,
     }
   ];
 
@@ -42,7 +42,7 @@ export async function seedTalents(): Promise<void> {
 
 export async function getRandomTalents(selectionSize: number, level: number): Promise<{}[]> {
   // const talentSchemaArray = await talentModel.find().lean().limit(selectionSize);
-  const talentSchemaArray = await talentModel.aggregate([{ $match: { level: {$lte:level} } }, { $sample: { size: selectionSize } }]);
+  const talentSchemaArray = await talentModel.aggregate([{ $match: { levelRequirement: level } }, { $sample: { size: selectionSize } }]);
   return talentSchemaArray;
 }
 

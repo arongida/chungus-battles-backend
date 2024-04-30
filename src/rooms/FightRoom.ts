@@ -77,6 +77,7 @@ export class FightRoom extends Room<FightState> {
       this.state.player.hp = this.playerInitialStats.hp;
       this.state.player.attack = this.playerInitialStats.attack;
       this.state.player.round++;
+      console.log("update player object on leave:", this.state.player.talents)
       const updatedPlayer = await updatePlayer(this.state.player);
       console.log(client.sessionId, "left!");
     }
@@ -172,7 +173,7 @@ export class FightRoom extends Room<FightState> {
     //if enemy state is already set, skip it
     if (this.state.enemy.playerId) return;
 
-    let enemy = await getSameRoundPlayer(this.state.player.round);
+    let enemy = await getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
     const enemyTalents = await getTalentsById(enemy.talents as unknown as number[]) as Talent[];
     const newEnemyObject = new Player(enemy);
     this.state.enemy.assign(newEnemyObject);
@@ -186,7 +187,8 @@ export class FightRoom extends Room<FightState> {
 
 
   async attack(attacker: Player, defender: Player) {
-    const damage = attacker.attack - defender.defense;
+    let damageReductionPercent = defender.defense >= 70 ? 70 : defender.defense;
+    const damage = Math.floor(attacker.attack * (1 - damageReductionPercent / 100));
     defender.hp -= damage;
     this.broadcast("combat_log", `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
   }
@@ -203,6 +205,7 @@ export class FightRoom extends Room<FightState> {
       this.fightResult = FightResultTypes.WIN;
     }
 
+
     switch (this.fightResult) {
       case FightResultTypes.WIN:
         this.handleWin();
@@ -214,9 +217,21 @@ export class FightRoom extends Room<FightState> {
         this.handleDraw();
         break;
     }
+
+
   }
 
   handleWin() {
+
+    //check if player took risky investment
+    if (this.state.player.talents.find(talent => talent.talentId === 3)) {
+      this.state.player.gold += 20;
+      this.broadcast("combat_log", "You took a risky investment and gained 20 gold!");
+      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== 3);
+      this.state.player.talents.push(new Talent({ talentId: 7, name: "Broken Risky Investment", description: "Already used", level: 1, class: "Merchant", levelRequirement: 0, activationRate: 0 }));
+
+    }
+
     this.state.player.gold += this.state.player.round * 4;
     this.state.player.xp += this.state.player.round * 4;
     this.state.player.wins++;
@@ -229,7 +244,24 @@ export class FightRoom extends Room<FightState> {
   handleLose() {
     this.state.player.gold += this.state.player.round * 2;
     this.state.player.xp += this.state.player.round * 2;
-    this.state.player.lives--;
+
+    //check guardian talents
+    if (this.state.player.talents.find(talent => talent.talentId === 4)) {
+      this.broadcast("combat_log", "You have been saved by the guardian angel!");
+      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== 4);
+      this.state.player.talents.push(new Talent({ talentId: 6, name: "Broken Guardian Angel", description: "Already used", level: 1, class: "Guardian", levelRequirement: 0, activationRate: 0 }));
+    } else {
+      this.state.player.lives--;
+    }
+
+    //check if player took risky investment
+    if (this.state.player.talents.find(talent => talent.talentId === 3)) {
+      this.broadcast("combat_log", "Your risky investment did not go well...");
+      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== 3);
+      this.state.player.talents.push(new Talent({ talentId: 7, name: "Broken Risky Investment", description: "Already used", level: 1, class: "Merchant", levelRequirement: 0, activationRate: 0 }));
+
+    }
+
     if (this.state.player.lives <= 0) {
       this.broadcast("game_over", "You have lost the game!");
     } else {
@@ -241,6 +273,15 @@ export class FightRoom extends Room<FightState> {
     this.state.player.gold += this.state.player.round * 2;
     this.state.player.xp += this.state.player.round * 2;
     this.broadcast("end_battle", "The battle has ended!");
+
+    //check if player took risky investment
+    if (this.state.player.talents.find(talent => talent.talentId === 3)) {
+      this.broadcast("combat_log", "You fought well but money is a btch...");
+      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== 3);
+      this.state.player.talents.push(new Talent({ talentId: 7, name: "Broken Risky Investment", description: "Already used", level: 1, class: "Merchant", levelRequirement: 0, activationRate: 0 }));
+
+    }
+
 
   }
 
