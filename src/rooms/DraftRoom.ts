@@ -106,10 +106,10 @@ export class DraftRoom extends Room<DraftState> {
     const itemQueryResults = await getNumberOfItems(newShopSize, this.state.player.level);
     const items = itemQueryResults;
     items.forEach((item) => {
-      
+
       let newItemObject = item as Item;
       let affectedStats = newItemObject.affectedStats;
-      newItemObject.affectedStats = new AffectedStats(affectedStats);    
+      newItemObject.affectedStats = new AffectedStats(affectedStats);
       const newItem = new Item();
       newItem.assign(newItemObject);
       this.state.shop.push(newItem);
@@ -118,12 +118,15 @@ export class DraftRoom extends Room<DraftState> {
 
   private async updateTalents() {
     this.state.availableTalents.clear();
-    
-    console.log("remaining talent points: ", this.state.remainingTalentPoints);
-
+    //if player has no talent points, return
     if (this.state.remainingTalentPoints <= 0) return;
 
-    const talents = await getRandomTalents(2, this.state.player.level);
+    //get next talent level to choose from
+    let nextTalentLevel = 1;
+    if (this.state.player.talents.length > 0) nextTalentLevel = this.state.player.talents.sort((a, b) => b.level - a.level)[0].level + 1;
+
+    //assign talents from db to state
+    const talents = await getRandomTalents(2, nextTalentLevel);
     talents.forEach((talent) => {
       const newTalent = new Talent();
       newTalent.assign(talent);
@@ -163,12 +166,12 @@ export class DraftRoom extends Room<DraftState> {
 
 
       console.log("item hp: ", item.affectedStats.hp);
-      console.log("palyer hp: ", this.state.player.hp); 
+      console.log("palyer hp: ", this.state.player.hp);
       this.state.player.hp += item.affectedStats.hp;
       this.state.player.attack += item.affectedStats.attack;
       this.state.player.defense += item.affectedStats.defense;
       this.state.player.attackSpeed += item.affectedStats.attackSpeed;
-      
+
       this.state.shop = this.state.shop.filter((item) => item.itemId !== itemId);
     }
   }
