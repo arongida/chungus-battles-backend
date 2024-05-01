@@ -54,7 +54,8 @@ export async function updatePlayer(player: Player): Promise<Player> {
   let playerObject = player.toJSON();
   let newPlayerObject = { ...playerObject, talents: [0] };
   newPlayerObject = { ...playerObject, talents: [] };
-
+  
+  console.log("update player object: ", newPlayerObject);
   const foundPlayerModel = await playerModel.findOne({ playerId: player.playerId });
 
   foundPlayerModel.set(newPlayerObject);
@@ -62,6 +63,7 @@ export async function updatePlayer(player: Player): Promise<Player> {
   playerObject.talents.forEach((talent) => {
     for (let i = 0; i < talent.level; i++) {
       foundPlayerModel.talents.push(talent.talentId);
+      console.log("pushed talentid: ", talent.talentId);
     }
   });
 
