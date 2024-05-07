@@ -198,6 +198,13 @@ export class FightRoom extends Room<FightState> {
   private async attack(attacker: Player, defender: Player) {
     let damageReductionPercent = defender.defense >= 70 ? 70 : defender.defense;
     const damage = Math.floor(attacker.attack * (1 - damageReductionPercent / 100));
+    if (defender.talents.find(talent => talent.talentId === 9)) {
+      const random = Math.random();
+      if (random < 0.25) {
+         this.broadcast("combat_log", `${defender.name} dodged the attack!`);
+         return;
+      }
+    }
     defender.hp -= damage;
     this.broadcast("combat_log", `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
   }
