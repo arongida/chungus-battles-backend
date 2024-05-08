@@ -76,6 +76,7 @@ export class FightRoom extends Room<FightState> {
       //set player for next round
       this.state.player.hp = this.playerInitialStats.hp;
       this.state.player.attack = this.playerInitialStats.attack;
+      this.state.player.defense = this.playerInitialStats.defense;
       this.state.player.round++;
       console.log("update player object on leave:", this.state.player.talents)
       await updatePlayer(this.state.player);
@@ -93,6 +94,7 @@ export class FightRoom extends Room<FightState> {
 
   //this is running all the time 
   update(deltaTime: number) {
+
 
     //check for battle end
     if (this.battleStarted) {
@@ -122,6 +124,7 @@ export class FightRoom extends Room<FightState> {
     this.startSkillLoop(this.state.player, this.state.enemy);
 
 
+
     //start enemy attack loop
     this.activatedTimers.push(this.clock.setInterval(() => {
       this.attack(this.state.enemy, this.state.player);
@@ -129,6 +132,8 @@ export class FightRoom extends Room<FightState> {
 
     //start enemy skills loops
     this.startSkillLoop(this.state.enemy, this.state.player);
+
+    
   }
 
   //get player, enemy and talents from db and map them to the room state
@@ -171,16 +176,16 @@ export class FightRoom extends Room<FightState> {
 
         //handle Rage skill
         if (talent.talentId === 1) {
-          player.hp -= 3;
-          player.attack += 1;
-          this.broadcast("combat_log", `${player.name} uses Rage! Increased attack by 1!`);
+          player.hp -= 5;
+          player.attack += 2;
+          this.broadcast("combat_log", `${player.name} uses Rage! Increased attack by 2!`);
         }
 
         //handle Greed skill
         if (talent.talentId === 2) {
-          player.gold += 1;
-          enemy.gold -= 1;
-          this.broadcast("combat_log", `${player.name} uses Greed! Stole 1 gold from ${enemy.name}!`);
+          player.gold += 2;
+          enemy.gold -= 2;
+          this.broadcast("combat_log", `${player.name} uses Greed! Stole 2 gold from ${enemy.name}!`);
         }
 
         //handle arcane missiles skill
@@ -193,18 +198,43 @@ export class FightRoom extends Room<FightState> {
 
         //handle drain life skill
         if (talent.talentId === 5) {
-          enemy.hp -= 4;
-          player.hp += 4;
-          this.broadcast("combat_log", `${player.name} drains 4 hp from ${enemy.name}!`);
+          enemy.hp -= 3;
+          player.hp += 3;
+          this.broadcast("combat_log", `${player.name} drains 3 hp from ${enemy.name}!`);
         }
+
+        //handle minor healing skill
+        if (talent.talentId === 10) {
+          player.hp += 6;
+          this.broadcast("combat_log", `${player.name} restores 6 health!`);
+        }
+
+        //handle throwing money skill
+        if (talent.talentId === 11) {
+          enemy.hp -= player.gold;
+          this.broadcast("combat_log", `${player.name} throws money for ${player.gold} damage!`);
+        }
+
+        //handle burn skill
+        if (talent.talentId === 12) {
+          const burnDamage = Math.floor(enemy.hp * 0.2);
+          enemy.hp -= burnDamage;
+          this.broadcast("combat_log", `${player.name} burns ${enemy.name} for ${burnDamage} damage!`);
+        }
+
       }, (1 / talent.activationRate) * 1000));
+
+
     });
   }
 
 
   private async attack(attacker: Player, defender: Player) {
+    //calculate defense
     let damageReductionPercent = defender.defense >= 70 ? 70 : defender.defense;
     const damage = Math.floor(attacker.attack * (1 - damageReductionPercent / 100));
+
+    //check if defender dodges the attack
     if (defender.talents.find(talent => talent.talentId === 9)) {
       const random = Math.random();
       if (random < 0.25) {
@@ -212,6 +242,8 @@ export class FightRoom extends Room<FightState> {
         return;
       }
     }
+
+    //damage
     defender.hp -= damage;
     this.broadcast("combat_log", `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
   }
