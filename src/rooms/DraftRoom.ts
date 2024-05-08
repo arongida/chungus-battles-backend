@@ -163,9 +163,6 @@ export class DraftRoom extends Room<DraftState> {
     if (item) {
       this.state.player.gold -= item.price;
 
-
-      console.log("item hp: ", item.affectedStats.hp);
-      console.log("palyer hp: ", this.state.player.hp);
       this.state.player.hp += item.affectedStats.hp;
       this.state.player.attack += item.affectedStats.attack;
       this.state.player.defense += item.affectedStats.defense;
