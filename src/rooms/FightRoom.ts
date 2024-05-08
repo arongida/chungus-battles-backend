@@ -180,7 +180,7 @@ export class FightRoom extends Room<FightState> {
         if (talent.talentId === 2) {
           player.gold += 1;
           enemy.gold -= 1;
-          this.broadcast("combat_log", `${player.name} uses Greed!\nGold: ${player.gold}`);
+          this.broadcast("combat_log", `${player.name} uses Greed! Stole 1 gold from ${enemy.name}!`);
         }
 
         //handle arcane missiles skill
@@ -189,6 +189,13 @@ export class FightRoom extends Room<FightState> {
             enemy.hp -= 2;
             this.broadcast("combat_log", `${player.name} shoots an arcane missle for 2 dmg!`);
           }
+        }
+
+        //handle drain life skill
+        if (talent.talentId === 5) {
+          enemy.hp -= 4;
+          player.hp += 4;
+          this.broadcast("combat_log", `${player.name} drains 4 hp from ${enemy.name}!`);
         }
       }, (1 / talent.activationRate) * 1000));
     });
@@ -201,8 +208,8 @@ export class FightRoom extends Room<FightState> {
     if (defender.talents.find(talent => talent.talentId === 9)) {
       const random = Math.random();
       if (random < 0.25) {
-         this.broadcast("combat_log", `${defender.name} dodged the attack!`);
-         return;
+        this.broadcast("combat_log", `${defender.name} dodged the attack!`);
+        return;
       }
     }
     defender.hp -= damage;
