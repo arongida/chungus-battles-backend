@@ -77,6 +77,7 @@ export class FightRoom extends Room<FightState> {
       this.state.player.hp = this.playerInitialStats.hp;
       this.state.player.attack = this.playerInitialStats.attack;
       this.state.player.defense = this.playerInitialStats.defense;
+      this.state.player.attackSpeed = this.playerInitialStats.attackSpeed;
       this.state.player.round++;
       console.log("update player object on leave:", this.state.player.talents)
       await updatePlayer(this.state.player);
@@ -192,7 +193,7 @@ export class FightRoom extends Room<FightState> {
         if (talent.talentId === 8) {
           for (let i = 0; i < 3; i++) {
             enemy.hp -= 2;
-            this.broadcast("combat_log", `${player.name} shoots an arcane missle for 2 dmg!`);
+            this.broadcast("combat_log", `${player.name} shoots an arcane missile for 2 dmg!`);
           }
         }
 
@@ -222,6 +223,24 @@ export class FightRoom extends Room<FightState> {
           this.broadcast("combat_log", `${player.name} burns ${enemy.name} for ${burnDamage} damage!`);
         }
 
+        //TODO: //handle body&mind skill
+        // //handle body&mind skill
+        // if (talent.talentId === 15) {      
+        //   const hpBonus = Math.floor(player.hp * 0.1);
+        //   const attackBonus = Math.floor(player.attack * 0.1);
+        //   const defenseBonus = Math.floor(player.defense * 0.1);
+        //   const attackSpeedBonus = player.attackSpeed * 0.1;
+        //   player.hp += hpBonus;
+        //   player.attack += attackBonus;
+        //   player.defense += defenseBonus;
+        //   player.attackSpeed += attackSpeedBonus;  
+        //   this.broadcast("combat_log", `${player.name} uses body and mind to increase stats!`);
+        //   this.broadcast("combat_log", `${player.name} gains ${hpBonus} hp!`);
+        //   this.broadcast("combat_log", `${player.name} gains ${attackBonus} attack!`);
+        //   this.broadcast("combat_log", `${player.name} gains ${defenseBonus} defense!`);
+        //   this.broadcast("combat_log", `${player.name} gains ${attackSpeedBonus} attack speed!`);
+        // }
+
       }, (1 / talent.activationRate) * 1000));
 
 
@@ -241,6 +260,11 @@ export class FightRoom extends Room<FightState> {
         this.broadcast("combat_log", `${defender.name} dodged the attack!`);
         return;
       }
+    }
+
+    //check for leech talent
+    if (attacker.talents.find(talent => talent.talentId === 13)) {
+      attacker.hp += Math.floor(damage * 0.1);
     }
 
     //damage
@@ -270,6 +294,13 @@ export class FightRoom extends Room<FightState> {
       case FightResultTypes.DRAW:
         this.handleDraw();
         break;
+    }
+
+    //check for fight end bonuses
+    if (this.state.player.talents.find(talent => talent.talentId === 14)) {
+      const goldBonus = Math.floor(this.state.player.gold * 0.15);
+      this.state.player.gold += goldBonus;
+      this.broadcast("combat_log", `You gained ${goldBonus} gold from selling loot!`);
     }
   }
 
