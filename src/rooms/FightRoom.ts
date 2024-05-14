@@ -116,6 +116,8 @@ export class FightRoom extends Room<FightState> {
   //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
   async startBattle() {
 
+
+
     //start player attack loop
     this.activatedTimers.push(this.clock.setInterval(() => {
       this.attack(this.state.player, this.state.enemy);
@@ -134,7 +136,11 @@ export class FightRoom extends Room<FightState> {
     //start enemy skills loops
     this.startSkillLoop(this.state.enemy, this.state.player);
 
-    
+
+    //apply fight start effects
+    this.applyFightStartEffects(this.state.player, this.state.enemy);
+    this.applyFightStartEffects(this.state.enemy, this.state.player);
+
   }
 
   //get player, enemy and talents from db and map them to the room state
@@ -225,21 +231,21 @@ export class FightRoom extends Room<FightState> {
 
         //TODO: //handle body&mind skill
         // //handle body&mind skill
-        // if (talent.talentId === 15) {      
-        //   const hpBonus = Math.floor(player.hp * 0.1);
-        //   const attackBonus = Math.floor(player.attack * 0.1);
-        //   const defenseBonus = Math.floor(player.defense * 0.1);
-        //   const attackSpeedBonus = player.attackSpeed * 0.1;
-        //   player.hp += hpBonus;
-        //   player.attack += attackBonus;
-        //   player.defense += defenseBonus;
-        //   player.attackSpeed += attackSpeedBonus;  
-        //   this.broadcast("combat_log", `${player.name} uses body and mind to increase stats!`);
-        //   this.broadcast("combat_log", `${player.name} gains ${hpBonus} hp!`);
-        //   this.broadcast("combat_log", `${player.name} gains ${attackBonus} attack!`);
-        //   this.broadcast("combat_log", `${player.name} gains ${defenseBonus} defense!`);
-        //   this.broadcast("combat_log", `${player.name} gains ${attackSpeedBonus} attack speed!`);
-        // }
+        if (talent.talentId === 15) {
+          const hpBonus = Math.floor(player.hp * 0.1);
+          const attackBonus = Math.floor(player.attack * 0.1);
+          const defenseBonus = Math.floor(player.defense * 0.1);
+          const attackSpeedBonus = player.attackSpeed * 0.1;
+          player.hp += hpBonus;
+          player.attack += attackBonus;
+          player.defense += defenseBonus;
+          player.attackSpeed += attackSpeedBonus;
+          this.broadcast("combat_log", `${player.name} is strong hence gets an increase to stats!`);
+          this.broadcast("combat_log", `${player.name} gains ${hpBonus} hp!`);
+          this.broadcast("combat_log", `${player.name} gains ${attackBonus} attack!`);
+          this.broadcast("combat_log", `${player.name} gains ${defenseBonus} defense!`);
+          this.broadcast("combat_log", `${player.name} gains ${attackSpeedBonus} attack speed!`);
+        }
 
       }, (1 / talent.activationRate) * 1000));
 
@@ -267,22 +273,34 @@ export class FightRoom extends Room<FightState> {
       attacker.hp += Math.floor(damage * 0.1);
     }
 
+    //check execute talent
+    if (attacker.talents.find(talent => talent.talentId === 18)) {
+      const random = Math.random();
+      if (random < (0.1 + (attacker.attack * 0.01))) {
+        defender.hp = -9999;
+        this.broadcast("combat_log", `${attacker.name} executes ${defender.name}!`);
+        return;
+      }
+    }
+
     //damage
     defender.hp -= damage;
+
     this.broadcast("combat_log", `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
   }
 
   private handleFightEnd() {
-    if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
-      this.broadcast("combat_log", "It's a draw!");
-      this.fightResult = FightResultTypes.DRAW;
-    } else if (this.state.player.hp <= 0) {
-      this.broadcast("combat_log", "YOU loose!");
-      this.fightResult = FightResultTypes.LOSE;
-    } else {
-      this.broadcast("combat_log", "YOU win!");
-      this.fightResult = FightResultTypes.WIN;
+    
+    if (!this.fightResult) {
+      if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
+        this.fightResult = FightResultTypes.DRAW;
+      } else if (this.state.player.hp <= 0) {
+        this.fightResult = FightResultTypes.LOSE;
+      } else {
+        this.fightResult = FightResultTypes.WIN;
+      }
     }
+    
 
     switch (this.fightResult) {
       case FightResultTypes.WIN:
@@ -306,6 +324,8 @@ export class FightRoom extends Room<FightState> {
 
   private handleWin() {
 
+    this.broadcast("combat_log", "You win!");
+
     //check if player took risky investment
     if (this.state.player.talents.find(talent => talent.talentId === 3)) {
       this.state.player.gold += 20;
@@ -324,6 +344,9 @@ export class FightRoom extends Room<FightState> {
   }
 
   private handleLose() {
+
+    this.broadcast("combat_log", "You loose!");
+
     this.state.player.gold += this.state.player.round * 2;
     this.state.player.xp += this.state.player.round * 2;
 
@@ -355,6 +378,7 @@ export class FightRoom extends Room<FightState> {
   }
 
   private handleDraw() {
+    this.broadcast("combat_log", "It's a draw!");
     this.state.player.gold += this.state.player.round * 2;
     this.state.player.xp += this.state.player.round * 2;
     this.broadcast("end_battle", "The battle has ended!");
@@ -366,6 +390,67 @@ export class FightRoom extends Room<FightState> {
       this.state.player.talents.push(new Talent(
         { talentId: 7, name: "Broken Risky Investment", description: "Already used", level: 1, class: "Merchant", levelRequirement: 0, activationRate: 0 }
       ));
+    }
+  }
+
+  //apply fight start effects for player/enemy
+  applyFightStartEffects(player: Player, enemy?: Player) {
+
+    if (!this.battleStarted) return;
+
+    //handle strong body talent
+    if (player.talents.find(talent => talent.talentId === 15)) {
+      const hpBonus = Math.ceil(player.hp * 0.3);
+      const attackBonus = Math.ceil(player.attack * 0.3);
+      const defenseBonus = Math.ceil(player.defense * 0.3);
+      const factor = 10 ** 2;
+      const attackSpeedBonus = Math.round(player.attackSpeed * 0.3 * factor) / factor;
+      player.hp += hpBonus;
+      player.attack += attackBonus;
+      player.defense += defenseBonus;
+      player.attackSpeed += attackSpeedBonus;
+      this.broadcast("combat_log", `${player.name} is strong hence gets an increase to stats!`);
+      this.broadcast("combat_log", `${player.name} gains ${hpBonus} hp!`);
+      this.broadcast("combat_log", `${player.name} gains ${attackBonus} attack!`);
+      this.broadcast("combat_log", `${player.name} gains ${defenseBonus} defense!`);
+      this.broadcast("combat_log", `${player.name} gains ${attackSpeedBonus} attack speed!`);
+    }
+
+    //handle upper middle class
+    if (player.talents.find(talent => talent.talentId === 16)) {
+      const hpBonus = Math.ceil(enemy.hp * (0.1 + (player.gold * 0.005)));
+      const attackBonus = Math.ceil(enemy.attack * (0.1 + (player.gold * 0.005)));
+      const defenseBonus = Math.ceil(enemy.defense * (0.1 + (player.gold * 0.005)));
+      const factor = 10 ** 2;
+      const attackSpeedBonus = Math.round(enemy.attackSpeed * (0.1 + (player.gold * 0.005)) * factor) / factor;
+      enemy.hp -= hpBonus;
+      enemy.attack -= attackBonus;
+      enemy.defense -= defenseBonus;
+      enemy.attackSpeed -= attackSpeedBonus;
+      this.broadcast("combat_log", `${player.name} intimidates ${enemy.name} with their wealth!`);
+      this.broadcast("combat_log", `${enemy.name} looses ${hpBonus} hp!`);
+      this.broadcast("combat_log", `${enemy.name} looses ${attackBonus} attack!`);
+      this.broadcast("combat_log", `${enemy.name} looses ${defenseBonus} defense!`);
+      this.broadcast("combat_log", `${enemy.name} looses ${attackSpeedBonus} attack speed!`);
+    }
+
+    //handle bribe
+    if (player.talents.find(talent => talent.talentId === 17)) {
+      if (player.gold >= 50) {
+        //set state and clear intervals
+        this.battleStarted = false;
+        this.activatedTimers.forEach(timer => timer.clear());
+        this.broadcast("combat_log", `${player.name} bribes ${enemy.name} for 50 gold!`);
+        player.gold -= 50;
+        enemy.gold += 50;
+        if (player.playerId === this.state.player.playerId) {
+          this.fightResult = FightResultTypes.WIN;
+          this.handleFightEnd();
+        } else {
+          this.fightResult = FightResultTypes.LOSE;
+          this.handleFightEnd();
+        }
+      }    
     }
   }
 }
