@@ -23,8 +23,10 @@ export default config({
 
   initializeExpress: (app) => {
 
-    const corsOptions = {origin: 'https://arongida.github.io'};
-    app.use(cors(corsOptions));
+    if (process.env.NODE_ENV === "production") {
+      const corsOptions = { origin: 'https://arongida.github.io' };
+      app.use(cors(corsOptions));
+    }
 
     /**
      * Bind your custom express routes here:
@@ -54,7 +56,7 @@ export default config({
 
   beforeListen: () => {
 
-    
+
 
   }
 });
