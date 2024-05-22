@@ -5,6 +5,8 @@ import { Player } from "./schema/PlayerSchema";
 import { Delayed } from "colyseus";
 import { delay, FightResultTypes } from "../utils/utils";
 import { getTalentsById } from "../db/Talent";
+import { getItemsById } from "../db/Item";
+import { AffectedStats, Item } from "./schema/ItemSchema";
 import { Talent } from "./schema/TalentSchema";
 
 export class FightRoom extends Room<FightState> {
@@ -146,6 +148,9 @@ export class FightRoom extends Room<FightState> {
   //get player, enemy and talents from db and map them to the room state
   async setUpState(player: Player) {
     const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
+    const inventory = await getItemsById(player.inventory as unknown as number[]) as Item[];
+    console.log("inventory:", inventory);
+    
     const newPlayer = new Player(player);
 
     this.state.player.assign(newPlayer);
@@ -156,6 +161,14 @@ export class FightRoom extends Room<FightState> {
       if (findTalent) findTalent.level++;
       else this.state.player.talents.push(newTalent);
     });
+
+    player.inventory.forEach(itemId => {
+      const newItem = new Item(inventory.find(item => item.itemId === itemId as unknown as number));
+      newItem.affectedStats.assign(newItem.affectedStats);
+      
+      this.state.player.inventory.push(newItem);
+    });
+
 
     //save original player stats
     this.playerInitialStats = { hp: this.state.player.hp, attack: this.state.player.attack, defense: this.state.player.defense, attackSpeed: this.state.player.attackSpeed };
