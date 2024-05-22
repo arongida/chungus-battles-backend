@@ -148,8 +148,7 @@ export class FightRoom extends Room<FightState> {
   //get player, enemy and talents from db and map them to the room state
   async setUpState(player: Player) {
     const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
-    const inventory = await getItemsById(player.inventory as unknown as number[]) as Item[];
-    console.log("inventory:", inventory);
+    const itemsDataFromDb = await getItemsById(player.inventory as unknown as number[]) as Item[];
     
     const newPlayer = new Player(player);
 
@@ -163,9 +162,8 @@ export class FightRoom extends Room<FightState> {
     });
 
     player.inventory.forEach(itemId => {
-      const newItem = new Item(inventory.find(item => item.itemId === itemId as unknown as number));
-      newItem.affectedStats.assign(newItem.affectedStats);
-      
+      let newItem = new Item(itemsDataFromDb.find(item => item.itemId === itemId as unknown as number));
+      newItem.affectedStats = new AffectedStats(newItem.affectedStats);
       this.state.player.inventory.push(newItem);
     });
 

@@ -138,7 +138,7 @@ export class DraftRoom extends Room<DraftState> {
   private async setUpState(player: Player) {
     //get player item, talent info
     const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
-    const inventory = await getItemsById(player.inventory as unknown as number[]) as Item[]; 
+    const itemDataFromDb = await getItemsById(player.inventory as unknown as number[]) as Item[]; 
     
     const newPlayer = new Player(player);
     this.state.player.assign(newPlayer);
@@ -152,7 +152,8 @@ export class DraftRoom extends Room<DraftState> {
     });
 
     player.inventory.forEach(itemId => {
-      const newItem = new Item(inventory.find(item => item.itemId === itemId as unknown as number));
+      let newItem = new Item(itemDataFromDb.find(item => item.itemId === itemId as unknown as number));
+      newItem.affectedStats = new AffectedStats(newItem.affectedStats);
       this.state.player.inventory.push(newItem);
     });
 
