@@ -16,7 +16,8 @@ const PlayerSchema = new Schema({
   round: Number,
   lives: Number,
   wins: Number,
-  talents: [Number]
+  talents: [Number],
+  inventory: [Number]
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
@@ -44,18 +45,19 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
     round: 1,
     lives: 3,
     wins: 0,
-    talents: []
+    talents: [],
+    inventory: []
   });
   await newPlayer.save().catch((err) => console.error(err));
   return newPlayer.toObject() as unknown as Player;
 }
 
 export async function updatePlayer(player: Player): Promise<Player> {
-  let playerObject = player.toJSON();
-  let newPlayerObject = { ...playerObject, talents: [0] };
-  newPlayerObject = { ...playerObject, talents: [] };
   
-  console.log("update player object: ", newPlayerObject);
+  let playerObject = player.toJSON();
+  let newPlayerObject = { ...playerObject, talents: [0], inventory: [0] };
+  newPlayerObject = { ...playerObject, talents: [], inventory: [] };
+  
   const foundPlayerModel = await playerModel.findOne({ playerId: player.playerId });
 
   foundPlayerModel.set(newPlayerObject);
@@ -63,8 +65,11 @@ export async function updatePlayer(player: Player): Promise<Player> {
   playerObject.talents.forEach((talent) => {
     for (let i = 0; i < talent.level; i++) {
       foundPlayerModel.talents.push(talent.talentId);
-      console.log("pushed talentid: ", talent.talentId);
     }
+  });
+
+  playerObject.inventory.forEach((item) => {
+    foundPlayerModel.inventory.push(item.itemId);
   });
 
   await foundPlayerModel.save().catch((err) => console.error(err));
