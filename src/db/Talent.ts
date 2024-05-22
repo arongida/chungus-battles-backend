@@ -52,6 +52,6 @@ export async function getAllTalents(): Promise<{}[]> {
 }
 
 export async function getTalentsById(talentIds: number[]): Promise<{}[]> {
-  const talentSchema = await talentModel.find({ talentId: { $in: talentIds } }).lean().select({ _id: 0, __v: 0 });
-  return talentSchema;
+  const talentCollection = await talentModel.find({ talentId: { $in: talentIds } }).lean().select({ _id: 0, __v: 0 });
+  return talentCollection;
 }

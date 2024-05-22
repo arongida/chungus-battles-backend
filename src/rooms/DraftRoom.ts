@@ -3,7 +3,7 @@ import { DraftState } from "./schema/DraftState";
 import { AffectedStats, Item } from "./schema/ItemSchema";
 import { Talent } from "./schema/TalentSchema";
 import { createNewPlayer } from "../db/Player";
-import { getNumberOfItems } from "../db/Item";
+import { getNumberOfItems, getItemsById } from "../db/Item";
 import { getPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { delay } from "../utils/utils";
@@ -71,7 +71,7 @@ export class DraftRoom extends Room<DraftState> {
     }
 
     //set room shop and talents
-    if (this.state.player.round === 1) await this.updateTalents();
+    if (this.state.player.round === 1) await this.updateTalentSelection();
     if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
   }
 
@@ -116,7 +116,7 @@ export class DraftRoom extends Room<DraftState> {
     });
   }
 
-  private async updateTalents() {
+  private async updateTalentSelection() {
     this.state.availableTalents.clear();
     //if player has no talent points, return
     if (this.state.remainingTalentPoints <= 0) return;
@@ -134,23 +134,30 @@ export class DraftRoom extends Room<DraftState> {
 
   }
 
-  //get player, enemy and talents from db and map them to the room state
+  //get player, enemy, items and talents from db and map them to the room state
   private async setUpState(player: Player) {
-    //get player talent info
+    //get player item, talent info
     const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
+    const itemDataFromDb = await getItemsById(player.inventory as unknown as number[]) as Item[]; 
+    
     const newPlayer = new Player(player);
-
     this.state.player.assign(newPlayer);
+
     this.state.remainingTalentPoints = player.level - player.talents.length;
     player.talents.forEach(talentId => {
       const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
       const findTalent = this.state.player.talents.find(talent => talent.talentId === newTalent.talentId);
       if (findTalent) findTalent.level++;
       else this.state.player.talents.push(newTalent);
-
     });
 
-    this.updateTalents();
+    player.inventory.forEach(itemId => {
+      let newItem = new Item(itemDataFromDb.find(item => item.itemId === itemId as unknown as number));
+      newItem.affectedStats = new AffectedStats(newItem.affectedStats);
+      this.state.player.inventory.push(newItem);
+    });
+
+    this.updateTalentSelection();
 
   }
 
@@ -169,6 +176,7 @@ export class DraftRoom extends Room<DraftState> {
       this.state.player.attackSpeed += item.affectedStats.attackSpeed;
 
       this.state.shop = this.state.shop.filter((item) => item.itemId !== itemId);
+      this.state.player.inventory.push(item);
     }
   }
 
@@ -190,7 +198,7 @@ export class DraftRoom extends Room<DraftState> {
       if (foundTalent) foundTalent.level++;
       else this.state.player.talents.push(talent);
       this.state.remainingTalentPoints--;
-      this.updateTalents();
+      this.updateTalentSelection();
     }
   }
 
@@ -208,7 +216,7 @@ export class DraftRoom extends Room<DraftState> {
     if (this.state.player.xp >= this.state.player.maxXp) {
       this.levelUp(this.state.player.xp - this.state.player.maxXp);
       this.state.remainingTalentPoints++;
-      this.updateTalents();
+      this.updateTalentSelection();
     }
   }
 
