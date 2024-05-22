@@ -123,8 +123,7 @@ export class DraftRoom extends Room<DraftState> {
 
     //get next talent level to choose from
     let nextTalentLevel = 1;
-    if (this.state.player.talents.length > 0) nextTalentLevel = this.state.player.talents.sort((a, b) => b.level - a.level)[0].level + 1;
-
+    if (this.state.player.talents.length > 0) nextTalentLevel = this.state.player.talents.sort((a, b) => b.levelRequirement - a.levelRequirement)[0].levelRequirement + 1;
     //assign talents from db to state
     const talents = await getRandomTalents(2, nextTalentLevel);
     talents.forEach((talent) => {
@@ -170,9 +169,6 @@ export class DraftRoom extends Room<DraftState> {
     if (item) {
       this.state.player.gold -= item.price;
 
-
-      console.log("item hp: ", item.affectedStats.hp);
-      console.log("palyer hp: ", this.state.player.hp);
       this.state.player.hp += item.affectedStats.hp;
       this.state.player.attack += item.affectedStats.attack;
       this.state.player.defense += item.affectedStats.defense;
