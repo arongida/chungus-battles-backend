@@ -29,12 +29,13 @@ export async function getPlayer(playerId: number): Promise<Player> {
 }
 
 export async function createNewPlayer(playerId: number, name: string, sessionId: string): Promise<Player> {
+  const startingGold = process.env.NODE_ENV === 'production' ? 10 : 100;
   const newPlayer = new playerModel({
     playerId: playerId,
     name: name,
     hp: 100,
     attack: 10,
-    gold: 100,
+    gold: startingGold,
     xp: 0,
     level: 1,
     sessionId: sessionId,
