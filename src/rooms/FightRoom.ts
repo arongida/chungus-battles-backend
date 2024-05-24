@@ -298,6 +298,7 @@ export class FightRoom extends Room<FightState> {
     defender.hp -= damage;
 
     this.broadcast("combat_log", `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
+    this.broadcast("damage", { attacker: attacker.playerId, defender: defender.playerId, damage: damage });
   }
 
   private handleFightEnd() {
