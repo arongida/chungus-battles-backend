@@ -10,7 +10,7 @@ const PlayerSchema = new Schema({
   xp: Number,
   level: Number,
   sessionId: String,
-  defense: Number,
+  defense: { type: Number, alias: '_defense' },
   attackSpeed: Number,
   maxXp: Number,
   round: Number,
