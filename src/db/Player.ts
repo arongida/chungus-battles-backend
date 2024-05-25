@@ -10,7 +10,7 @@ const PlayerSchema = new Schema({
   xp: Number,
   level: Number,
   sessionId: String,
-  defense: Number,
+  defense: { type: Number, alias: '_defense' },
   attackSpeed: Number,
   maxXp: Number,
   round: Number,
@@ -54,19 +54,17 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
 }
 
 export async function updatePlayer(player: Player): Promise<Player> {
-  
+
   let playerObject = player.toJSON();
   let newPlayerObject = { ...playerObject, talents: [0], inventory: [0] };
   newPlayerObject = { ...playerObject, talents: [], inventory: [] };
-  
+
   const foundPlayerModel = await playerModel.findOne({ playerId: player.playerId });
 
   foundPlayerModel.set(newPlayerObject);
 
   playerObject.talents.forEach((talent) => {
-    for (let i = 0; i < talent.level; i++) {
-      foundPlayerModel.talents.push(talent.talentId);
-    }
+    foundPlayerModel.talents.push(talent.talentId);
   });
 
   playerObject.inventory.forEach((item) => {

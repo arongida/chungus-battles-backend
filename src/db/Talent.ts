@@ -6,9 +6,9 @@ export const talentMongooseSchema = new Schema({
   name: String,
   description: String,
   levelRequirement: Number,
-  class: String,
-  level: Number,
-  activationRate: Number
+  activationRate: Number,
+  image: String,
+  tags: [String]
 });
 
 export const talentModel = mongoose.model('Talent', talentMongooseSchema);

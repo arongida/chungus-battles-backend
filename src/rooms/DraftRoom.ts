@@ -124,7 +124,7 @@ export class DraftRoom extends Room<DraftState> {
 
     //get next talent level to choose from
     let nextTalentLevel = 1;
-    if (this.state.player.talents.length > 0) nextTalentLevel = this.state. player.talents.sort((a, b) => b.levelRequirement - a.levelRequirement)[0].levelRequirement + 1;
+    if (this.state.player.talents.length > 0) nextTalentLevel = this.state.player.talents.sort((a, b) => b.levelRequirement - a.levelRequirement)[0].levelRequirement + 1;
     //assign talents from db to state
     const talents = await getRandomTalents(2, nextTalentLevel);
     talents.forEach((talent) => {
@@ -139,17 +139,15 @@ export class DraftRoom extends Room<DraftState> {
   private async setUpState(player: Player) {
     //get player item, talent info
     const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
-    const itemDataFromDb = await getItemsById(player.inventory as unknown as number[]) as Item[]; 
-    
+    const itemDataFromDb = await getItemsById(player.inventory as unknown as number[]) as Item[];
+
     const newPlayer = new Player(player);
     this.state.player.assign(newPlayer);
 
     this.state.remainingTalentPoints = player.level - player.talents.length;
     player.talents.forEach(talentId => {
       const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
-      const findTalent = this.state.player.talents.find(talent => talent.talentId === newTalent.talentId);
-      if (findTalent) findTalent.level++;
-      else this.state.player.talents.push(newTalent);
+      this.state.player.talents.push(newTalent);
     });
 
     player.inventory.forEach(itemId => {
@@ -193,11 +191,8 @@ export class DraftRoom extends Room<DraftState> {
 
   private async selectTalent(talentId: number) {
     const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
-
     if (talent) {
-      const foundTalent = this.state.player.talents.find((talent) => talent.talentId === talentId);
-      if (foundTalent) foundTalent.level++;
-      else this.state.player.talents.push(talent);
+      this.state.player.talents.push(talent);
       this.state.remainingTalentPoints--;
       await this.updateTalentSelection();
     }

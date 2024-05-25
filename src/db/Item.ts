@@ -13,7 +13,8 @@ const ItemSchema = new Schema({
     defense: Number,
     attackSpeed: Number,
   },
-  image: String
+  image: String,
+  tags: [String]
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);
