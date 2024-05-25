@@ -91,23 +91,16 @@ export class FightRoom extends Room<FightState> {
     console.log("room", this.roomId, "disposing...");
   }
 
-  async getRandomEnemy() {
-
-  }
 
   //this is running all the time 
   update(deltaTime: number) {
 
-
     //check for battle end
     if (this.battleStarted) {
       if (this.state.player.hp <= 0 || this.state.enemy.hp <= 0) {
-
         //set state and clear intervals
         this.battleStarted = false;
-
         this.activatedTimers.forEach(timer => timer.clear());
-
         this.broadcast("combat_log", "The battle has ended!");
         this.handleFightEnd();
 
@@ -118,8 +111,6 @@ export class FightRoom extends Room<FightState> {
   //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
   async startBattle() {
 
-
-
     //start player attack loop
     this.activatedTimers.push(this.clock.setInterval(() => {
       this.attack(this.state.player, this.state.enemy);
@@ -127,8 +118,6 @@ export class FightRoom extends Room<FightState> {
 
     //start player skills loop
     this.startSkillLoop(this.state.player, this.state.enemy);
-
-
 
     //start enemy attack loop
     this.activatedTimers.push(this.clock.setInterval(() => {
@@ -138,11 +127,9 @@ export class FightRoom extends Room<FightState> {
     //start enemy skills loops
     this.startSkillLoop(this.state.enemy, this.state.player);
 
-
     //apply fight start effects
     this.applyFightStartEffects(this.state.player, this.state.enemy);
     this.applyFightStartEffects(this.state.enemy, this.state.player);
-
   }
 
   //get player, enemy and talents from db and map them to the room state
@@ -157,8 +144,7 @@ export class FightRoom extends Room<FightState> {
     player.talents.forEach(talentId => {
       const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
       const findTalent = this.state.player.talents.find(talent => talent.talentId === newTalent.talentId);
-      if (findTalent) findTalent.level++;
-      else this.state.player.talents.push(newTalent);
+      this.state.player.talents.push(newTalent);
     });
 
     player.inventory.forEach(itemId => {
@@ -181,8 +167,7 @@ export class FightRoom extends Room<FightState> {
     enemy.talents.forEach(talentId => {
       const newTalent = new Talent(enemyTalents.find(talent => talent.talentId === talentId as unknown as number));
       const findTalent = this.state.enemy.talents.find(talent => talent.talentId === newTalent.talentId);
-      if (findTalent) findTalent.level++;
-      else this.state.enemy.talents.push(newTalent);
+      this.state.enemy.talents.push(newTalent);
     });
   }
 
