@@ -53,12 +53,18 @@ export class FightRoom extends Room<FightState> {
 
 
     //start battle after 5 seconds
-    this.broadcast("combat_log", "The battle will begin in 5 seconds...");
+    let countdown = 5;
+    const countdownTimer = this.clock.setInterval(() => {
+      this.broadcast("combat_log", `The battle will begin in ${countdown--} second(s)...`);
+    }, 1000);
+
+
     this.clock.setTimeout(async () => {
+      countdownTimer.clear();
       this.broadcast("combat_log", "The battle begins!");
       this.battleStarted = true;
       this.startBattle();
-    }, 5000);
+    }, 5500);
 
   }
 
@@ -136,7 +142,7 @@ export class FightRoom extends Room<FightState> {
   async setUpState(player: Player) {
     const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
     const itemsDataFromDb = await getItemsById(player.inventory as unknown as number[]) as Item[];
-    
+
     const newPlayer = new Player(player);
 
     this.state.player.assign(newPlayer);
@@ -252,8 +258,7 @@ export class FightRoom extends Room<FightState> {
 
   private async attack(attacker: Player, defender: Player) {
     //calculate defense
-    let damageReductionPercent = defender.defense >= 70 ? 70 : defender.defense;
-    const damage = Math.floor(attacker.attack * (1 - damageReductionPercent / 100));
+    const damage = Math.floor(attacker.attack *  (100 / (100 + defender.defense)));
 
     //check if defender dodges the attack
     if (defender.talents.find(talent => talent.talentId === 9)) {
@@ -287,7 +292,7 @@ export class FightRoom extends Room<FightState> {
   }
 
   private handleFightEnd() {
-    
+
     if (!this.fightResult) {
       if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
         this.fightResult = FightResultTypes.DRAW;
@@ -297,7 +302,7 @@ export class FightRoom extends Room<FightState> {
         this.fightResult = FightResultTypes.WIN;
       }
     }
-    
+
 
     switch (this.fightResult) {
       case FightResultTypes.WIN:
@@ -447,7 +452,7 @@ export class FightRoom extends Room<FightState> {
           this.fightResult = FightResultTypes.LOSE;
           this.handleFightEnd();
         }
-      }    
+      }
     }
   }
 }

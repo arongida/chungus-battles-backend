@@ -25,6 +25,6 @@ export class Player extends Schema {
   }
 
   set defense(value: number) {
-    this._defense = Math.min(value, 70);
+    this._defense = value;
   }
 }
