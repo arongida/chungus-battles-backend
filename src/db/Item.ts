@@ -21,7 +21,7 @@ export const itemModel = mongoose.model('Item', ItemSchema);
 
 
 export async function getNumberOfItems(numberOfItems: number, levelRequirement: number): Promise<{}[]> {
-  const randomItems = await itemModel.aggregate([{ $match: { levelRequirement: {$lte:levelRequirement} } }, { $sample: { size: numberOfItems } }]);
+  const randomItems = await itemModel.aggregate([{ $match: { tier: {$lte:levelRequirement} } }, { $sample: { size: numberOfItems } }]);
   //const itemSchemaArray = await itemModel.find({ levelRequirement: {$lte:levelRequirement}}).lean().limit(numberOfItems).select({ _id: 0, __v: 0});
   return randomItems;
 }
