@@ -6,7 +6,7 @@ const ItemSchema = new Schema({
   name: String,
   description: String,
   price: Number,
-  levelRequirement: Number,
+  tier: {type: Number, alias: 'levelRequirement'},
   affectedStats: {
     hp: Number,
     attack: Number,

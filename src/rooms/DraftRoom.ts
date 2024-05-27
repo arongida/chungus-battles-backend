@@ -218,13 +218,13 @@ export class DraftRoom extends Room<DraftState> {
 
   private levelUp(leftoverXp: number = 0) {
     this.state.player.level++;
-    this.state.player.maxXp += this.state.player.level * 2;
+    this.state.player.maxXp += this.state.player.level * 4;
     this.state.player.xp = leftoverXp;
 
-    this.state.player.hp += 10;
-    this.state.player.attack += 1;
-    this.state.player.defense += 1;
-    this.state.player.attackSpeed += 0.1;
+    // this.state.player.hp += 10;
+    // this.state.player.attack += 1;
+    // this.state.player.defense += 1;
+    // this.state.player.attackSpeed += 0.1;
 
   }
 }

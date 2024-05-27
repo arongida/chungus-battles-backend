@@ -337,7 +337,7 @@ export class FightRoom extends Room<FightState> {
     }
 
     this.state.player.gold += this.state.player.round * 4;
-    this.state.player.xp += this.state.player.round * 4;
+    this.state.player.xp += this.state.player.round * 2;
     this.state.player.wins++;
     this.broadcast("end_battle", "The battle has ended!");
     if (this.state.player.wins >= 10) {
