@@ -5,7 +5,7 @@ export const talentMongooseSchema = new Schema({
   talentId: Number,
   name: String,
   description: String,
-  levelRequirement: Number,
+  tier: {type: Number, alias: 'levelRequirement'},
   activationRate: Number,
   image: String,
   tags: [String]
@@ -13,36 +13,9 @@ export const talentMongooseSchema = new Schema({
 
 export const talentModel = mongoose.model('Talent', talentMongooseSchema);
 
-export async function seedTalents(): Promise<void> {
-
-  const talents = [
-    {
-      talentId: 1,
-      name: 'Rage',
-      description: 'Loose health to gain attack',
-      levelRequirement: 1,
-      class: 'Warrior',
-      level: 1,
-      activationRate: 0.5,
-    },
-    {
-      talentId: 2,
-      name: 'Greed',
-      description: 'Gain gold',
-      levelRequirement: 1,
-      class: 'Merchant',
-      level: 1,
-      activationRate: 0.5,
-    }
-  ];
-
-  await talentModel.insertMany(talents);
-
-}
-
 export async function getRandomTalents(selectionSize: number, level: number): Promise<{}[]> {
   // const talentSchemaArray = await talentModel.find().lean().limit(selectionSize);
-  const talentSchemaArray = await talentModel.aggregate([{ $match: { levelRequirement: level } }, { $sample: { size: selectionSize } }]);
+  const talentSchemaArray = await talentModel.aggregate([{ $match: { tier: level } }, { $sample: { size: selectionSize } }]);
   return talentSchemaArray;
 }
 

@@ -3,7 +3,7 @@ import { FightState } from "./schema/FightState";
 import { getPlayer, getSameRoundPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { Delayed } from "colyseus";
-import { delay, FightResultTypes } from "../utils/utils";
+import { delay, FightResultType, TalentType } from "../utils/utils";
 import { getTalentsById } from "../db/Talent";
 import { getItemsById } from "../db/Item";
 import { AffectedStats, Item } from "./schema/ItemSchema";
@@ -14,7 +14,7 @@ export class FightRoom extends Room<FightState> {
   battleStarted = false;
   activatedTimers: Delayed[] = [];
   playerInitialStats: { hp: number, attack: number, defense: number, attackSpeed: number };
-  fightResult: FightResultTypes;
+  fightResult: FightResultType;
 
   onCreate(options: any) {
     this.setState(new FightState());
@@ -87,7 +87,6 @@ export class FightRoom extends Room<FightState> {
       this.state.player.defense = this.playerInitialStats.defense;
       this.state.player.attackSpeed = this.playerInitialStats.attackSpeed;
       this.state.player.round++;
-      console.log("update player object on leave:", this.state.player.talents)
       await updatePlayer(this.state.player);
       console.log(client.sessionId, "left!");
     }
@@ -184,69 +183,36 @@ export class FightRoom extends Room<FightState> {
       this.activatedTimers.push(this.clock.setInterval(() => {
 
         //handle Rage skill
-        if (talent.talentId === 1) {
+        if (talent.talentId === TalentType.Rage) {
           player.hp -= 5;
           player.attack += 2;
           this.broadcast("combat_log", `${player.name} uses Rage! Increased attack by 2!`);
         }
 
         //handle Greed skill
-        if (talent.talentId === 2) {
-          player.gold += 2;
-          enemy.gold -= 2;
-          this.broadcast("combat_log", `${player.name} uses Greed! Stole 2 gold from ${enemy.name}!`);
+        if (talent.talentId === TalentType.Greed) {
+          player.gold += 1;
+          enemy.gold -= 1;
+          this.broadcast("combat_log", `${player.name} uses Greed! Stole 1 gold from ${enemy.name}!`);
         }
 
-        //handle arcane missiles skill
-        if (talent.talentId === 8) {
-          for (let i = 0; i < 3; i++) {
-            enemy.hp -= 2;
-            this.broadcast("combat_log", `${player.name} shoots an arcane missile for 2 dmg!`);
-          }
-        }
-
-        //handle drain life skill
-        if (talent.talentId === 5) {
+        //handle steal life skill
+        if (talent.talentId === TalentType.StealLife) {
           enemy.hp -= 3;
           player.hp += 3;
-          this.broadcast("combat_log", `${player.name} drains 3 hp from ${enemy.name}!`);
+          this.broadcast("combat_log", `${player.name} steals 3 health from ${enemy.name}!`);
         }
 
-        //handle minor healing skill
-        if (talent.talentId === 10) {
+        //handle bandage skill
+        if (talent.talentId === TalentType.Bandage) {
           player.hp += 6;
           this.broadcast("combat_log", `${player.name} restores 6 health!`);
         }
 
         //handle throwing money skill
-        if (talent.talentId === 11) {
+        if (talent.talentId === TalentType.ThrowMoney) {
           enemy.hp -= player.gold;
           this.broadcast("combat_log", `${player.name} throws money for ${player.gold} damage!`);
-        }
-
-        //handle burn skill
-        if (talent.talentId === 12) {
-          const burnDamage = Math.floor(enemy.hp * 0.2);
-          enemy.hp -= burnDamage;
-          this.broadcast("combat_log", `${player.name} burns ${enemy.name} for ${burnDamage} damage!`);
-        }
-
-        //TODO: //handle body&mind skill
-        // //handle body&mind skill
-        if (talent.talentId === 15) {
-          const hpBonus = Math.floor(player.hp * 0.1);
-          const attackBonus = Math.floor(player.attack * 0.1);
-          const defenseBonus = Math.floor(player.defense * 0.1);
-          const attackSpeedBonus = player.attackSpeed * 0.1;
-          player.hp += hpBonus;
-          player.attack += attackBonus;
-          player.defense += defenseBonus;
-          player.attackSpeed += attackSpeedBonus;
-          this.broadcast("combat_log", `${player.name} is strong hence gets an increase to stats!`);
-          this.broadcast("combat_log", `${player.name} gains ${hpBonus} hp!`);
-          this.broadcast("combat_log", `${player.name} gains ${attackBonus} attack!`);
-          this.broadcast("combat_log", `${player.name} gains ${defenseBonus} defense!`);
-          this.broadcast("combat_log", `${player.name} gains ${attackSpeedBonus} attack speed!`);
         }
 
       }, (1 / talent.activationRate) * 1000));
@@ -258,10 +224,10 @@ export class FightRoom extends Room<FightState> {
 
   private async attack(attacker: Player, defender: Player) {
     //calculate defense
-    const damage = Math.floor(attacker.attack *  (100 / (100 + defender.defense)));
+    const damage = Math.floor(attacker.attack * (100 / (100 + defender.defense)));
 
     //check if defender dodges the attack
-    if (defender.talents.find(talent => talent.talentId === 9)) {
+    if (defender.talents.find(talent => talent.talentId === TalentType.Evasion)) {
       const random = Math.random();
       if (random < 0.25) {
         this.broadcast("combat_log", `${defender.name} dodged the attack!`);
@@ -270,14 +236,16 @@ export class FightRoom extends Room<FightState> {
     }
 
     //check for leech talent
-    if (attacker.talents.find(talent => talent.talentId === 13)) {
-      attacker.hp += Math.floor(damage * 0.1);
+    if (attacker.talents.find(talent => talent.talentId === TalentType.Invigorate)) {
+      const leechAmount = Math.floor(damage * 0.15);
+      attacker.hp += leechAmount;
+      this.broadcast("combat_log", `${attacker.name} leeches ${leechAmount} health!`);
     }
 
     //check execute talent
-    if (attacker.talents.find(talent => talent.talentId === 18)) {
+    if (attacker.talents.find(talent => talent.talentId === TalentType.Execute)) {
       const random = Math.random();
-      if (random < (0.1 + (attacker.attack * 0.01))) {
+      if (random < (attacker.attack * 0.01)) {
         defender.hp = -9999;
         this.broadcast("combat_log", `${attacker.name} executes ${defender.name}!`);
         return;
@@ -295,30 +263,30 @@ export class FightRoom extends Room<FightState> {
 
     if (!this.fightResult) {
       if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
-        this.fightResult = FightResultTypes.DRAW;
+        this.fightResult = FightResultType.DRAW;
       } else if (this.state.player.hp <= 0) {
-        this.fightResult = FightResultTypes.LOSE;
+        this.fightResult = FightResultType.LOSE;
       } else {
-        this.fightResult = FightResultTypes.WIN;
+        this.fightResult = FightResultType.WIN;
       }
     }
 
 
     switch (this.fightResult) {
-      case FightResultTypes.WIN:
+      case FightResultType.WIN:
         this.handleWin();
         break;
-      case FightResultTypes.LOSE:
+      case FightResultType.LOSE:
         this.handleLose();
         break;
-      case FightResultTypes.DRAW:
+      case FightResultType.DRAW:
         this.handleDraw();
         break;
     }
 
     //check for fight end bonuses
-    if (this.state.player.talents.find(talent => talent.talentId === 14)) {
-      const goldBonus = Math.floor(this.state.player.gold * 0.15);
+    if (this.state.player.talents.find(talent => talent.talentId === TalentType.SmartInvestment)) {
+      const goldBonus = Math.floor(this.state.player.gold * 0.1);
       this.state.player.gold += goldBonus;
       this.broadcast("combat_log", `You gained ${goldBonus} gold from selling loot!`);
     }
@@ -329,15 +297,15 @@ export class FightRoom extends Room<FightState> {
     this.broadcast("combat_log", "You win!");
 
     //check if player took risky investment
-    if (this.state.player.talents.find(talent => talent.talentId === 3)) {
+    if (this.state.player.talents.find(talent => talent.talentId === TalentType.RiskyInvestment)) {
       this.state.player.gold += 20;
       this.broadcast("combat_log", "You took a risky investment and gained 20 gold!");
-      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== 3);
-      this.state.player.talents.push(new Talent({ talentId: 7, name: "Broken Risky Investment", description: "Already used", level: 1, class: "Merchant", levelRequirement: 0, activationRate: 0 }));
+      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== TalentType.RiskyInvestment);
+      this.state.player.talents.push(new Talent({ talentId: 7, name: "Broken Risky Investment", description: "Already used", tier: 0, activationRate: 0 }));
     }
 
     this.state.player.gold += this.state.player.round * 4;
-    this.state.player.xp += this.state.player.round * 4;
+    this.state.player.xp += this.state.player.round * 2;
     this.state.player.wins++;
     this.broadcast("end_battle", "The battle has ended!");
     if (this.state.player.wins >= 10) {
@@ -353,22 +321,22 @@ export class FightRoom extends Room<FightState> {
     this.state.player.xp += this.state.player.round * 2;
 
     //check guardian talents
-    if (this.state.player.talents.find(talent => talent.talentId === 4)) {
+    if (this.state.player.talents.find(talent => talent.talentId === TalentType.GuardianAngel)) {
       this.broadcast("combat_log", "You have been saved by the guardian angel!");
-      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== 4);
+      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== TalentType.GuardianAngel);
       this.state.player.talents.push(new Talent(
-        { talentId: 6, name: "Broken Guardian Angel", description: "Already used", level: 1, class: "Guardian", levelRequirement: 0, activationRate: 0 }
+        { talentId: 6, name: "Broken Guardian Angel", description: "Already used", tier: 0, activationRate: 0 }
       ));
     } else {
       this.state.player.lives--;
     }
 
     //check if player took risky investment
-    if (this.state.player.talents.find(talent => talent.talentId === 3)) {
+    if (this.state.player.talents.find(talent => talent.talentId === TalentType.RiskyInvestment)) {
       this.broadcast("combat_log", "Your risky investment did not go well...");
-      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== 3);
+      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== TalentType.RiskyInvestment);
       this.state.player.talents.push(new Talent(
-        { talentId: 7, name: "Broken Risky Investment", description: "Already used", level: 1, class: "Merchant", levelRequirement: 0, activationRate: 0 }
+        { talentId: 7, name: "Broken Risky Investment", description: "Already used", tier: 0, activationRate: 0 }
       ));
     }
 
@@ -385,14 +353,6 @@ export class FightRoom extends Room<FightState> {
     this.state.player.xp += this.state.player.round * 2;
     this.broadcast("end_battle", "The battle has ended!");
 
-    //check if player took risky investment
-    if (this.state.player.talents.find(talent => talent.talentId === 3)) {
-      this.broadcast("combat_log", "You fought well but money is a btch...");
-      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== 3);
-      this.state.player.talents.push(new Talent(
-        { talentId: 7, name: "Broken Risky Investment", description: "Already used", level: 1, class: "Merchant", levelRequirement: 0, activationRate: 0 }
-      ));
-    }
   }
 
   //apply fight start effects for player/enemy
@@ -401,7 +361,7 @@ export class FightRoom extends Room<FightState> {
     if (!this.battleStarted) return;
 
     //handle strong body talent
-    if (player.talents.find(talent => talent.talentId === 15)) {
+    if (player.talents.find(talent => talent.talentId === TalentType.Strong)) {
       const hpBonus = Math.ceil(player.hp * 0.3);
       const attackBonus = Math.ceil(player.attack * 0.3);
       const defenseBonus = Math.ceil(player.defense * 0.3);
@@ -419,12 +379,12 @@ export class FightRoom extends Room<FightState> {
     }
 
     //handle upper middle class
-    if (player.talents.find(talent => talent.talentId === 16)) {
-      const hpBonus = Math.ceil(enemy.hp * (0.1 + (player.gold * 0.005)));
-      const attackBonus = Math.ceil(enemy.attack * (0.1 + (player.gold * 0.005)));
-      const defenseBonus = Math.ceil(enemy.defense * (0.1 + (player.gold * 0.005)));
+    if (player.talents.find(talent => talent.talentId === TalentType.UpperMiddleClass)) {
+      const hpBonus = Math.ceil(Math.min(0.1 + player.gold * 0.005, 0.5) * enemy.hp);
+      const attackBonus = Math.ceil(Math.min(0.1 + player.gold * 0.005, 0.5) * enemy.attack);
+      const defenseBonus = Math.ceil(Math.min(0.1 + player.gold * 0.005, 0.5) * enemy.defense);
       const factor = 10 ** 2;
-      const attackSpeedBonus = Math.round(enemy.attackSpeed * (0.1 + (player.gold * 0.005)) * factor) / factor;
+      const attackSpeedBonus = Math.round(Math.min(0.1 + player.gold * 0.005, 0.5) * enemy.attackSpeed * factor) / factor;
       enemy.hp -= hpBonus;
       enemy.attack -= attackBonus;
       enemy.defense -= defenseBonus;
@@ -437,19 +397,19 @@ export class FightRoom extends Room<FightState> {
     }
 
     //handle bribe
-    if (player.talents.find(talent => talent.talentId === 17)) {
-      if (player.gold >= 50) {
+    if (player.talents.find(talent => talent.talentId === TalentType.Bribe)) {
+      if (player.gold >= 60) {
         //set state and clear intervals
         this.battleStarted = false;
         this.activatedTimers.forEach(timer => timer.clear());
-        this.broadcast("combat_log", `${player.name} bribes ${enemy.name} for 50 gold!`);
-        player.gold -= 50;
-        enemy.gold += 50;
+        this.broadcast("combat_log", `${player.name} bribes ${enemy.name} for 60 gold!`);
+        player.gold -= 60;
+        enemy.gold += 60;
         if (player.playerId === this.state.player.playerId) {
-          this.fightResult = FightResultTypes.WIN;
+          this.fightResult = FightResultType.WIN;
           this.handleFightEnd();
         } else {
-          this.fightResult = FightResultTypes.LOSE;
+          this.fightResult = FightResultType.LOSE;
           this.handleFightEnd();
         }
       }
