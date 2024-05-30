@@ -87,7 +87,6 @@ export class FightRoom extends Room<FightState> {
       this.state.player.defense = this.playerInitialStats.defense;
       this.state.player.attackSpeed = this.playerInitialStats.attackSpeed;
       this.state.player.round++;
-      console.log("update player object on leave:", this.state.player.talents)
       await updatePlayer(this.state.player);
       console.log(client.sessionId, "left!");
     }
@@ -197,14 +196,14 @@ export class FightRoom extends Room<FightState> {
           this.broadcast("combat_log", `${player.name} uses Greed! Stole 1 gold from ${enemy.name}!`);
         }
 
-        //handle drain life skill
+        //handle steal life skill
         if (talent.talentId === TalentType.StealLife) {
           enemy.hp -= 3;
           player.hp += 3;
           this.broadcast("combat_log", `${player.name} steals 3 health from ${enemy.name}!`);
         }
 
-        //handle minor healing skill
+        //handle bandage skill
         if (talent.talentId === TalentType.Bandage) {
           player.hp += 6;
           this.broadcast("combat_log", `${player.name} restores 6 health!`);
