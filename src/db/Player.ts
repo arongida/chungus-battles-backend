@@ -16,6 +16,7 @@ const PlayerSchema = new Schema({
   round: Number,
   lives: Number,
   wins: Number,
+  avatarUrl: String,
   talents: [Number],
   inventory: [Number]
 });
@@ -29,7 +30,7 @@ export async function getPlayer(playerId: number): Promise<Player> {
   return playerSchema as unknown as Player;
 }
 
-export async function createNewPlayer(playerId: number, name: string, sessionId: string): Promise<Player> {
+export async function createNewPlayer(playerId: number, name: string, sessionId: string, avatarUrl: string): Promise<Player> {
   const startingGold = process.env.NODE_ENV === 'production' ? 10 : 100;
   const newPlayer = new playerModel({
     playerId: playerId,
@@ -46,6 +47,7 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
     round: 1,
     lives: 3,
     wins: 0,
+    avatarUrl: avatarUrl,
     talents: [],
     inventory: []
   });

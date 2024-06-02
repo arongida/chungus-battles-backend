@@ -47,6 +47,8 @@ export class DraftRoom extends Room<DraftState> {
 
     if (!options.name) throw new Error("Name is required!");
     if (!options.playerId) throw new Error("Player ID is required!");
+    if (!options.playerId) throw new Error("Avatar is required!");
+
 
 
     await delay(1000, this.clock);
@@ -65,7 +67,7 @@ export class DraftRoom extends Room<DraftState> {
       this.checkLevelUp();
     } else {
 
-      const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId);
+      const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId, options.avatarUrl);
       this.state.player.assign(newPlayer);
       this.state.remainingTalentPoints = 1;
     }
