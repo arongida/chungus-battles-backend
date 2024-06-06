@@ -26,4 +26,14 @@ export enum TalentType {
   UpperMiddleClass = 16,
   Bribe = 17,
   Execute = 18,
+  EyeForAnEye = 19,
+  Steal = 20,
 }
+
+export function updateStats(entity: any, stats: any, multiplier = 1) {
+  entity.hp += multiplier * stats.hp;
+  entity.attack += multiplier * stats.attack;
+  entity.defense += multiplier * stats.defense;
+  entity.attackSpeed += multiplier * stats.attackSpeed;
+};
+

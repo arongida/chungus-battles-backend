@@ -3,7 +3,7 @@ import { FightState } from "./schema/FightState";
 import { getPlayer, getSameRoundPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { Delayed } from "colyseus";
-import { delay, FightResultType, TalentType } from "../utils/utils";
+import { delay, FightResultType, TalentType, updateStats } from "../utils/utils";
 import { getTalentsById } from "../db/Talent";
 import { getItemsById } from "../db/Item";
 import { AffectedStats, Item } from "./schema/ItemSchema";
@@ -167,6 +167,7 @@ export class FightRoom extends Room<FightState> {
 
     let enemy = await getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
     const enemyTalents = await getTalentsById(enemy.talents as unknown as number[]) as Talent[];
+    const enemyItemsDataFromDb = await getItemsById(enemy.inventory as unknown as number[]) as Item[];
     const newEnemyObject = new Player(enemy);
     this.state.enemy.assign(newEnemyObject);
     enemy.talents.forEach(talentId => {
@@ -174,6 +175,13 @@ export class FightRoom extends Room<FightState> {
       const findTalent = this.state.enemy.talents.find(talent => talent.talentId === newTalent.talentId);
       this.state.enemy.talents.push(newTalent);
     });
+
+    enemy.inventory.forEach(itemId => {
+      let newItem = new Item(enemyItemsDataFromDb.find(item => item.itemId === itemId as unknown as number));
+      newItem.affectedStats = new AffectedStats(newItem.affectedStats);
+      this.state.enemy.inventory.push(newItem);
+    });
+
   }
 
   //start active skill loops for player and enemy
@@ -255,8 +263,21 @@ export class FightRoom extends Room<FightState> {
     //damage
     defender.hp -= damage;
 
+
     this.broadcast("combat_log", `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
     this.broadcast("damage", { attacker: attacker.playerId, defender: defender.playerId, damage: damage });
+
+    if (defender.hp <= 0) return;
+
+    //handle eye for an eye talent
+    const eyeForAnEyeTalent = attacker.talents.find(talent => talent.talentId === TalentType.EyeForAnEye);
+    if (eyeForAnEyeTalent) {
+      const random = Math.random();
+      if (random < eyeForAnEyeTalent.activationRate) {
+        this.broadcast("combat_log", `${defender.name} counters ${attacker.name}!`);
+        this.attack(defender, attacker);
+      }
+    }
   }
 
   private handleFightEnd() {
@@ -298,8 +319,8 @@ export class FightRoom extends Room<FightState> {
 
     //check if player took risky investment
     if (this.state.player.talents.find(talent => talent.talentId === TalentType.RiskyInvestment)) {
-      this.state.player.gold += 20;
-      this.broadcast("combat_log", "You took a risky investment and gained 20 gold!");
+      this.state.player.gold += 10;
+      this.broadcast("combat_log", "You took a risky investment and gained 10 gold!");
       this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== TalentType.RiskyInvestment);
       this.state.player.talents.push(new Talent({ talentId: 7, name: "Broken Risky Investment", description: "Already used", tier: 0, activationRate: 0 }));
     }
@@ -331,15 +352,6 @@ export class FightRoom extends Room<FightState> {
       this.state.player.lives--;
     }
 
-    //check if player took risky investment
-    if (this.state.player.talents.find(talent => talent.talentId === TalentType.RiskyInvestment)) {
-      this.broadcast("combat_log", "Your risky investment did not go well...");
-      this.state.player.talents = this.state.player.talents.filter(talent => talent.talentId !== TalentType.RiskyInvestment);
-      this.state.player.talents.push(new Talent(
-        { talentId: 7, name: "Broken Risky Investment", description: "Already used", tier: 0, activationRate: 0 }
-      ));
-    }
-
     if (this.state.player.lives <= 0) {
       this.broadcast("game_over", "You have lost the game!");
     } else {
@@ -356,17 +368,37 @@ export class FightRoom extends Room<FightState> {
   }
 
   //apply fight start effects for player/enemy
-  applyFightStartEffects(player: Player, enemy?: Player) {
+  applyFightStartEffects(player: Player, enemy?: Player, isPlayer = true) {
 
     if (!this.battleStarted) return;
 
+    // handle steal talent
+    const stealTalent = player.talents.find(talent => talent.talentId === TalentType.Steal);
+    if(stealTalent) {
+      const stolenItem = enemy.inventory[Math.floor(Math.random() * enemy.inventory.length)];
+      if (!stolenItem) {
+        this.broadcast("combat_log", `${player.name} tried to steal from ${enemy.name} but failed!`);
+        return;
+      }
+      player.inventory.push(stolenItem);
+      enemy.inventory = enemy.inventory.filter(item => item.itemId !== stolenItem.itemId);
+
+      updateStats(player, stolenItem.affectedStats);
+      if (isPlayer) updateStats(this.playerInitialStats, stolenItem.affectedStats);
+      updateStats(enemy, stolenItem.affectedStats, -1);
+
+      this.broadcast("combat_log", `${player.name} steals ${stolenItem.name} from ${enemy.name}!`);
+
+    }
+
     //handle strong body talent
-    if (player.talents.find(talent => talent.talentId === TalentType.Strong)) {
-      const hpBonus = Math.ceil(player.hp * 0.3);
-      const attackBonus = Math.ceil(player.attack * 0.3);
-      const defenseBonus = Math.ceil(player.defense * 0.3);
+    const strongBodyTalent = player.talents.find(talent => talent.talentId === TalentType.Strong);
+    if (strongBodyTalent) {
+      const hpBonus = Math.ceil(player.hp * strongBodyTalent.activationRate);
+      const attackBonus = Math.ceil(player.attack * strongBodyTalent.activationRate);
+      const defenseBonus = Math.ceil(player.defense * strongBodyTalent.activationRate);
       const factor = 10 ** 2;
-      const attackSpeedBonus = Math.round(player.attackSpeed * 0.3 * factor) / factor;
+      const attackSpeedBonus = Math.round(player.attackSpeed * strongBodyTalent.activationRate * factor) / factor;
       player.hp += hpBonus;
       player.attack += attackBonus;
       player.defense += defenseBonus;
