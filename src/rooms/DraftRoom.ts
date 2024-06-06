@@ -6,7 +6,7 @@ import { createNewPlayer } from "../db/Player";
 import { getNumberOfItems, getItemsById } from "../db/Item";
 import { getPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
-import { delay } from "../utils/utils";
+import { delay, updateStats } from "../utils/utils";
 import { getRandomTalents, getTalentsById } from "../db/Talent";
 
 export class DraftRoom extends Room<DraftState> {
@@ -171,10 +171,7 @@ export class DraftRoom extends Room<DraftState> {
     if (item) {
       this.state.player.gold -= item.price;
 
-      this.state.player.hp += item.affectedStats.hp;
-      this.state.player.attack += item.affectedStats.attack;
-      this.state.player.defense += item.affectedStats.defense;
-      this.state.player.attackSpeed += item.affectedStats.attackSpeed;
+      updateStats(this.state.player, item.affectedStats);
 
       this.state.shop = this.state.shop.filter((item) => item.itemId !== itemId);
       this.state.player.inventory.push(item);
