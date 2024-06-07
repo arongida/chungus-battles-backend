@@ -30,10 +30,22 @@ export enum TalentType {
   Steal = 20,
 }
 
-export function updateStats(entity: any, stats: any, multiplier = 1) {
+export function increaseStats(entity: any, stats: any, multiplier = 1) {
   entity.hp += multiplier * stats.hp;
   entity.attack += multiplier * stats.attack;
   entity.defense += multiplier * stats.defense;
   entity.attackSpeed += multiplier * stats.attackSpeed;
+};
+
+export function setStats(entity: any, stats: any) {
+
+  if (entity === undefined) {
+    entity = {hp: stats.hp, attack: stats.attack, defense: stats.defense, attackSpeed: stats.attackSpeed};
+  } else {
+    entity.hp = stats.hp;
+    entity.attack = stats.attack;
+    entity.defense = stats.defense;
+    entity.attackSpeed = stats.attackSpeed;
+  }
 };
 
