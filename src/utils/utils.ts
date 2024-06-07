@@ -38,14 +38,16 @@ export function increaseStats(entity: any, stats: any, multiplier = 1) {
 };
 
 export function setStats(entity: any, stats: any) {
-
-  if (entity === undefined) {
-    entity = {hp: stats.hp, attack: stats.attack, defense: stats.defense, attackSpeed: stats.attackSpeed};
-  } else {
-    entity.hp = stats.hp;
-    entity.attack = stats.attack;
-    entity.defense = stats.defense;
-    entity.attackSpeed = stats.attackSpeed;
-  }
+  entity.hp = stats.hp;
+  entity.attack = stats.attack;
+  entity.defense = stats.defense;
+  entity.attackSpeed = stats.attackSpeed;
 };
+
+export interface Stats {
+  hp: number;
+  attack: number;
+  defense: number;
+  attackSpeed: number;
+}
 
