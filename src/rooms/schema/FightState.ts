@@ -5,5 +5,4 @@ export class FightState extends Schema {
 
   @type(Player) player: Player = new Player();
   @type(Player) enemy: Player = new Player();
-
 }

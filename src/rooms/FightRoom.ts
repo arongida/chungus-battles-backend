@@ -3,7 +3,7 @@ import { FightState } from "./schema/FightState";
 import { getPlayer, getSameRoundPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { Delayed } from "colyseus";
-import { delay, FightResultType, TalentType, increaseStats, setStats } from "../utils/utils";
+import { delay, FightResultType, TalentType, increaseStats, setStats, Stats } from "../utils/utils";
 import { getTalentsById } from "../db/Talent";
 import { getItemsById } from "../db/Item";
 import { AffectedStats, Item } from "./schema/ItemSchema";
@@ -13,7 +13,7 @@ export class FightRoom extends Room<FightState> {
   maxClients = 1;
   battleStarted = false;
   activatedTimers: Delayed[] = [];
-  playerInitialStats: {};
+  playerInitialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
   fightResult: FightResultType;
 
   onCreate(options: any) {
