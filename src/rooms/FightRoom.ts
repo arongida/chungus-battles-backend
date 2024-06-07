@@ -3,7 +3,7 @@ import { FightState } from "./schema/FightState";
 import { getPlayer, getSameRoundPlayer, updatePlayer } from "../db/Player";
 import { Player } from "./schema/PlayerSchema";
 import { Delayed } from "colyseus";
-import { delay, FightResultType, TalentType, updateStats } from "../utils/utils";
+import { delay, FightResultType, TalentType, increaseStats, setStats } from "../utils/utils";
 import { getTalentsById } from "../db/Talent";
 import { getItemsById } from "../db/Item";
 import { AffectedStats, Item } from "./schema/ItemSchema";
@@ -13,7 +13,7 @@ export class FightRoom extends Room<FightState> {
   maxClients = 1;
   battleStarted = false;
   activatedTimers: Delayed[] = [];
-  playerInitialStats: { hp: number, attack: number, defense: number, attackSpeed: number };
+  playerInitialStats: {};
   fightResult: FightResultType;
 
   onCreate(options: any) {
@@ -44,6 +44,15 @@ export class FightRoom extends Room<FightState> {
 
     //set up player state
     await this.setUpState(player);
+    setStats(this.playerInitialStats, this.state.player);
+
+    //set up enemy state
+    if (!this.state.enemy.playerId) {
+      let enemy = await getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
+      //set up enemy state
+      await this.setUpState(enemy, true);
+    }
+
 
     // check if player is already playing
     if (this.state.player.sessionId !== "") throw new Error("Player already playing!");
@@ -82,10 +91,7 @@ export class FightRoom extends Room<FightState> {
       //save player state to db
       this.state.player.sessionId = "";
       //set player for next round
-      this.state.player.hp = this.playerInitialStats.hp;
-      this.state.player.attack = this.playerInitialStats.attack;
-      this.state.player.defense = this.playerInitialStats.defense;
-      this.state.player.attackSpeed = this.playerInitialStats.attackSpeed;
+      setStats(this.state.player, this.playerInitialStats);
       this.state.player.round++;
       await updatePlayer(this.state.player);
       console.log(client.sessionId, "left!");
@@ -138,50 +144,33 @@ export class FightRoom extends Room<FightState> {
   }
 
   //get player, enemy and talents from db and map them to the room state
-  async setUpState(player: Player) {
-    const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
-    const itemsDataFromDb = await getItemsById(player.inventory as unknown as number[]) as Item[];
+  async setUpState(player: Player, isEnemy = false) {
 
     const newPlayer = new Player(player);
-
-    this.state.player.assign(newPlayer);
-
-    player.talents.forEach(talentId => {
-      const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
-      const findTalent = this.state.player.talents.find(talent => talent.talentId === newTalent.talentId);
-      this.state.player.talents.push(newTalent);
-    });
-
-    player.inventory.forEach(itemId => {
-      let newItem = new Item(itemsDataFromDb.find(item => item.itemId === itemId as unknown as number));
-      newItem.affectedStats = new AffectedStats(newItem.affectedStats);
-      this.state.player.inventory.push(newItem);
-    });
+    if (!isEnemy) {
+      this.state.player.assign(newPlayer);
+    } else {
+      this.state.enemy.assign(newPlayer);
+    }
 
 
-    //save original player stats
-    this.playerInitialStats = { hp: this.state.player.hp, attack: this.state.player.attack, defense: this.state.player.defense, attackSpeed: this.state.player.attackSpeed };
+    if (player.talents?.length > 0) {
+      const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
+      player.talents.forEach(talentId => {
+        const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
+        const findTalent = this.state.player.talents.find(talent => talent.talentId === newTalent.talentId);
+        this.state.player.talents.push(newTalent);
+      });
+    }
 
-    //if enemy state is already set, skip it
-    if (this.state.enemy.playerId) return;
-
-    let enemy = await getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
-    const enemyTalents = await getTalentsById(enemy.talents as unknown as number[]) as Talent[];
-    const enemyItemsDataFromDb = await getItemsById(enemy.inventory as unknown as number[]) as Item[];
-    const newEnemyObject = new Player(enemy);
-    this.state.enemy.assign(newEnemyObject);
-    enemy.talents.forEach(talentId => {
-      const newTalent = new Talent(enemyTalents.find(talent => talent.talentId === talentId as unknown as number));
-      const findTalent = this.state.enemy.talents.find(talent => talent.talentId === newTalent.talentId);
-      this.state.enemy.talents.push(newTalent);
-    });
-
-    enemy.inventory.forEach(itemId => {
-      let newItem = new Item(enemyItemsDataFromDb.find(item => item.itemId === itemId as unknown as number));
-      newItem.affectedStats = new AffectedStats(newItem.affectedStats);
-      this.state.enemy.inventory.push(newItem);
-    });
-
+    if (player.inventory?.length > 0) {
+      const itemsDataFromDb = await getItemsById(player.inventory as unknown as number[]) as Item[];
+      player.inventory.forEach(itemId => {
+        let newItem = new Item(itemsDataFromDb.find(item => item.itemId === itemId as unknown as number));
+        newItem.affectedStats = new AffectedStats(newItem.affectedStats);
+        this.state.player.inventory.push(newItem);
+      });
+    }
   }
 
   //start active skill loops for player and enemy
@@ -200,7 +189,7 @@ export class FightRoom extends Room<FightState> {
         //handle Greed skill
         if (talent.talentId === TalentType.Greed) {
           player.gold += 1;
-          enemy.gold -= 1;
+          if (enemy.gold > 0) enemy.gold -= 1;
           this.broadcast("combat_log", `${player.name} uses Greed! Stole 1 gold from ${enemy.name}!`);
         }
 
@@ -270,7 +259,7 @@ export class FightRoom extends Room<FightState> {
     if (defender.hp <= 0) return;
 
     //handle eye for an eye talent
-    const eyeForAnEyeTalent = attacker.talents.find(talent => talent.talentId === TalentType.EyeForAnEye);
+    const eyeForAnEyeTalent = defender.talents.find(talent => talent.talentId === TalentType.EyeForAnEye);
     if (eyeForAnEyeTalent) {
       const random = Math.random();
       if (random < eyeForAnEyeTalent.activationRate) {
@@ -374,7 +363,7 @@ export class FightRoom extends Room<FightState> {
 
     // handle steal talent
     const stealTalent = player.talents.find(talent => talent.talentId === TalentType.Steal);
-    if(stealTalent) {
+    if (stealTalent) {
       const stolenItem = enemy.inventory[Math.floor(Math.random() * enemy.inventory.length)];
       if (!stolenItem) {
         this.broadcast("combat_log", `${player.name} tried to steal from ${enemy.name} but failed!`);
@@ -383,9 +372,9 @@ export class FightRoom extends Room<FightState> {
       player.inventory.push(stolenItem);
       enemy.inventory = enemy.inventory.filter(item => item.itemId !== stolenItem.itemId);
 
-      updateStats(player, stolenItem.affectedStats);
-      if (isPlayer) updateStats(this.playerInitialStats, stolenItem.affectedStats);
-      updateStats(enemy, stolenItem.affectedStats, -1);
+      increaseStats(player, stolenItem.affectedStats);
+      if (isPlayer) increaseStats(this.playerInitialStats, stolenItem.affectedStats);
+      increaseStats(enemy, stolenItem.affectedStats, -1);
 
       this.broadcast("combat_log", `${player.name} steals ${stolenItem.name} from ${enemy.name}!`);
 
