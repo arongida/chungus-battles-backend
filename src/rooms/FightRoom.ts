@@ -46,6 +46,7 @@ export class FightRoom extends Room<FightState> {
     await this.setUpState(player);
     setStats(this.playerInitialStats, this.state.player);
 
+
     //set up enemy state
     if (!this.state.enemy.playerId) {
       let enemy = await getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
@@ -140,7 +141,7 @@ export class FightRoom extends Room<FightState> {
 
     //apply fight start effects
     this.applyFightStartEffects(this.state.player, this.state.enemy);
-    this.applyFightStartEffects(this.state.enemy, this.state.player);
+    this.applyFightStartEffects(this.state.enemy, this.state.player, false);
   }
 
   //get player, enemy and talents from db and map them to the room state
@@ -154,21 +155,24 @@ export class FightRoom extends Room<FightState> {
     }
 
 
-    if (player.talents?.length > 0) {
+    if (player.talents.length > 0) {
       const talents = await getTalentsById(player.talents as unknown as number[]) as Talent[];
       player.talents.forEach(talentId => {
         const newTalent = new Talent(talents.find(talent => talent.talentId === talentId as unknown as number));
-        const findTalent = this.state.player.talents.find(talent => talent.talentId === newTalent.talentId);
-        this.state.player.talents.push(newTalent);
+        if (!isEnemy) this.state.player.talents.push(newTalent);
+        else this.state.enemy.talents.push(newTalent);
+
       });
     }
 
-    if (player.inventory?.length > 0) {
+    if (player.inventory.length > 0) {
       const itemsDataFromDb = await getItemsById(player.inventory as unknown as number[]) as Item[];
       player.inventory.forEach(itemId => {
         let newItem = new Item(itemsDataFromDb.find(item => item.itemId === itemId as unknown as number));
         newItem.affectedStats = new AffectedStats(newItem.affectedStats);
-        this.state.player.inventory.push(newItem);
+        if (!isEnemy) this.state.player.inventory.push(newItem);
+        else this.state.enemy.inventory.push(newItem);
+
       });
     }
   }
@@ -181,13 +185,13 @@ export class FightRoom extends Room<FightState> {
 
         //handle Rage skill
         if (talent.talentId === TalentType.Rage) {
-          player.hp -= 5;
-          player.attack += 2;
-          this.broadcast("combat_log", `${player.name} uses Rage! Increased attack by 2!`);
+          player.hp -= 4;
+          player.attack += 1;
+          this.broadcast("combat_log", `${player.name} uses Rage! Increased attack by 1!`);
         }
 
         //handle Greed skill
-        if (talent.talentId === TalentType.Greed) {
+        if (talent.talentId === TalentType.Pickpocket) {
           player.gold += 1;
           if (enemy.gold > 0) enemy.gold -= 1;
           this.broadcast("combat_log", `${player.name} uses Greed! Stole 1 gold from ${enemy.name}!`);
@@ -373,8 +377,13 @@ export class FightRoom extends Room<FightState> {
       enemy.inventory = enemy.inventory.filter(item => item.itemId !== stolenItem.itemId);
 
       increaseStats(player, stolenItem.affectedStats);
-      if (isPlayer) increaseStats(this.playerInitialStats, stolenItem.affectedStats);
       increaseStats(enemy, stolenItem.affectedStats, -1);
+
+      if (isPlayer) {
+        increaseStats(this.playerInitialStats, stolenItem.affectedStats);
+      } else {
+        increaseStats(this.playerInitialStats, stolenItem.affectedStats, -1);
+      }
 
       this.broadcast("combat_log", `${player.name} steals ${stolenItem.name} from ${enemy.name}!`);
 
@@ -419,13 +428,13 @@ export class FightRoom extends Room<FightState> {
 
     //handle bribe
     if (player.talents.find(talent => talent.talentId === TalentType.Bribe)) {
-      if (player.gold >= 60) {
+      if (player.gold >= 80) {
         //set state and clear intervals
         this.battleStarted = false;
         this.activatedTimers.forEach(timer => timer.clear());
-        this.broadcast("combat_log", `${player.name} bribes ${enemy.name} for 60 gold!`);
-        player.gold -= 60;
-        enemy.gold += 60;
+        this.broadcast("combat_log", `${player.name} bribes ${enemy.name} for ${player.gold} gold!`);
+        player.gold = 0;
+        enemy.gold += player.gold;
         if (player.playerId === this.state.player.playerId) {
           this.fightResult = FightResultType.WIN;
           this.handleFightEnd();
