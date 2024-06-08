@@ -11,7 +11,7 @@ export enum FightResultType {
 
 export enum TalentType {
   Rage = 1,
-  Greed = 2,
+  Pickpocket = 2,
   RiskyInvestment = 3,
   GuardianAngel = 4,
   StealLife = 5,
