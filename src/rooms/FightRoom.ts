@@ -87,6 +87,11 @@ export class FightRoom extends Room<FightState> {
       // allow disconnected client to reconnect into this room until 20 seconds
       await this.allowReconnection(client, 20);
       console.log("client reconnected!");
+      if (this.fightResult) {
+        if (this.state.player.lives > 0 && this.state.player.wins < 10)  this.broadcast("end_battle", "The battle has ended!");
+        else if (this.state.player.lives <= 0 && this.state.player.wins < 10) this.broadcast("game_over", "You have lost the game!");
+        else if (this.state.player.wins >= 10) this.broadcast("game_over", "You have won the game!");
+      }
 
     } catch (e) {
       //save player state to db
