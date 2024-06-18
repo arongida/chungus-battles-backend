@@ -8,8 +8,8 @@
  *
  * See: https://docs.colyseus.io/server/api/#constructor-options
  */
-import { listen } from "@colyseus/tools";
-import mongoose from "mongoose";
+import { listen } from '@colyseus/tools';
+import mongoose from 'mongoose';
 
 /**
  * Connect to MongoDB
@@ -20,7 +20,7 @@ mongoose.connect(process.env.DB_CONNECTION_STRING, {
 });
 
 // Import Colyseus config
-import app from "./app.config";
+import app from './app.config';
 
 // Create and listen on 2567 (or PORT environment variable.)
 listen(app);
