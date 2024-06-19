@@ -27,6 +27,8 @@ export enum TalentType {
   Execute = 18,
   EyeForAnEye = 19,
   Steal = 20,
+  WeaponWhisperer = 21,
+  GoldGenie = 22,
 }
 
 export function increaseStats(entity: any, stats: any, multiplier = 1) {

@@ -6,7 +6,7 @@ import { createNewPlayer } from '../db/Player';
 import { getNumberOfItems, getItemsById } from '../db/Item';
 import { getPlayer, updatePlayer } from '../db/Player';
 import { Player } from './schema/PlayerSchema';
-import { delay, increaseStats } from '../utils/utils';
+import { TalentType, delay, increaseStats } from '../utils/utils';
 import { getRandomTalents, getTalentsById } from '../db/Talent';
 
 export class DraftRoom extends Room<DraftState> {

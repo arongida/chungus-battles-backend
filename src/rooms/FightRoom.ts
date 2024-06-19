@@ -209,7 +209,7 @@ export class FightRoom extends Room<FightState> {
         this.clock.setInterval(() => {
           //handle Rage skill
           if (talent.talentId === TalentType.Rage) {
-            player.hp -= 4;
+            player.hp -= 3;
             player.attack += 1;
             this.broadcast(
               'combat_log',
@@ -263,11 +263,12 @@ export class FightRoom extends Room<FightState> {
     );
 
     //check if defender dodges the attack
-    if (
-      defender.talents.find((talent) => talent.talentId === TalentType.Evasion)
-    ) {
+    const evasionTalent = defender.talents.find(
+      (talent) => talent.talentId === TalentType.Evasion
+    );
+    if (evasionTalent) {
       const random = Math.random();
-      if (random < 0.25) {
+      if (random < evasionTalent.activationRate) {
         this.broadcast('combat_log', `${defender.name} dodged the attack!`);
         return;
       }
@@ -357,12 +358,16 @@ export class FightRoom extends Room<FightState> {
     }
 
     //check for fight end bonuses
-    if (
-      this.state.player.talents.find(
-        (talent) => talent.talentId === TalentType.SmartInvestment
-      )
-    ) {
-      const goldBonus = Math.floor(this.state.player.gold * 0.1);
+    const smartInvestmentTalent = this.state.player.talents.find(
+      (talent) => talent.talentId === TalentType.SmartInvestment
+    );
+    if (smartInvestmentTalent) {
+      const goldBonus = Math.max(
+        Math.floor(
+          this.state.player.gold * smartInvestmentTalent.activationRate
+        ),
+        2
+      );
       this.state.player.gold += goldBonus;
       this.broadcast(
         'combat_log',
@@ -375,15 +380,14 @@ export class FightRoom extends Room<FightState> {
     this.broadcast('combat_log', 'You win!');
 
     //check if player took risky investment
-    if (
-      this.state.player.talents.find(
-        (talent) => talent.talentId === TalentType.RiskyInvestment
-      )
-    ) {
-      this.state.player.gold += 10;
+    const riskyInvestmentTalent = this.state.player.talents.find(
+      (talent) => talent.talentId === TalentType.RiskyInvestment
+    );
+    if (riskyInvestmentTalent) {
+      this.state.player.gold += riskyInvestmentTalent.activationRate;
       this.broadcast(
         'combat_log',
-        'You took a risky investment and gained 10 gold!'
+        `You took a risky investment and gained ${riskyInvestmentTalent.activationRate} gold!`
       );
       this.state.player.talents = this.state.player.talents.filter(
         (talent) => talent.talentId !== TalentType.RiskyInvestment
@@ -458,6 +462,33 @@ export class FightRoom extends Room<FightState> {
   applyFightStartEffects(player: Player, enemy?: Player, isPlayer = true) {
     if (!this.battleStarted) return;
 
+    //handle weapon whisperer talent
+    const weaponWhispererTalent = player.talents.find(
+      (talent) => talent.talentId === TalentType.WeaponWhisperer
+    );
+    if (weaponWhispererTalent) {
+      const numberOfMeleeWeapons = player.getNumberOfMeleeWeapons();
+      player.attack += numberOfMeleeWeapons;
+      this.broadcast(
+        'combat_log',
+        `${player.name} gains ${numberOfMeleeWeapons} attack from Weapon Whisperer!`
+      );
+    }
+
+    //handle talent buy effects
+    const goldGenieTalent = player.talents.find(
+      (talent) => talent.talentId === TalentType.GoldGenie
+    );
+    if (goldGenieTalent) {
+      player.defense += player.gold * 4;
+      this.broadcast(
+        'combat_log',
+        `${player.name} gains ${
+          this.state.player.gold * 4
+        } defense from Gold Genie!`
+      );
+    }
+
     // handle steal talent
     const stealTalent = player.talents.find(
       (talent) => talent.talentId === TalentType.Steal
@@ -470,7 +501,6 @@ export class FightRoom extends Room<FightState> {
           'combat_log',
           `${player.name} tried to steal from ${enemy.name} but failed!`
         );
-        return;
       }
       player.inventory.push(stolenItem);
       enemy.inventory = enemy.inventory.filter(

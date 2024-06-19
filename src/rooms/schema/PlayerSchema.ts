@@ -28,4 +28,13 @@ export class Player extends Schema {
   set defense(value: number) {
     this._defense = value;
   }
+
+  getNumberOfMeleeWeapons(): number {
+    return this.inventory.reduce((count, item) => {
+      if (item.tags.includes('weapon') && item.tags.includes('melee')) {
+        return count + 1;
+      }
+      return count;
+    }, 0);
+  }
 }
