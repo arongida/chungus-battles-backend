@@ -1,12 +1,11 @@
-
 export function delay(ms: number, clock: any): Promise<void> {
   return new Promise((resolve) => clock.setTimeout(resolve, ms));
 }
 
 export enum FightResultType {
-  WIN = "win",
-  LOSE = "lose",
-  DRAW = "draw"
+  WIN = 'win',
+  LOSE = 'lose',
+  DRAW = 'draw',
 }
 
 export enum TalentType {
@@ -28,6 +27,8 @@ export enum TalentType {
   Execute = 18,
   EyeForAnEye = 19,
   Steal = 20,
+  WeaponWhisperer = 21,
+  GoldGenie = 22,
 }
 
 export function increaseStats(entity: any, stats: any, multiplier = 1) {
@@ -35,14 +36,14 @@ export function increaseStats(entity: any, stats: any, multiplier = 1) {
   entity.attack += multiplier * stats.attack;
   entity.defense += multiplier * stats.defense;
   entity.attackSpeed += multiplier * stats.attackSpeed;
-};
+}
 
 export function setStats(entity: any, stats: any) {
   entity.hp = stats.hp;
   entity.attack = stats.attack;
   entity.defense = stats.defense;
   entity.attackSpeed = stats.attackSpeed;
-};
+}
 
 export interface Stats {
   hp: number;
@@ -50,4 +51,3 @@ export interface Stats {
   defense: number;
   attackSpeed: number;
 }
-

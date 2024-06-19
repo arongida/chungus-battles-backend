@@ -1,23 +1,23 @@
-import { Schema, type, ArraySchema } from "@colyseus/schema";
-import { Talent } from "./TalentSchema";
-import { Item } from "./ItemSchema";
+import { Schema, type, ArraySchema } from '@colyseus/schema';
+import { Talent } from './TalentSchema';
+import { Item } from './ItemSchema';
 
 export class Player extends Schema {
-  @type("number") playerId: number;
-  @type("string") name: string;
-  @type("number") hp: number;
-  @type("number") attack: number;
-  @type("number") gold: number;
-  @type("number") xp: number;
-  @type("number") level: number;
-  @type("string") sessionId: string;
-  @type("number") private _defense: number;
-  @type("number") attackSpeed: number;
-  @type("number") maxXp: number;
-  @type("number") round: number;
-  @type("number") lives: number;
-  @type("number") wins: number;
-  @type("string") avatarUrl: string;
+  @type('number') playerId: number;
+  @type('string') name: string;
+  @type('number') hp: number;
+  @type('number') attack: number;
+  @type('number') gold: number;
+  @type('number') xp: number;
+  @type('number') level: number;
+  @type('string') sessionId: string;
+  @type('number') private _defense: number;
+  @type('number') attackSpeed: number;
+  @type('number') maxXp: number;
+  @type('number') round: number;
+  @type('number') lives: number;
+  @type('number') wins: number;
+  @type('string') avatarUrl: string;
   @type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
   @type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 
@@ -27,5 +27,14 @@ export class Player extends Schema {
 
   set defense(value: number) {
     this._defense = value;
+  }
+
+  getNumberOfMeleeWeapons(): number {
+    return this.inventory.reduce((count, item) => {
+      if (item.tags.includes('weapon') && item.tags.includes('melee')) {
+        return count + 1;
+      }
+      return count;
+    }, 0);
   }
 }

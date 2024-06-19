@@ -18,19 +18,26 @@ const PlayerSchema = new Schema({
   wins: Number,
   avatarUrl: String,
   talents: [Number],
-  inventory: [Number]
+  inventory: [Number],
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
 
 export async function getPlayer(playerId: number): Promise<Player> {
-  const playerSchema = await playerModel.findOne({ playerId: playerId }).lean().select({ _id: 0, __v: 0 });
-
+  const playerSchema = await playerModel
+    .findOne({ playerId: playerId })
+    .lean()
+    .select({ _id: 0, __v: 0 });
 
   return playerSchema as unknown as Player;
 }
 
-export async function createNewPlayer(playerId: number, name: string, sessionId: string, avatarUrl: string): Promise<Player> {
+export async function createNewPlayer(
+  playerId: number,
+  name: string,
+  sessionId: string,
+  avatarUrl: string
+): Promise<Player> {
   const startingGold = process.env.NODE_ENV === 'production' ? 10 : 100;
   const newPlayer = new playerModel({
     playerId: playerId,
@@ -49,19 +56,20 @@ export async function createNewPlayer(playerId: number, name: string, sessionId:
     wins: 0,
     avatarUrl: avatarUrl,
     talents: [],
-    inventory: []
+    inventory: [],
   });
   await newPlayer.save().catch((err) => console.error(err));
   return newPlayer.toObject() as unknown as Player;
 }
 
 export async function updatePlayer(player: Player): Promise<Player> {
-
   let playerObject = player.toJSON();
   let newPlayerObject = { ...playerObject, talents: [0], inventory: [0] };
   newPlayerObject = { ...playerObject, talents: [], inventory: [] };
 
-  const foundPlayerModel = await playerModel.findOne({ playerId: player.playerId });
+  const foundPlayerModel = await playerModel.findOne({
+    playerId: player.playerId,
+  });
 
   foundPlayerModel.set(newPlayerObject);
 
@@ -78,17 +86,26 @@ export async function updatePlayer(player: Player): Promise<Player> {
 }
 
 export async function getNextPlayerId(): Promise<number> {
-  const lastPlayer = await playerModel.findOne().sort({ playerId: -1 }).limit(1).lean();
+  const lastPlayer = await playerModel
+    .findOne()
+    .sort({ playerId: -1 })
+    .limit(1)
+    .lean();
   return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
 
-export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
-
+export async function getSameRoundPlayer(
+  round: number,
+  playerId: number
+): Promise<Player> {
   if (round <= 0) {
     return null;
   }
 
-  const randomPlayerWithSameTurn = await playerModel.aggregate([{ $match: { round: round, playerId: { $ne: playerId } } }, { $sample: { size: 1 } }]);
+  const randomPlayerWithSameTurn = await playerModel.aggregate([
+    { $match: { round: round, playerId: { $ne: playerId } } },
+    { $sample: { size: 1 } },
+  ]);
   const [enemyPlayerObject] = randomPlayerWithSameTurn;
   if (!enemyPlayerObject) {
     return await getSameRoundPlayer(round - 1, playerId);
