@@ -397,7 +397,7 @@ export class FightRoom extends Room<FightState> {
           talentId: 7,
           name: 'Broken Risky Investment',
           description: 'Already used',
-          tier: 0,
+          tier: 1,
           activationRate: 0,
         })
       );
