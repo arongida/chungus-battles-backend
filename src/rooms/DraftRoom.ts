@@ -2,7 +2,7 @@ import { Room, Client } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
 import { AffectedStats, Item } from './schema/ItemSchema';
 import { Talent } from './schema/TalentSchema';
-import { createNewPlayer } from '../db/Player';
+import { copyPlayer, createNewPlayer } from '../db/Player';
 import { getNumberOfItems, getItemsById } from '../db/Item';
 import { getPlayer, updatePlayer } from '../db/Player';
 import { Player } from './schema/PlayerSchema';
@@ -86,6 +86,7 @@ export class DraftRoom extends Room<DraftState> {
     } catch (e) {
       //save player state to db
       this.state.player.sessionId = '';
+      const copiedPlayer = await copyPlayer(this.state.player);
       const updatedPlayer = await updatePlayer(this.state.player);
       console.log(client.sessionId, 'left!');
     }

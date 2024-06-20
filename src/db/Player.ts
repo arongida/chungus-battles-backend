@@ -2,113 +2,141 @@ import mongoose, { Document, Schema } from 'mongoose';
 import { Player } from '../rooms/schema/PlayerSchema';
 
 const PlayerSchema = new Schema({
-  playerId: Number,
-  name: String,
-  hp: Number,
-  attack: Number,
-  gold: Number,
-  xp: Number,
-  level: Number,
-  sessionId: String,
-  defense: { type: Number, alias: '_defense' },
-  attackSpeed: Number,
-  maxXp: Number,
-  round: Number,
-  lives: Number,
-  wins: Number,
-  avatarUrl: String,
-  talents: [Number],
-  inventory: [Number],
+	playerId: Number,
+	name: String,
+	hp: Number,
+	attack: Number,
+	gold: Number,
+	xp: Number,
+	level: Number,
+	sessionId: String,
+	defense: { type: Number, alias: '_defense' },
+	attackSpeed: Number,
+	maxXp: Number,
+	round: Number,
+	lives: Number,
+	wins: Number,
+	avatarUrl: String,
+	talents: [Number],
+	inventory: [Number],
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
 
 export async function getPlayer(playerId: number): Promise<Player> {
-  const playerSchema = await playerModel
-    .findOne({ playerId: playerId })
-    .lean()
-    .select({ _id: 0, __v: 0 });
+	const playerSchema = await playerModel
+		.findOne({ playerId: playerId })
+		.lean()
+		.select({ _id: 0, __v: 0 });
 
-  return playerSchema as unknown as Player;
+	return playerSchema as unknown as Player;
 }
 
 export async function createNewPlayer(
-  playerId: number,
-  name: string,
-  sessionId: string,
-  avatarUrl: string
+	playerId: number,
+	name: string,
+	sessionId: string,
+	avatarUrl: string
 ): Promise<Player> {
-  const startingGold = process.env.NODE_ENV === 'production' ? 10 : 100;
-  const newPlayer = new playerModel({
-    playerId: playerId,
-    name: name,
-    hp: 100,
-    attack: 10,
-    gold: startingGold,
-    xp: 0,
-    level: 1,
-    sessionId: sessionId,
-    defense: 0,
-    attackSpeed: 1,
-    maxXp: 12,
-    round: 1,
-    lives: 3,
-    wins: 0,
-    avatarUrl: avatarUrl,
-    talents: [],
-    inventory: [],
-  });
-  await newPlayer.save().catch((err) => console.error(err));
-  return newPlayer.toObject() as unknown as Player;
+	const startingGold = process.env.NODE_ENV === 'production' ? 10 : 100;
+	const newPlayer = new playerModel({
+		playerId: playerId,
+		name: name,
+		hp: 100,
+		attack: 10,
+		gold: startingGold,
+		xp: 0,
+		level: 1,
+		sessionId: sessionId,
+		defense: 0,
+		attackSpeed: 1,
+		maxXp: 12,
+		round: 1,
+		lives: 3,
+		wins: 0,
+		avatarUrl: avatarUrl,
+		talents: [],
+		inventory: [],
+	});
+	await newPlayer.save().catch((err) => console.error(err));
+	return newPlayer.toObject() as unknown as Player;
+}
+
+export async function copyPlayer(player: Player): Promise<Player> {
+	let playerObject = player.toJSON();
+	let newPlayerObject = {
+		...playerObject,
+		talents: [0],
+		inventory: [0],
+	};
+	newPlayerObject = {
+		...playerObject,
+		talents: [],
+		inventory: [],
+		playerId: await getNextPlayerId(),
+	};
+
+	const newPlayer = new playerModel(newPlayerObject);
+
+	playerObject.talents.forEach((talent) => {
+		newPlayer.talents.push(talent.talentId);
+	});
+
+	playerObject.inventory.forEach((item) => {
+		newPlayer.inventory.push(item.itemId);
+	});
+
+	await newPlayer.save().catch((err) => console.error(err));
+	return newPlayer.toObject() as unknown as Player;
 }
 
 export async function updatePlayer(player: Player): Promise<Player> {
-  let playerObject = player.toJSON();
-  let newPlayerObject = { ...playerObject, talents: [0], inventory: [0] };
-  newPlayerObject = { ...playerObject, talents: [], inventory: [] };
+	let playerObject = player.toJSON();
+	let newPlayerObject = { ...playerObject, talents: [0], inventory: [0] };
+	newPlayerObject = { ...playerObject, talents: [], inventory: [] };
 
-  const foundPlayerModel = await playerModel.findOne({
-    playerId: player.playerId,
-  });
+	const foundPlayerModel = await playerModel.findOne({
+		playerId: player.playerId,
+	});
 
-  foundPlayerModel.set(newPlayerObject);
+	foundPlayerModel.set(newPlayerObject);
 
-  playerObject.talents.forEach((talent) => {
-    foundPlayerModel.talents.push(talent.talentId);
-  });
+	playerObject.talents.forEach((talent) => {
+		foundPlayerModel.talents.push(talent.talentId);
+	});
 
-  playerObject.inventory.forEach((item) => {
-    foundPlayerModel.inventory.push(item.itemId);
-  });
+	playerObject.inventory.forEach((item) => {
+		foundPlayerModel.inventory.push(item.itemId);
+	});
 
-  await foundPlayerModel.save().catch((err) => console.error(err));
-  return player;
+	await foundPlayerModel.save().catch((err) => console.error(err));
+	return player;
 }
 
 export async function getNextPlayerId(): Promise<number> {
-  const lastPlayer = await playerModel
-    .findOne()
-    .sort({ playerId: -1 })
-    .limit(1)
-    .lean();
-  return lastPlayer ? lastPlayer.playerId + 1 : 1;
+	const lastPlayer = await playerModel
+		.findOne()
+		.sort({ playerId: -1 })
+		.limit(1)
+		.lean();
+	return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
 
 export async function getSameRoundPlayer(
-  round: number,
-  playerId: number
+	round: number,
+	playerId: number
 ): Promise<Player> {
-  if (round <= 0) {
-    return null;
-  }
+	if (round <= 0) {
+		return null;
+	}
 
-  const randomPlayerWithSameTurn = await playerModel.aggregate([
-    { $match: { round: round, playerId: { $ne: playerId } } },
-    { $sample: { size: 1 } },
-  ]);
-  const [enemyPlayerObject] = randomPlayerWithSameTurn;
-  if (!enemyPlayerObject) {
-    return await getSameRoundPlayer(round - 1, playerId);
-  }
-  return enemyPlayerObject as unknown as Player;
+	const randomPlayerWithSameTurn = await playerModel.aggregate([
+		{ $match: { round: round, playerId: { $ne: playerId } } },
+		{ $sample: { size: 1 } },
+	]);
+	const [enemyPlayerObject] = randomPlayerWithSameTurn;
+	if (!enemyPlayerObject) {
+		return await getSameRoundPlayer(round - 1, playerId);
+	}
+	return enemyPlayerObject as unknown as Player;
 }
