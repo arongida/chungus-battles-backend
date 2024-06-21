@@ -19,7 +19,9 @@ import { Talent } from './schema/TalentSchema';
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
 	battleStarted = false;
-	activatedTimers: Delayed[] = [];
+	playerAttackTimer: Delayed;
+	enemyAttackTimer: Delayed;
+	skillsTimers: Delayed[] = [];
 	playerInitialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	fightResult: FightResultType;
 
@@ -126,33 +128,37 @@ export class FightRoom extends Room<FightState> {
 			if (this.state.player.hp <= 0 || this.state.enemy.hp <= 0) {
 				//set state and clear intervals
 				this.battleStarted = false;
-				this.activatedTimers.forEach((timer) => timer.clear());
+				this.playerAttackTimer.clear();
+				this.enemyAttackTimer.clear();
+				this.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast('combat_log', 'The battle has ended!');
 				this.handleFightEnd();
 			}
 		}
 	}
 
+	startPlayerAttackTimers() {
+		//start player attack loop
+		this.playerAttackTimer = this.clock.setInterval(() => {
+			this.attack(this.state.player, this.state.enemy);
+		}, (1 / this.state.player.attackSpeed) * 1000);
+	}
+
+	startEnemyAttackTimers() {
+		//start enemy attack loop
+		this.enemyAttackTimer = this.clock.setInterval(() => {
+			this.attack(this.state.enemy, this.state.player);
+		}, (1 / this.state.enemy.attackSpeed) * 1000);
+	}
+
 	//start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
 	async startBattle() {
-		//start player attack loop
-		this.activatedTimers.push(
-			this.clock.setInterval(() => {
-				this.attack(this.state.player, this.state.enemy);
-			}, (1 / this.state.player.attackSpeed) * 1000)
-		);
-
-		//start player skills loop
+		//start attack timers
+		this.startPlayerAttackTimers();
+		this.startEnemyAttackTimers();
+		//start player skill loop
 		this.startSkillLoop(this.state.player, this.state.enemy);
-
-		//start enemy attack loop
-		this.activatedTimers.push(
-			this.clock.setInterval(() => {
-				this.attack(this.state.enemy, this.state.player);
-			}, (1 / this.state.enemy.attackSpeed) * 1000)
-		);
-
-		//start enemy skills loops
+		//start enemy skill loops
 		this.startSkillLoop(this.state.enemy, this.state.player);
 
 		//apply fight start effects
@@ -205,7 +211,7 @@ export class FightRoom extends Room<FightState> {
 	startSkillLoop(player: Player, enemy: Player) {
 		//start player skills loops
 		player.talents.forEach((talent) => {
-			this.activatedTimers.push(
+			this.skillsTimers.push(
 				this.clock.setInterval(() => {
 					//handle Rage skill
 					if (talent.talentId === TalentType.Rage) {
@@ -228,27 +234,34 @@ export class FightRoom extends Room<FightState> {
 					}
 
 					//handle steal life skill
-					if (talent.talentId === TalentType.StealLife) {
+					if (talent.talentId === TalentType.Scam) {
 						enemy.hp -= 3;
 						player.hp += 3;
 						this.broadcast(
 							'combat_log',
-							`${player.name} steals 3 health from ${enemy.name}!\nNew health: ${player.hp}`
+							`${player.name} scams 3 health from ${enemy.name}!\nNew health: ${player.hp}`
 						);
 					}
 
 					//handle bandage skill
 					if (talent.talentId === TalentType.Bandage) {
 						player.hp += 6;
-						this.broadcast('combat_log', `${player.name} restores 6 health!\nNew health: ${player.hp}`);
+						this.broadcast(
+							'combat_log',
+							`${player.name} restores 6 health!\nNew health: ${player.hp}`
+						);
 					}
 
 					//handle throwing money skill
 					if (talent.talentId === TalentType.ThrowMoney) {
-						enemy.hp -= player.gold;
+						//calculate defense
+						const damage = Math.floor(
+							player.gold * 0.6 * (100 / (100 + enemy.defense))
+						);
+						enemy.hp -= damage;
 						this.broadcast(
 							'combat_log',
-							`${player.name} throws money for ${player.gold} damage!`
+							`${player.name} throws money for ${damage} damage!`
 						);
 					}
 				}, (1 / talent.activationRate) * 1000)
@@ -280,7 +293,7 @@ export class FightRoom extends Room<FightState> {
 				(talent) => talent.talentId === TalentType.Invigorate
 			)
 		) {
-			const leechAmount = Math.floor(damage * 0.15);
+			const leechAmount = Math.floor(damage * 0.15) + 3;
 			attacker.hp += leechAmount;
 			this.broadcast(
 				'combat_log',
@@ -305,6 +318,20 @@ export class FightRoom extends Room<FightState> {
 
 		//damage
 		defender.hp -= damage;
+
+		const assassinAmusementTalent = attacker.talents.find(
+			(talent) => talent.talentId === TalentType.AssassinAmusement
+		);
+		if (assassinAmusementTalent) {
+			attacker.attackSpeed += assassinAmusementTalent.activationRate;
+			if (attacker.playerId === this.state.player.playerId) {
+				this.playerAttackTimer.clear();
+				this.startPlayerAttackTimers();
+			} else {
+				this.enemyAttackTimer.clear();
+				this.startEnemyAttackTimers();
+			}
+		}
 
 		this.broadcast(
 			'combat_log',
@@ -468,7 +495,7 @@ export class FightRoom extends Room<FightState> {
 		);
 		if (weaponWhispererTalent) {
 			const numberOfMeleeWeapons = player.getNumberOfMeleeWeapons();
-			player.attack += numberOfMeleeWeapons;
+			player.attack += numberOfMeleeWeapons * 2;
 			this.broadcast(
 				'combat_log',
 				`${player.name} gains ${numberOfMeleeWeapons} attack from Weapon Whisperer!`
@@ -480,12 +507,11 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.GoldGenie
 		);
 		if (goldGenieTalent) {
-			player.defense += player.gold * 4;
+			const defenseBonus = player.gold * 2;
+			player.defense += defenseBonus;
 			this.broadcast(
 				'combat_log',
-				`${player.name} gains ${
-					this.state.player.gold * 4
-				} defense from Gold Genie!`
+				`${player.name} gains ${defenseBonus} defense from Gold Genie!`
 			);
 		}
 
@@ -543,18 +569,18 @@ export class FightRoom extends Room<FightState> {
 			const attackBonus = Math.ceil(
 				player.attack * strongBodyTalent.activationRate
 			);
-			const defenseBonus = Math.ceil(
-				player.defense * strongBodyTalent.activationRate
-			);
-			const factor = 10 ** 2;
-			const attackSpeedBonus =
-				Math.round(
-					player.attackSpeed * strongBodyTalent.activationRate * factor
-				) / factor;
+			// const defenseBonus = Math.ceil(
+			// 	player.defense * strongBodyTalent.activationRate
+			// );
+			// const factor = 10 ** 2;
+			// const attackSpeedBonus =
+			// 	Math.round(
+			// 		player.attackSpeed * strongBodyTalent.activationRate * factor
+			// 	) / factor;
 			player.hp += hpBonus;
 			player.attack += attackBonus;
-			player.defense += defenseBonus;
-			player.attackSpeed += attackSpeedBonus;
+			// player.defense += defenseBonus;
+			// player.attackSpeed += attackSpeedBonus;
 			this.broadcast(
 				'combat_log',
 				`${player.name} is strong hence gets an increase to stats!`
@@ -564,14 +590,14 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				`${player.name} gains ${attackBonus} attack!`
 			);
-			this.broadcast(
-				'combat_log',
-				`${player.name} gains ${defenseBonus} defense!`
-			);
-			this.broadcast(
-				'combat_log',
-				`${player.name} gains ${attackSpeedBonus} attack speed!`
-			);
+			// this.broadcast(
+			// 	'combat_log',
+			// 	`${player.name} gains ${defenseBonus} defense!`
+			// );
+			// this.broadcast(
+			// 	'combat_log',
+			// 	`${player.name} gains ${attackSpeedBonus} attack speed!`
+			// );
 		}
 
 		//handle upper middle class
@@ -583,38 +609,38 @@ export class FightRoom extends Room<FightState> {
 			const hpBonus = Math.ceil(
 				Math.min(0.1 + player.gold * 0.005, 0.5) * enemy.hp
 			);
-			const attackBonus = Math.ceil(
-				Math.min(0.1 + player.gold * 0.005, 0.5) * enemy.attack
-			);
-			const defenseBonus = Math.ceil(
-				Math.min(0.1 + player.gold * 0.005, 0.5) * enemy.defense
-			);
-			const factor = 10 ** 2;
-			const attackSpeedBonus =
-				Math.round(
-					Math.min(0.1 + player.gold * 0.005, 0.5) * enemy.attackSpeed * factor
-				) / factor;
+			// const attackBonus = Math.ceil(
+			// 	Math.min(0.1 + player.gold * 0.005, 0.4) * enemy.attack
+			// );
+			// const defenseBonus = Math.ceil(
+			// 	Math.min(0.1 + player.gold * 0.005, 0.4) * enemy.defense
+			// );
+			// const factor = 10 ** 2;
+			// const attackSpeedBonus =
+			// 	Math.round(
+			// 		Math.min(0.1 + player.gold * 0.005, 0.4) * enemy.attackSpeed * factor
+			// 	) / factor;
 			enemy.hp -= hpBonus;
-			enemy.attack -= attackBonus;
-			enemy.defense -= defenseBonus;
-			enemy.attackSpeed -= attackSpeedBonus;
+			// enemy.attack -= attackBonus;
+			// enemy.defense -= defenseBonus;
+			// enemy.attackSpeed -= attackSpeedBonus;
 			this.broadcast(
 				'combat_log',
 				`${player.name} intimidates ${enemy.name} with their wealth!`
 			);
 			this.broadcast('combat_log', `${enemy.name} looses ${hpBonus} hp!`);
-			this.broadcast(
-				'combat_log',
-				`${enemy.name} looses ${attackBonus} attack!`
-			);
-			this.broadcast(
-				'combat_log',
-				`${enemy.name} looses ${defenseBonus} defense!`
-			);
-			this.broadcast(
-				'combat_log',
-				`${enemy.name} looses ${attackSpeedBonus} attack speed!`
-			);
+			// this.broadcast(
+			// 	'combat_log',
+			// 	`${enemy.name} looses ${attackBonus} attack!`
+			// );
+			// this.broadcast(
+			// 	'combat_log',
+			// 	`${enemy.name} looses ${defenseBonus} defense!`
+			// );
+			// this.broadcast(
+			// 	'combat_log',
+			// 	`${enemy.name} looses ${attackSpeedBonus} attack speed!`
+			// );
 		}
 
 		//handle bribe
@@ -622,7 +648,9 @@ export class FightRoom extends Room<FightState> {
 			if (player.gold >= 80) {
 				//set state and clear intervals
 				this.battleStarted = false;
-				this.activatedTimers.forEach((timer) => timer.clear());
+				this.playerAttackTimer.clear();
+        this.enemyAttackTimer.clear();
+				this.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast(
 					'combat_log',
 					`${player.name} bribes ${enemy.name} for ${player.gold} gold!`

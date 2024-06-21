@@ -221,6 +221,7 @@ export class DraftRoom extends Room<DraftState> {
   }
 
   private async checkLevelUp() {
+    if (this.state.player.level >= 5) return;
     if (this.state.player.xp >= this.state.player.maxXp) {
       this.levelUp(this.state.player.xp - this.state.player.maxXp);
       this.state.remainingTalentPoints++;
