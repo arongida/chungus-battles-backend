@@ -22,7 +22,7 @@ export enum TalentType {
 	Invigorate = 13,
 	SmartInvestment = 14,
 	Strong = 15,
-	UpperMiddleClass = 16,
+	IntimidatingWealth = 16,
 	Bribe = 17,
 	Execute = 18,
 	EyeForAnEye = 19,

@@ -603,7 +603,7 @@ export class FightRoom extends Room<FightState> {
 		//handle upper middle class
 		if (
 			player.talents.find(
-				(talent) => talent.talentId === TalentType.UpperMiddleClass
+				(talent) => talent.talentId === TalentType.IntimidatingWealth
 			)
 		) {
 			const hpBonus = Math.ceil(
