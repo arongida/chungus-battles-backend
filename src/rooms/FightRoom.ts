@@ -209,7 +209,7 @@ export class FightRoom extends Room<FightState> {
 				this.clock.setInterval(() => {
 					//handle Rage skill
 					if (talent.talentId === TalentType.Rage) {
-						player.hp -= 3;
+						player.hp -= 1;
 						player.attack += 1;
 						this.broadcast(
 							'combat_log',
@@ -233,14 +233,14 @@ export class FightRoom extends Room<FightState> {
 						player.hp += 3;
 						this.broadcast(
 							'combat_log',
-							`${player.name} steals 3 health from ${enemy.name}!`
+							`${player.name} steals 3 health from ${enemy.name}!\nNew health: ${player.hp}`
 						);
 					}
 
 					//handle bandage skill
 					if (talent.talentId === TalentType.Bandage) {
 						player.hp += 6;
-						this.broadcast('combat_log', `${player.name} restores 6 health!`);
+						this.broadcast('combat_log', `${player.name} restores 6 health!\nNew health: ${player.hp}`);
 					}
 
 					//handle throwing money skill
