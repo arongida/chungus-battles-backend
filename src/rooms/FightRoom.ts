@@ -221,6 +221,7 @@ export class FightRoom extends Room<FightState> {
 							'combat_log',
 							`${player.name} uses Rage! Increased attack by 1!`
 						);
+            this.broadcast('damage', {playerId: player.playerId, damage: 1});
 					}
 
 					//handle Greed skill
@@ -235,34 +236,42 @@ export class FightRoom extends Room<FightState> {
 
 					//handle steal life skill
 					if (talent.talentId === TalentType.Scam) {
-						enemy.hp -= 3;
-						player.hp += 3;
+						const amount = 3;
+						enemy.hp -= amount;
+						player.hp += amount;
 						this.broadcast(
 							'combat_log',
-							`${player.name} scams 3 health from ${enemy.name}!\nNew health: ${player.hp}`
+							`${player.name} scams ${amount} health from ${enemy.name}!`
 						);
+						this.broadcast('damage', {
+							playerId: enemy.playerId,
+							damage: amount,
+						});
+						this.broadcast('healing', {
+							playerId: player.playerId,
+							healing: amount,
+						});
 					}
 
 					//handle bandage skill
 					if (talent.talentId === TalentType.Bandage) {
 						player.hp += 6;
-						this.broadcast(
-							'combat_log',
-							`${player.name} restores 6 health!\nNew health: ${player.hp}`
-						);
+						this.broadcast('combat_log', `${player.name} restores 6 health!`);
+						this.broadcast('healing', {playerId: player.playerId, healing: 6});
 					}
 
 					//handle throwing money skill
 					if (talent.talentId === TalentType.ThrowMoney) {
 						//calculate defense
 						const damage = Math.floor(
-							player.gold * 0.6 * (100 / (100 + enemy.defense))
+							player.gold * 0.7 * (100 / (100 + enemy.defense))
 						);
 						enemy.hp -= damage;
 						this.broadcast(
 							'combat_log',
 							`${player.name} throws money for ${damage} damage!`
 						);
+            this.broadcast('damage', {playerId: enemy.playerId, damage: damage});
 					}
 				}, (1 / talent.activationRate) * 1000)
 			);
@@ -293,12 +302,16 @@ export class FightRoom extends Room<FightState> {
 				(talent) => talent.talentId === TalentType.Invigorate
 			)
 		) {
-			const leechAmount = Math.floor(damage * 0.15) + 3;
+			const leechAmount = Math.floor(damage * 0.15) + 2;
 			attacker.hp += leechAmount;
 			this.broadcast(
 				'combat_log',
 				`${attacker.name} leeches ${leechAmount} health!`
 			);
+			this.broadcast('healing', {
+				playerId: attacker.playerId,
+				healing: leechAmount,
+			});
 		}
 
 		//check execute talent
@@ -338,10 +351,10 @@ export class FightRoom extends Room<FightState> {
 			`${attacker.name} attacks ${defender.name} for ${damage} damage!`
 		);
 		this.broadcast('damage', {
-			attacker: attacker.playerId,
-			defender: defender.playerId,
+			playerId: defender.playerId,
 			damage: damage,
 		});
+		this.broadcast('attack', attacker.playerId);
 
 		if (defender.hp <= 0) return;
 
@@ -649,7 +662,7 @@ export class FightRoom extends Room<FightState> {
 				//set state and clear intervals
 				this.battleStarted = false;
 				this.playerAttackTimer.clear();
-        this.enemyAttackTimer.clear();
+				this.enemyAttackTimer.clear();
 				this.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast(
 					'combat_log',
