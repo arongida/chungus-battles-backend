@@ -269,9 +269,9 @@ export class FightRoom extends Room<FightState> {
 					//handle throwing money skill
 					if (talent.talentId === TalentType.ThrowMoney) {
 						//calculate defense
-						const damage = Math.floor(
-							player.gold * 0.7 * (100 / (100 + enemy.defense))
-						);
+						const damage =
+							10 +
+							Math.floor(player.gold * 0.8 * (100 / (100 + enemy.defense)));
 						enemy.hp -= damage;
 						this.broadcast(
 							'combat_log',
