@@ -419,7 +419,7 @@ export class FightRoom extends Room<FightState> {
 				this.handleWin();
 				break;
 			case FightResultType.LOSE:
-				this.handleLose();
+				this.handleLoose();
 				break;
 			case FightResultType.DRAW:
 				this.handleDraw();
@@ -481,10 +481,10 @@ export class FightRoom extends Room<FightState> {
 		}
 	}
 
-	private handleLose() {
+	private handleLoose() {
 		this.broadcast('combat_log', 'You loose!');
 
-		this.state.player.gold += this.state.player.round * 2;
+		this.state.player.gold += this.state.player.round * 4;
 		this.state.player.xp += this.state.player.round * 2;
 
 		//check guardian talents
@@ -522,7 +522,7 @@ export class FightRoom extends Room<FightState> {
 
 	private handleDraw() {
 		this.broadcast('combat_log', "It's a draw!");
-		this.state.player.gold += this.state.player.round * 2;
+		this.state.player.gold += this.state.player.round * 4;
 		this.state.player.xp += this.state.player.round * 2;
 		this.broadcast('end_battle', 'The battle has ended!');
 	}
