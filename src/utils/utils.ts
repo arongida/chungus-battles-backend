@@ -30,6 +30,8 @@ export enum TalentType {
 	WeaponWhisperer = 21,
 	GoldGenie = 22,
 	AssassinAmusement = 23,
+  Resilience = 24,
+  DisarmingDeal = 25,
 }
 
 export function increaseStats(entity: any, stats: any, multiplier = 1) {

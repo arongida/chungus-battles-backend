@@ -15,6 +15,7 @@ import { getTalentsById } from '../db/Talent';
 import { getItemsById } from '../db/Item';
 import { AffectedStats, Item } from './schema/ItemSchema';
 import { Talent } from './schema/TalentSchema';
+import { set } from 'mongoose';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
@@ -22,7 +23,8 @@ export class FightRoom extends Room<FightState> {
 	playerAttackTimer: Delayed;
 	enemyAttackTimer: Delayed;
 	skillsTimers: Delayed[] = [];
-	playerInitialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
+	// playerInitialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
+	// enemyInitialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	fightResult: FightResultType;
 
 	onCreate(options: any) {
@@ -53,7 +55,7 @@ export class FightRoom extends Room<FightState> {
 
 		//set up player state
 		await this.setUpState(player);
-		setStats(this.playerInitialStats, this.state.player);
+		setStats(this.state.player.initialStats, this.state.player);
 
 		//set up enemy state
 		if (!this.state.enemy.playerId) {
@@ -63,6 +65,7 @@ export class FightRoom extends Room<FightState> {
 			);
 			//set up enemy state
 			await this.setUpState(enemy, true);
+			setStats(this.state.enemy.initialStats, this.state.enemy);
 		}
 
 		// check if player is already playing
@@ -110,7 +113,7 @@ export class FightRoom extends Room<FightState> {
 			//save player state to db
 			this.state.player.sessionId = '';
 			//set player for next round
-			setStats(this.state.player, this.playerInitialStats);
+			setStats(this.state.player, this.state.player.initialStats);
 			this.state.player.round++;
 			await updatePlayer(this.state.player);
 			console.log(client.sessionId, 'left!');
@@ -163,7 +166,7 @@ export class FightRoom extends Room<FightState> {
 
 		//apply fight start effects
 		this.applyFightStartEffects(this.state.player, this.state.enemy);
-		this.applyFightStartEffects(this.state.enemy, this.state.player, false);
+		this.applyFightStartEffects(this.state.enemy, this.state.player);
 	}
 
 	//get player, enemy and talents from db and map them to the room state
@@ -221,7 +224,7 @@ export class FightRoom extends Room<FightState> {
 							'combat_log',
 							`${player.name} uses Rage! Increased attack by 1!`
 						);
-            this.broadcast('damage', {playerId: player.playerId, damage: 1});
+						this.broadcast('damage', { playerId: player.playerId, damage: 1 });
 					}
 
 					//handle Greed skill
@@ -257,7 +260,10 @@ export class FightRoom extends Room<FightState> {
 					if (talent.talentId === TalentType.Bandage) {
 						player.hp += 6;
 						this.broadcast('combat_log', `${player.name} restores 6 health!`);
-						this.broadcast('healing', {playerId: player.playerId, healing: 6});
+						this.broadcast('healing', {
+							playerId: player.playerId,
+							healing: 6,
+						});
 					}
 
 					//handle throwing money skill
@@ -271,7 +277,10 @@ export class FightRoom extends Room<FightState> {
 							'combat_log',
 							`${player.name} throws money for ${damage} damage!`
 						);
-            this.broadcast('damage', {playerId: enemy.playerId, damage: damage});
+						this.broadcast('damage', {
+							playerId: enemy.playerId,
+							damage: damage,
+						});
 					}
 				}, (1 / talent.activationRate) * 1000)
 			);
@@ -327,6 +336,26 @@ export class FightRoom extends Room<FightState> {
 				);
 				return;
 			}
+		}
+
+		//check resilience talent
+		const resilienceTalent = defender.talents.find(
+			(talent) => talent.talentId === TalentType.Resilience
+		);
+		if (resilienceTalent) {
+			const healingAmount = Math.floor(
+				1 + resilienceTalent.activationRate * defender.initialStats.hp
+			);
+			console.log(healingAmount);
+			defender.hp += healingAmount;
+			this.broadcast(
+				'combat_log',
+				`${defender.name} recovers ${healingAmount} health!`
+			);
+			this.broadcast('healing', {
+				playerId: defender.playerId,
+				healing: healingAmount,
+			});
 		}
 
 		//damage
@@ -499,8 +528,27 @@ export class FightRoom extends Room<FightState> {
 	}
 
 	//apply fight start effects for player/enemy
-	applyFightStartEffects(player: Player, enemy?: Player, isPlayer = true) {
+	applyFightStartEffects(player: Player, enemy?: Player) {
 		if (!this.battleStarted) return;
+
+		//handle disarming deal talent
+		const disarmingDealTalent = player.talents.find(
+			(talent) => talent.talentId === TalentType.DisarmingDeal
+		);
+		if (disarmingDealTalent) {
+			const numberOfEnemyWeapons = enemy.getNumberOfWeapons();
+			enemy.attack -= numberOfEnemyWeapons;
+			enemy.attackSpeed -=
+				numberOfEnemyWeapons * disarmingDealTalent.activationRate;
+			this.broadcast(
+				'combat_log',
+				`${player.name} disarms ${enemy.name}! ${
+					enemy.name
+				} looses ${numberOfEnemyWeapons} attack and ${
+					numberOfEnemyWeapons * disarmingDealTalent.activationRate
+				} attack speed!`
+			);
+		}
 
 		//handle weapon whisperer talent
 		const weaponWhispererTalent = player.talents.find(
@@ -565,12 +613,8 @@ export class FightRoom extends Room<FightState> {
 
 			increaseStats(player, stolenItem.affectedStats);
 			increaseStats(enemy, stolenItem.affectedStats, -1);
-
-			if (isPlayer) {
-				increaseStats(this.playerInitialStats, stolenItem.affectedStats);
-			} else {
-				increaseStats(this.playerInitialStats, stolenItem.affectedStats, -1);
-			}
+			increaseStats(player.initialStats, stolenItem.affectedStats);
+			increaseStats(enemy.initialStats, stolenItem.affectedStats, -1);
 		}
 
 		//handle strong body talent
@@ -620,7 +664,7 @@ export class FightRoom extends Room<FightState> {
 			)
 		) {
 			const hpBonus = Math.ceil(
-				Math.min(0.1 + player.gold * 0.005, 0.5) * enemy.hp
+				Math.min(0.2 + player.gold * 0.005, 0.5) * enemy.hp
 			);
 			// const attackBonus = Math.ceil(
 			// 	Math.min(0.1 + player.gold * 0.005, 0.4) * enemy.attack
