@@ -38,7 +38,7 @@ export async function createNewPlayer(
 	sessionId: string,
 	avatarUrl: string
 ): Promise<Player> {
-	const startingGold = process.env.NODE_ENV === 'production' ? 10 : 100;
+	const startingGold = process.env.NODE_ENV === 'production' ? 10 : 1000;
 	const newPlayer = new playerModel({
 		playerId: playerId,
 		name: name,

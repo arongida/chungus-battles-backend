@@ -2,6 +2,7 @@ import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { Talent } from './TalentSchema';
 import { Item } from './ItemSchema';
 import { Stats } from '../../utils/utils';
+import { Delayed } from 'colyseus';
 
 export class Player extends Schema {
   @type('number') playerId: number;
@@ -22,6 +23,8 @@ export class Player extends Schema {
   @type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
   @type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
   initialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
+  initialInventory: Item[] = [];
+  attackTimer: Delayed;
 
   get defense(): number {
     return this._defense;
@@ -47,5 +50,9 @@ export class Player extends Schema {
       }
       return count;
     }, 0);
+  }
+
+  resetInventory() {
+    this.inventory.splice(0, this.inventory.length, ...this.initialInventory);
   }
 }

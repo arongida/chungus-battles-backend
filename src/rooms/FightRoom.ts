@@ -18,11 +18,7 @@ import { Talent } from './schema/TalentSchema';
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
 	battleStarted = false;
-	playerAttackTimer: Delayed;
-	enemyAttackTimer: Delayed;
 	skillsTimers: Delayed[] = [];
-	// playerInitialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
-	// enemyInitialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	fightResult: FightResultType;
 	endBurnTimer: Delayed;
 	endBurnDamage: number = 10;
@@ -114,6 +110,7 @@ export class FightRoom extends Room<FightState> {
 			this.state.player.sessionId = '';
 			//set player for next round
 			setStats(this.state.player, this.state.player.initialStats);
+			this.state.player.resetInventory();
 			this.state.player.round++;
 			await updatePlayer(this.state.player);
 			console.log(client.sessionId, 'left!');
@@ -134,8 +131,8 @@ export class FightRoom extends Room<FightState> {
 			if (this.state.player.hp <= 0 || this.state.enemy.hp <= 0) {
 				//set state and clear intervals
 				this.battleStarted = false;
-				this.playerAttackTimer.clear();
-				this.enemyAttackTimer.clear();
+				this.state.player.attackTimer.clear();
+				this.state.enemy.attackTimer.clear();
 				if (this.endBurnTimer) this.endBurnTimer.clear();
 				this.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast('combat_log', 'The battle has ended!');
@@ -165,25 +162,18 @@ export class FightRoom extends Room<FightState> {
 		}, 1000);
 	}
 
-	startPlayerAttackTimers() {
+	startAttackTimer(player: Player, enemy: Player) {
 		//start player attack loop
-		this.playerAttackTimer = this.clock.setInterval(() => {
-			this.attack(this.state.player, this.state.enemy);
-		}, (1 / this.state.player.attackSpeed) * 1000);
-	}
-
-	startEnemyAttackTimers() {
-		//start enemy attack loop
-		this.enemyAttackTimer = this.clock.setInterval(() => {
-			this.attack(this.state.enemy, this.state.player);
-		}, (1 / this.state.enemy.attackSpeed) * 1000);
+		player.attackTimer = this.clock.setInterval(() => {
+			this.attack(player, enemy);
+		}, (1 / player.attackSpeed) * 1000);
 	}
 
 	//start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
 	async startBattle() {
 		//start attack timers
-		this.startPlayerAttackTimers();
-		this.startEnemyAttackTimers();
+		this.startAttackTimer(this.state.player, this.state.enemy);
+		this.startAttackTimer(this.state.enemy, this.state.player);
 		//start player skill loop
 		this.startSkillLoop(this.state.player, this.state.enemy);
 		//start enemy skill loops
@@ -231,6 +221,10 @@ export class FightRoom extends Room<FightState> {
 				newItem.affectedStats = new AffectedStats(newItem.affectedStats);
 				if (!isEnemy) this.state.player.inventory.push(newItem);
 				else this.state.enemy.inventory.push(newItem);
+
+				//save initial inventory
+				if (!isEnemy) this.state.player.initialInventory.push(newItem);
+				else this.state.enemy.initialInventory.push(newItem);
 			});
 		}
 	}
@@ -241,6 +235,23 @@ export class FightRoom extends Room<FightState> {
 		player.talents.forEach((talent) => {
 			this.skillsTimers.push(
 				this.clock.setInterval(() => {
+					if (talent.talentId === TalentType.Steal) {
+						const stolenItemIndex = Math.floor(
+							Math.random() * enemy.inventory.length
+						);
+						const stolenItem = enemy.inventory[stolenItemIndex];
+						if (stolenItem) {
+							enemy.inventory.splice(stolenItemIndex, 1);
+							this.broadcast(
+								'combat_log',
+								`${player.name} steals ${stolenItem.name} from ${enemy.name}!`
+							);
+							player.inventory.push(stolenItem);
+							increaseStats(player, stolenItem.affectedStats);
+							increaseStats(enemy, stolenItem.affectedStats, -1);
+						}
+					}
+
 					//handle Rage skill
 					if (talent.talentId === TalentType.Rage) {
 						player.hp -= 1;
@@ -258,11 +269,11 @@ export class FightRoom extends Room<FightState> {
 						if (enemy.gold > 0) enemy.gold -= 1;
 						this.broadcast(
 							'combat_log',
-							`${player.name} uses Greed! Stole 1 gold from ${enemy.name}!`
+							`${player.name} stole 1 gold from ${enemy.name}!`
 						);
 					}
 
-					//handle steal life skill
+					//handle scam skill
 					if (talent.talentId === TalentType.Scam) {
 						const amount = 2 + player.level;
 						enemy.hp -= amount;
@@ -374,13 +385,6 @@ export class FightRoom extends Room<FightState> {
 		);
 		if (assassinAmusementTalent) {
 			attacker.attackSpeed += assassinAmusementTalent.activationRate;
-			if (attacker.playerId === this.state.player.playerId) {
-				this.playerAttackTimer.clear();
-				this.startPlayerAttackTimers();
-			} else {
-				this.enemyAttackTimer.clear();
-				this.startEnemyAttackTimers();
-			}
 		}
 
 		this.broadcast(
@@ -447,6 +451,11 @@ export class FightRoom extends Room<FightState> {
 				this.attack(defender, attacker);
 			}
 		}
+
+		//reset attack timers
+		attacker.attackTimer.clear();
+		this.startAttackTimer(attacker, defender);
+		console.log('attack speed reset for player', attacker.name);
 
 		if (defender.hp <= 0) return;
 	}
@@ -626,47 +635,6 @@ export class FightRoom extends Room<FightState> {
 			);
 		}
 
-		// handle steal talent
-		const stealTalent = player.talents.find(
-			(talent) => talent.talentId === TalentType.Steal
-		);
-		if (stealTalent) {
-			const stolenItemIndex = Math.floor(
-				Math.random() * enemy.inventory.length
-			);
-			let stolenItem = enemy.inventory[stolenItemIndex];
-			if (!stolenItem) {
-				this.broadcast(
-					'combat_log',
-					`${enemy.name} had no valuable items to steal! At least there is always moldy bread...`
-				);
-				stolenItem = new Item({
-					itemId: 81,
-					name: 'Moldy Bread',
-					description: 'A moldy piece of bread',
-					price: 0,
-					affectedStats: new AffectedStats({
-						hp: 10,
-						attack: 0,
-						defense: 6,
-						attackSpeed: 0,
-					}),
-				});
-			} else {
-				enemy.inventory.splice(stolenItemIndex, 1);
-				this.broadcast(
-					'combat_log',
-					`${player.name} steals ${stolenItem.name} from ${enemy.name}!`
-				);
-			}
-			player.inventory.push(stolenItem);
-
-			increaseStats(player, stolenItem.affectedStats);
-			increaseStats(enemy, stolenItem.affectedStats, -1);
-			increaseStats(player.initialStats, stolenItem.affectedStats);
-			increaseStats(enemy.initialStats, stolenItem.affectedStats, -1);
-		}
-
 		//handle strong body talent
 		const strongBodyTalent = player.talents.find(
 			(talent) => talent.talentId === TalentType.Strong
@@ -713,29 +681,18 @@ export class FightRoom extends Room<FightState> {
 				(talent) => talent.talentId === TalentType.IntimidatingWealth
 			)
 		) {
-			const hpBonus = Math.ceil(
-				Math.min(0.2 + player.gold * 0.005, 0.5) * enemy.hp
+			const attackBonus = Math.ceil(
+				Math.min(0.1 + player.gold * 0.0025, 0.4) * enemy.attack
 			);
-			// const attackBonus = Math.ceil(
-			// 	Math.min(0.1 + player.gold * 0.005, 0.4) * enemy.attack
-			// );
-			// const defenseBonus = Math.ceil(
-			// 	Math.min(0.1 + player.gold * 0.005, 0.4) * enemy.defense
-			// );
-			// const factor = 10 ** 2;
-			// const attackSpeedBonus =
-			// 	Math.round(
-			// 		Math.min(0.1 + player.gold * 0.005, 0.4) * enemy.attackSpeed * factor
-			// 	) / factor;
-			enemy.hp -= hpBonus;
-			// enemy.attack -= attackBonus;
-			// enemy.defense -= defenseBonus;
-			// enemy.attackSpeed -= attackSpeedBonus;
+			enemy.attack -= attackBonus;
 			this.broadcast(
 				'combat_log',
 				`${player.name} intimidates ${enemy.name} with their wealth!`
 			);
-			this.broadcast('combat_log', `${enemy.name} looses ${hpBonus} hp!`);
+			this.broadcast(
+				'combat_log',
+				`${enemy.name} looses ${attackBonus} attack!`
+			);
 			// this.broadcast(
 			// 	'combat_log',
 			// 	`${enemy.name} looses ${attackBonus} attack!`
