@@ -18,7 +18,7 @@ export async function getRandomTalents(
 ): Promise<{}[]> {
   // const talentSchemaArray = await talentModel.find().lean().limit(selectionSize);
   const talentSchemaArray = await talentModel.aggregate([
-    { $match: { tier: level } },
+    { $match: { tier: level, tags: {$ne: 'used'} } },
     { $sample: { size: selectionSize } },
   ]);
   return talentSchemaArray;

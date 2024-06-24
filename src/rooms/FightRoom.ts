@@ -9,13 +9,11 @@ import {
 	TalentType,
 	increaseStats,
 	setStats,
-	Stats,
 } from '../utils/utils';
 import { getTalentsById } from '../db/Talent';
 import { getItemsById } from '../db/Item';
 import { AffectedStats, Item } from './schema/ItemSchema';
 import { Talent } from './schema/TalentSchema';
-import { set } from 'mongoose';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
@@ -239,7 +237,7 @@ export class FightRoom extends Room<FightState> {
 
 					//handle steal life skill
 					if (talent.talentId === TalentType.Scam) {
-						const amount = 3;
+						const amount = 2 + player.level;
 						enemy.hp -= amount;
 						player.hp += amount;
 						this.broadcast(
@@ -258,11 +256,15 @@ export class FightRoom extends Room<FightState> {
 
 					//handle bandage skill
 					if (talent.talentId === TalentType.Bandage) {
-						player.hp += 6;
-						this.broadcast('combat_log', `${player.name} restores 6 health!`);
+						const healing = 5 + player.level;
+						player.hp += healing;
+						this.broadcast(
+							'combat_log',
+							`${player.name} restores ${healing} health!`
+						);
 						this.broadcast('healing', {
 							playerId: player.playerId,
-							healing: 6,
+							healing: healing,
 						});
 					}
 
@@ -270,8 +272,7 @@ export class FightRoom extends Room<FightState> {
 					if (talent.talentId === TalentType.ThrowMoney) {
 						//calculate defense
 						const damage =
-							10 +
-							Math.floor(player.gold * 0.8 * (100 / (100 + enemy.defense)));
+							7 + Math.floor(player.gold * 0.7 * (100 / (100 + enemy.defense)));
 						enemy.hp -= damage;
 						this.broadcast(
 							'combat_log',
@@ -346,7 +347,6 @@ export class FightRoom extends Room<FightState> {
 			const healingAmount = Math.floor(
 				1 + resilienceTalent.activationRate * defender.initialStats.hp
 			);
-			console.log(healingAmount);
 			defender.hp += healingAmount;
 			this.broadcast(
 				'combat_log',
