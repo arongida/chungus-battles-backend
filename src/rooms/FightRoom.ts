@@ -24,6 +24,8 @@ export class FightRoom extends Room<FightState> {
 	// playerInitialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	// enemyInitialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	fightResult: FightResultType;
+	endBurnTimer: Delayed;
+	endBurnDamage: number = 10;
 
 	onCreate(options: any) {
 		this.setState(new FightState());
@@ -126,16 +128,41 @@ export class FightRoom extends Room<FightState> {
 	update(deltaTime: number) {
 		//check for battle end
 		if (this.battleStarted) {
+			if (this.clock.elapsedTime > 65000 && !this.endBurnTimer) {
+				this.startEndBurnTimer();
+			}
 			if (this.state.player.hp <= 0 || this.state.enemy.hp <= 0) {
 				//set state and clear intervals
 				this.battleStarted = false;
 				this.playerAttackTimer.clear();
 				this.enemyAttackTimer.clear();
+				if (this.endBurnTimer) this.endBurnTimer.clear();
 				this.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast('combat_log', 'The battle has ended!');
 				this.handleFightEnd();
 			}
 		}
+	}
+
+	startEndBurnTimer() {
+		if (this.endBurnTimer) return;
+		this.endBurnTimer = this.clock.setInterval(() => {
+			const burnDamage = this.endBurnDamage++;
+			this.state.player.hp -= burnDamage;
+			this.state.enemy.hp -= burnDamage;
+			this.broadcast(
+				'combat_log',
+				`The battle is dragging on! Both players burned for ${burnDamage} damage!`
+			);
+			this.broadcast('damage', {
+				playerId: this.state.player.playerId,
+				damage: burnDamage,
+			});
+			this.broadcast('damage', {
+				playerId: this.state.enemy.playerId,
+				damage: burnDamage,
+			});
+		}, 1000);
 	}
 
 	startPlayerAttackTimers() {
@@ -324,39 +351,20 @@ export class FightRoom extends Room<FightState> {
 			});
 		}
 
-		//check execute talent
-		if (
-			attacker.talents.find((talent) => talent.talentId === TalentType.Execute)
-		) {
-			const random = Math.random();
-			if (random < attacker.attack * 0.01) {
-				defender.hp = -9999;
-				this.broadcast(
-					'combat_log',
-					`${attacker.name} executes ${defender.name}!`
-				);
-				return;
-			}
-		}
-
-		//check resilience talent
-		const resilienceTalent = defender.talents.find(
-			(talent) => talent.talentId === TalentType.Resilience
-		);
-		if (resilienceTalent) {
-			const healingAmount = Math.floor(
-				1 + resilienceTalent.activationRate * defender.initialStats.hp
-			);
-			defender.hp += healingAmount;
-			this.broadcast(
-				'combat_log',
-				`${defender.name} recovers ${healingAmount} health!`
-			);
-			this.broadcast('healing', {
-				playerId: defender.playerId,
-				healing: healingAmount,
-			});
-		}
+		// //check execute talent
+		// if (
+		// 	attacker.talents.find((talent) => talent.talentId === TalentType.Execute)
+		// ) {
+		// 	const random = Math.random();
+		// 	if (random < attacker.attack * 0.01) {
+		// 		defender.hp = -9999;
+		// 		this.broadcast(
+		// 			'combat_log',
+		// 			`${attacker.name} executes ${defender.name}!`
+		// 		);
+		// 		return;
+		// 	}
+		// }
 
 		//damage
 		defender.hp -= damage;
@@ -385,7 +393,45 @@ export class FightRoom extends Room<FightState> {
 		});
 		this.broadcast('attack', attacker.playerId);
 
-		if (defender.hp <= 0) return;
+		//handle thorny fence talent
+		const thornyFenceTalent = defender.talents.find(
+			(talent) => talent.talentId === TalentType.ThornyFence
+		);
+		if (thornyFenceTalent) {
+			const reflectDamage = Math.ceil(
+				damage *
+					(thornyFenceTalent.activationRate +
+						defender.defense * thornyFenceTalent.activationRate * 0.01)
+			);
+			attacker.hp -= reflectDamage;
+			this.broadcast(
+				'combat_log',
+				`${defender.name} reflects ${reflectDamage} damage to ${attacker.name}!`
+			);
+			this.broadcast('damage', {
+				playerId: attacker.playerId,
+				damage: reflectDamage,
+			});
+		}
+
+		//check resilience talent
+		const resilienceTalent = defender.talents.find(
+			(talent) => talent.talentId === TalentType.Resilience
+		);
+		if (resilienceTalent) {
+			const healingAmount = Math.floor(
+				1 + resilienceTalent.activationRate * defender.initialStats.hp
+			);
+			defender.hp += healingAmount;
+			this.broadcast(
+				'combat_log',
+				`${defender.name} recovers ${healingAmount} health!`
+			);
+			this.broadcast('healing', {
+				playerId: defender.playerId,
+				healing: healingAmount,
+			});
+		}
 
 		//handle eye for an eye talent
 		const eyeForAnEyeTalent = defender.talents.find(
@@ -401,6 +447,8 @@ export class FightRoom extends Room<FightState> {
 				this.attack(defender, attacker);
 			}
 		}
+
+		if (defender.hp <= 0) return;
 	}
 
 	private handleFightEnd() {
@@ -556,10 +604,12 @@ export class FightRoom extends Room<FightState> {
 		);
 		if (weaponWhispererTalent) {
 			const numberOfMeleeWeapons = player.getNumberOfMeleeWeapons();
-			player.attack += numberOfMeleeWeapons * 2;
+			const attackBonus =
+				numberOfMeleeWeapons * weaponWhispererTalent.activationRate;
+			player.attack += attackBonus;
 			this.broadcast(
 				'combat_log',
-				`${player.name} gains ${numberOfMeleeWeapons} attack from Weapon Whisperer!`
+				`${player.name} gains ${attackBonus} attack from Weapon Whisperer!`
 			);
 		}
 
@@ -701,27 +751,27 @@ export class FightRoom extends Room<FightState> {
 		}
 
 		//handle bribe
-		if (player.talents.find((talent) => talent.talentId === TalentType.Bribe)) {
-			if (player.gold >= 80) {
-				//set state and clear intervals
-				this.battleStarted = false;
-				this.playerAttackTimer.clear();
-				this.enemyAttackTimer.clear();
-				this.skillsTimers.forEach((timer) => timer.clear());
-				this.broadcast(
-					'combat_log',
-					`${player.name} bribes ${enemy.name} for ${player.gold} gold!`
-				);
-				player.gold = 0;
-				enemy.gold += player.gold;
-				if (player.playerId === this.state.player.playerId) {
-					this.fightResult = FightResultType.WIN;
-					this.handleFightEnd();
-				} else {
-					this.fightResult = FightResultType.LOSE;
-					this.handleFightEnd();
-				}
-			}
-		}
+		// if (player.talents.find((talent) => talent.talentId === TalentType.Bribe)) {
+		// 	if (player.gold >= 80) {
+		// 		//set state and clear intervals
+		// 		this.battleStarted = false;
+		// 		this.playerAttackTimer.clear();
+		// 		this.enemyAttackTimer.clear();
+		// 		this.skillsTimers.forEach((timer) => timer.clear());
+		// 		this.broadcast(
+		// 			'combat_log',
+		// 			`${player.name} bribes ${enemy.name} for ${player.gold} gold!`
+		// 		);
+		// 		player.gold = 0;
+		// 		enemy.gold += player.gold;
+		// 		if (player.playerId === this.state.player.playerId) {
+		// 			this.fightResult = FightResultType.WIN;
+		// 			this.handleFightEnd();
+		// 		} else {
+		// 			this.fightResult = FightResultType.LOSE;
+		// 			this.handleFightEnd();
+		// 		}
+		// 	}
+		// }
 	}
 }
