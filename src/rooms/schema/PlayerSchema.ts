@@ -38,8 +38,8 @@ export class Player extends Schema {
 	set poisonStack(value: number) {
 		if (value < 0) {
 			this._poisonStack = 0;
-		} else if (value > 5) {
-			this._poisonStack = 5;
+		} else if (value > 50) {
+			this._poisonStack = 50;
 		} else {
 			this._poisonStack = value;
 		}
@@ -87,7 +87,7 @@ export class Player extends Schema {
 				this.poisonTimer.clear();
 				this.poisonTimer = null;
 			}
-		}, 5000);
+		}, 3000);
 		if (!this.poisonTimer) {
 			this.poisonTimer = clock.setInterval(() => {
 				const poisonDamage = Math.round(
