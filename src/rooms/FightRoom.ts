@@ -326,7 +326,11 @@ export class FightRoom extends Room<FightState> {
 		});
 	}
 
-	private async attack(attacker: Player, defender: Player) {
+	private async attack(
+		attacker: Player,
+		defender: Player,
+		recalculateTimer = true
+	) {
 		//calculate defense
 		const damage = Math.floor(
 			attacker.attack * (100 / (100 + defender.defense))
@@ -448,16 +452,17 @@ export class FightRoom extends Room<FightState> {
 					'combat_log',
 					`${defender.name} counters ${attacker.name}!`
 				);
-				this.attack(defender, attacker);
+				this.attack(defender, attacker, false);
 			}
 		}
 
-		//reset attack timers
-		attacker.attackTimer.clear();
-		this.startAttackTimer(attacker, defender);
-		console.log('attack speed reset for player', attacker.name);
-
-		if (defender.hp <= 0) return;
+		if (recalculateTimer) {
+			//reset attack timers
+			attacker.attackTimer.clear();
+			this.startAttackTimer(attacker, defender);
+			this.broadcast('combat_log', recalculateTimer);
+		}
+		this.broadcast('combat_log', recalculateTimer);
 	}
 
 	private handleFightEnd() {
