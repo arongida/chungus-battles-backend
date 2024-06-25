@@ -22,6 +22,7 @@ export class FightRoom extends Room<FightState> {
 	fightResult: FightResultType;
 	endBurnTimer: Delayed;
 	endBurnDamage: number = 10;
+  playerClient: Client;
 
 	onCreate(options: any) {
 		this.setState(new FightState());
@@ -52,6 +53,8 @@ export class FightRoom extends Room<FightState> {
 		//set up player state
 		await this.setUpState(player);
 		setStats(this.state.player.initialStats, this.state.player);
+    this.state.player.maxHp = this.state.player.hp;
+    this.playerClient = client;
 
 		//set up enemy state
 		if (!this.state.enemy.playerId) {
@@ -62,6 +65,7 @@ export class FightRoom extends Room<FightState> {
 			//set up enemy state
 			await this.setUpState(enemy, true);
 			setStats(this.state.enemy.initialStats, this.state.enemy);
+      this.state.enemy.maxHp = this.state.enemy.hp;
 		}
 
 		// check if player is already playing
@@ -384,6 +388,14 @@ export class FightRoom extends Room<FightState> {
 		//damage
 		defender.hp -= damage;
 
+		//handle poison talent
+		const poisonTalent = attacker.talents.find(
+			(talent) => talent.talentId === TalentType.Poison
+		);
+		if (poisonTalent) {
+      defender.addPoison(this.clock, this.playerClient, poisonTalent.activationRate);
+		}
+
 		const assassinAmusementTalent = attacker.talents.find(
 			(talent) => talent.talentId === TalentType.AssassinAmusement
 		);
@@ -406,7 +418,7 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.ThornyFence
 		);
 		if (thornyFenceTalent) {
-			const reflectDamage = Math.ceil(
+			const reflectDamage = Math.round(
 				damage *
 					(thornyFenceTalent.activationRate +
 						defender.defense * thornyFenceTalent.activationRate * 0.01)
@@ -427,8 +439,8 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.Resilience
 		);
 		if (resilienceTalent) {
-			const healingAmount = Math.floor(
-				1 + resilienceTalent.activationRate * defender.initialStats.hp
+			const healingAmount = Math.round(
+				1 + resilienceTalent.activationRate * defender.maxHp
 			);
 			defender.hp += healingAmount;
 			this.broadcast(
@@ -460,9 +472,7 @@ export class FightRoom extends Room<FightState> {
 			//reset attack timers
 			attacker.attackTimer.clear();
 			this.startAttackTimer(attacker, defender);
-			this.broadcast('combat_log', recalculateTimer);
 		}
-		this.broadcast('combat_log', recalculateTimer);
 	}
 
 	private handleFightEnd() {
@@ -658,6 +668,7 @@ export class FightRoom extends Room<FightState> {
 			// 		player.attackSpeed * strongBodyTalent.activationRate * factor
 			// 	) / factor;
 			player.hp += hpBonus;
+      player.maxHp = player.hp;
 			player.attack += attackBonus;
 			// player.defense += defenseBonus;
 			// player.attackSpeed += attackSpeedBonus;

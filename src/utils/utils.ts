@@ -33,6 +33,7 @@ export enum TalentType {
   Resilience = 24,
   DisarmingDeal = 25,
   ThornyFence = 26,
+  Poison = 27,
 }
 
 export function increaseStats(entity: any, stats: any, multiplier = 1) {
@@ -40,6 +41,7 @@ export function increaseStats(entity: any, stats: any, multiplier = 1) {
 	entity.attack += multiplier * stats.attack;
 	entity.defense += multiplier * stats.defense;
 	entity.attackSpeed += multiplier * stats.attackSpeed;
+  if (entity.maxHp) entity.maxHp += multiplier * stats.hp;
 }
 
 export function setStats(entity: any, stats: any) {
@@ -47,6 +49,7 @@ export function setStats(entity: any, stats: any) {
 	entity.attack = stats.attack;
 	entity.defense = stats.defense;
 	entity.attackSpeed = stats.attackSpeed;
+  if (entity.maxHp) entity.maxHp = stats.hp;
 }
 
 export interface Stats {
