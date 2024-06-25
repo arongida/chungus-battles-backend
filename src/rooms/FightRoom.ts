@@ -22,7 +22,7 @@ export class FightRoom extends Room<FightState> {
 	fightResult: FightResultType;
 	endBurnTimer: Delayed;
 	endBurnDamage: number = 10;
-  playerClient: Client;
+	playerClient: Client;
 
 	onCreate(options: any) {
 		this.setState(new FightState());
@@ -53,8 +53,8 @@ export class FightRoom extends Room<FightState> {
 		//set up player state
 		await this.setUpState(player);
 		setStats(this.state.player.initialStats, this.state.player);
-    this.state.player.maxHp = this.state.player.hp;
-    this.playerClient = client;
+		this.state.player.maxHp = this.state.player.hp;
+		this.playerClient = client;
 
 		//set up enemy state
 		if (!this.state.enemy.playerId) {
@@ -65,7 +65,7 @@ export class FightRoom extends Room<FightState> {
 			//set up enemy state
 			await this.setUpState(enemy, true);
 			setStats(this.state.enemy.initialStats, this.state.enemy);
-      this.state.enemy.maxHp = this.state.enemy.hp;
+			this.state.enemy.maxHp = this.state.enemy.hp;
 		}
 
 		// check if player is already playing
@@ -256,17 +256,6 @@ export class FightRoom extends Room<FightState> {
 						}
 					}
 
-					//handle Rage skill
-					if (talent.talentId === TalentType.Rage) {
-						player.hp -= 1;
-						player.attack += 1;
-						this.broadcast(
-							'combat_log',
-							`${player.name} uses Rage! Increased attack by 1!`
-						);
-						this.broadcast('damage', { playerId: player.playerId, damage: 1 });
-					}
-
 					//handle Greed skill
 					if (talent.talentId === TalentType.Pickpocket) {
 						player.gold += 1;
@@ -370,30 +359,36 @@ export class FightRoom extends Room<FightState> {
 			});
 		}
 
-		// //check execute talent
-		// if (
-		// 	attacker.talents.find((talent) => talent.talentId === TalentType.Execute)
-		// ) {
-		// 	const random = Math.random();
-		// 	if (random < attacker.attack * 0.01) {
-		// 		defender.hp = -9999;
-		// 		this.broadcast(
-		// 			'combat_log',
-		// 			`${attacker.name} executes ${defender.name}!`
-		// 		);
-		// 		return;
-		// 	}
-		// }
-
 		//damage
 		defender.hp -= damage;
+
+		//handle Rage skill
+		const rageTalent = attacker.talents.find(
+			(talent) => talent.talentId === TalentType.Rage
+		);
+		if (rageTalent) {
+			attacker.hp -= rageTalent.activationRate;
+			attacker.attack += rageTalent.activationRate;
+			this.broadcast(
+				'combat_log',
+				`${attacker.name} rages, increased attack by 1!`
+			);
+			this.broadcast('damage', {
+				playerId: attacker.playerId,
+				damage: rageTalent.activationRate,
+			});
+		}
 
 		//handle poison talent
 		const poisonTalent = attacker.talents.find(
 			(talent) => talent.talentId === TalentType.Poison
 		);
 		if (poisonTalent) {
-      defender.addPoison(this.clock, this.playerClient, poisonTalent.activationRate);
+			defender.addPoison(
+				this.clock,
+				this.playerClient,
+				poisonTalent.activationRate
+			);
 		}
 
 		const assassinAmusementTalent = attacker.talents.find(
@@ -420,8 +415,7 @@ export class FightRoom extends Room<FightState> {
 		if (thornyFenceTalent) {
 			const reflectDamage = Math.round(
 				damage *
-					(thornyFenceTalent.activationRate +
-						defender.defense * thornyFenceTalent.activationRate * 0.01)
+					(0.2 + defender.defense * thornyFenceTalent.activationRate * 0.01)
 			);
 			attacker.hp -= reflectDamage;
 			this.broadcast(
@@ -609,7 +603,7 @@ export class FightRoom extends Room<FightState> {
 		);
 		if (disarmingDealTalent) {
 			const numberOfEnemyWeapons = enemy.getNumberOfWeapons();
-			enemy.attack -= numberOfEnemyWeapons;
+			enemy.attack -= numberOfEnemyWeapons + 5;
 			enemy.attackSpeed -=
 				numberOfEnemyWeapons * disarmingDealTalent.activationRate;
 			this.broadcast(
@@ -668,7 +662,7 @@ export class FightRoom extends Room<FightState> {
 			// 		player.attackSpeed * strongBodyTalent.activationRate * factor
 			// 	) / factor;
 			player.hp += hpBonus;
-      player.maxHp = player.hp;
+			player.maxHp = player.hp;
 			player.attack += attackBonus;
 			// player.defense += defenseBonus;
 			// player.attackSpeed += attackSpeedBonus;
