@@ -207,8 +207,11 @@ export class FightRoom extends Room<FightState> {
 						(talent) => talent.talentId === (talentId as unknown as number)
 					)
 				);
-				if (!isEnemy) this.state.player.talents.push(newTalent);
-				else this.state.enemy.talents.push(newTalent);
+				if (!isEnemy) {
+					this.state.player.talents.push(newTalent);
+				} else {
+					this.state.enemy.talents.push(newTalent);
+				}
 			});
 		}
 
@@ -367,9 +370,8 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.Rage
 		);
 		if (rageTalent) {
-			const selfDamage = Math.round(
-				rageTalent.activationRate * attacker.hp * 0.01
-			) + 1;
+			const selfDamage =
+				Math.round(rageTalent.activationRate * attacker.hp * 0.01) + 1;
 			attacker.hp -= selfDamage;
 			attacker.attack += rageTalent.activationRate;
 			this.broadcast(
@@ -382,17 +384,8 @@ export class FightRoom extends Room<FightState> {
 			});
 		}
 
-		//handle poison talent
-		const poisonTalent = attacker.talents.find(
-			(talent) => talent.talentId === TalentType.Poison
-		);
-		if (poisonTalent) {
-			defender.addPoison(
-				this.clock,
-				this.playerClient,
-				poisonTalent.activationRate
-			);
-		}
+    //handle on attacked talents in defender player class
+    defender.onAttacked(this.clock, this.playerClient, attacker, damage);
 
 		const assassinAmusementTalent = attacker.talents.find(
 			(talent) => talent.talentId === TalentType.AssassinAmusement
@@ -411,44 +404,7 @@ export class FightRoom extends Room<FightState> {
 		});
 		this.broadcast('attack', attacker.playerId);
 
-		//handle thorny fence talent
-		const thornyFenceTalent = defender.talents.find(
-			(talent) => talent.talentId === TalentType.ThornyFence
-		);
-		if (thornyFenceTalent) {
-			const reflectDamage = Math.round(
-				damage *
-					(0.2 + defender.defense * thornyFenceTalent.activationRate * 0.01)
-			);
-			attacker.hp -= reflectDamage;
-			this.broadcast(
-				'combat_log',
-				`${defender.name} reflects ${reflectDamage} damage to ${attacker.name}!`
-			);
-			this.broadcast('damage', {
-				playerId: attacker.playerId,
-				damage: reflectDamage,
-			});
-		}
 
-		//check resilience talent
-		const resilienceTalent = defender.talents.find(
-			(talent) => talent.talentId === TalentType.Resilience
-		);
-		if (resilienceTalent) {
-			const healingAmount = Math.round(
-				1 + resilienceTalent.activationRate * defender.maxHp
-			);
-			defender.hp += healingAmount;
-			this.broadcast(
-				'combat_log',
-				`${defender.name} recovers ${healingAmount} health!`
-			);
-			this.broadcast('healing', {
-				playerId: defender.playerId,
-				healing: healingAmount,
-			});
-		}
 
 		//handle eye for an eye talent
 		const eyeForAnEyeTalent = defender.talents.find(
@@ -606,9 +562,9 @@ export class FightRoom extends Room<FightState> {
 		);
 		if (disarmingDealTalent) {
 			const numberOfEnemyWeapons = enemy.getNumberOfWeapons();
-			enemy.attack -= numberOfEnemyWeapons + 5;
+			enemy.attack -= numberOfEnemyWeapons + 4;
 			enemy.attackSpeed -=
-				numberOfEnemyWeapons * disarmingDealTalent.activationRate + 0.3;
+				numberOfEnemyWeapons * disarmingDealTalent.activationRate + 0.1;
 			this.broadcast(
 				'combat_log',
 				`${player.name} disarms ${enemy.name}! ${
