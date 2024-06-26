@@ -303,7 +303,7 @@ export class FightRoom extends Room<FightState> {
 					if (talent.talentId === TalentType.ThrowMoney) {
 						//calculate defense
 						const damage =
-							7 + Math.floor(player.gold * 0.7 * (100 / (100 + enemy.defense)));
+							7 + Math.round(player.gold * 0.7 * (100 / (100 + enemy.defense)));
 						enemy.hp -= damage;
 						this.broadcast(
 							'combat_log',

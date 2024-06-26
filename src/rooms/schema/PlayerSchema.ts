@@ -8,14 +8,14 @@ import ClockTimer from '@gamestdio/timer';
 export class Player extends Schema {
 	@type('number') playerId: number;
 	@type('string') name: string;
-	@type('number') hp: number;
-	@type('number') attack: number;
-	@type('number') gold: number;
+	@type('number') private _hp: number;
+	@type('number') private _attack: number;
+	@type('number') private _gold: number;
 	@type('number') xp: number;
-	@type('number') level: number;
+	@type('number') private _level: number;
 	@type('string') sessionId: string;
 	@type('number') private _defense: number;
-	@type('number') attackSpeed: number;
+	@type('number') private _attackSpeed: number;
 	@type('number') maxXp: number;
 	@type('number') round: number;
 	@type('number') lives: number;
@@ -30,6 +30,46 @@ export class Player extends Schema {
 	poisonTimer: Delayed;
 	private _poisonStack: number = 0;
 	playerClient: Client;
+
+	get gold(): number {
+		return this._gold;
+	}
+
+	set gold(value: number) {
+		this._gold = value < 0 ? 0 : value;
+	}
+
+	get level(): number {
+		return this._level;
+	}
+
+	set level(value: number) {
+		this._level = value > 5 ? 5 : value;
+	}
+
+	get attackSpeed(): number {
+		return this._attackSpeed;
+	}
+
+	set attackSpeed(value: number) {
+		this._attackSpeed = value < 0.1 ? 0.1 : value;
+	}
+
+	get hp(): number {
+		return this._hp;
+	}
+
+	set hp(value: number) {
+		this._hp = value < 0 ? 0 : value;
+	}
+
+	get attack(): number {
+		return this._attack;
+	}
+
+	set attack(value: number) {
+		this._attack = value < 1 ? 1 : value;
+	}
 
 	get poisonStack(): number {
 		return this._poisonStack;
@@ -50,7 +90,7 @@ export class Player extends Schema {
 	}
 
 	set defense(value: number) {
-		this._defense = value;
+		this._defense = value < 0 ? 0 : value;
 	}
 
 	getNumberOfMeleeWeapons(): number {
