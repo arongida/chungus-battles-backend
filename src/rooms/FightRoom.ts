@@ -368,8 +368,8 @@ export class FightRoom extends Room<FightState> {
 		);
 		if (rageTalent) {
 			const selfDamage = Math.round(
-				rageTalent.activationRate * attacker.maxHp * 0.01
-			);
+				rageTalent.activationRate * attacker.hp * 0.01
+			) + 1;
 			attacker.hp -= selfDamage;
 			attacker.attack += rageTalent.activationRate;
 			this.broadcast(
