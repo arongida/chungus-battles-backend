@@ -364,6 +364,15 @@ export class FightRoom extends Room<FightState> {
 
 		//damage
 		defender.hp -= damage;
+		this.broadcast(
+			'combat_log',
+			`${attacker.name} attacks ${defender.name} for ${damage} damage!`
+		);
+		this.broadcast('damage', {
+			playerId: defender.playerId,
+			damage: damage,
+		});
+		this.broadcast('attack', attacker.playerId);
 
 		//handle Rage skill
 		const rageTalent = attacker.talents.find(
@@ -384,8 +393,8 @@ export class FightRoom extends Room<FightState> {
 			});
 		}
 
-    //handle on attacked talents in defender player class
-    defender.onAttacked(this.clock, this.playerClient, attacker, damage);
+		//handle on attacked talents in defender player class
+		defender.onAttacked(this.clock, this.playerClient, attacker, damage);
 
 		const assassinAmusementTalent = attacker.talents.find(
 			(talent) => talent.talentId === TalentType.AssassinAmusement
@@ -393,18 +402,6 @@ export class FightRoom extends Room<FightState> {
 		if (assassinAmusementTalent) {
 			attacker.attackSpeed += assassinAmusementTalent.activationRate;
 		}
-
-		this.broadcast(
-			'combat_log',
-			`${attacker.name} attacks ${defender.name} for ${damage} damage!`
-		);
-		this.broadcast('damage', {
-			playerId: defender.playerId,
-			damage: damage,
-		});
-		this.broadcast('attack', attacker.playerId);
-
-
 
 		//handle eye for an eye talent
 		const eyeForAnEyeTalent = defender.talents.find(

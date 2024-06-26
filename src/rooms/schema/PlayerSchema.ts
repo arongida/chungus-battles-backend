@@ -60,7 +60,7 @@ export class Player extends Schema {
 	}
 
 	set hp(value: number) {
-		this._hp = value < 0 ? 0 : value;
+		this._hp = value;
 	}
 
 	get attack(): number {
@@ -167,11 +167,7 @@ export class Player extends Schema {
 		});
 	}
 
-	recoverHp(
-		playerClient: Client,
-		recoverAmount: number,
-		resilienceTalent: Talent
-	) {
+	recoverHp(playerClient: Client, resilienceTalent: Talent) {
 		const healingAmount = Math.round(
 			1 + resilienceTalent.activationRate * this.maxHp
 		);
@@ -220,14 +216,14 @@ export class Player extends Schema {
 			(talent) => talent.talentId === TalentType.Resilience
 		);
 		if (resilienceTalent) {
-			this.recoverHp(playerClient, damage, resilienceTalent);
+			this.recoverHp(playerClient, resilienceTalent);
 		}
 
 		const zealotTalent = this.talents.find(
 			(talent) => talent.talentId === TalentType.Zealot
 		);
 		if (zealotTalent) {
-      this.zealot(playerClient, zealotTalent);
+			this.zealot(playerClient, zealotTalent);
 		}
 	}
 }
