@@ -1,7 +1,7 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { Talent } from './TalentSchema';
 import { Item } from './ItemSchema';
-import { Stats } from '../../utils/utils';
+import { Stats, TalentType } from '../../utils/utils';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
 
@@ -25,10 +25,10 @@ export class Player extends Schema {
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 	initialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	initialInventory: Item[] = [];
+	private _poisonStack: number = 0;
 	maxHp: number;
 	attackTimer: Delayed;
 	poisonTimer: Delayed;
-	private _poisonStack: number = 0;
 	playerClient: Client;
 
 	get gold(): number {
@@ -144,6 +144,90 @@ export class Player extends Schema {
 					damage: poisonDamage,
 				});
 			}, 1000);
+		}
+	}
+
+	reflectDamage(
+		playerClient: Client,
+		damage: number,
+		thornyFenceTalent: Talent,
+		attacker: Player
+	) {
+		const reflectDamage = Math.round(
+			damage * (0.2 + this.defense * thornyFenceTalent.activationRate * 0.01)
+		);
+		attacker.hp -= reflectDamage;
+		playerClient.send(
+			'combat_log',
+			`${this.name} reflects ${reflectDamage} damage to ${this.name}!`
+		);
+		playerClient.send('damage', {
+			playerId: attacker.playerId,
+			damage: reflectDamage,
+		});
+	}
+
+	recoverHp(
+		playerClient: Client,
+		recoverAmount: number,
+		resilienceTalent: Talent
+	) {
+		const healingAmount = Math.round(
+			1 + resilienceTalent.activationRate * this.maxHp
+		);
+		this.hp += healingAmount;
+		playerClient.send(
+			'combat_log',
+			`${this.name} recovers ${healingAmount} health!`
+		);
+		playerClient.send('healing', {
+			playerId: this.playerId,
+			healing: healingAmount,
+		});
+	}
+
+	zealot(playerClient: Client, zealotTalent: Talent) {
+		const attackSpeedBuff =
+			0.05 + this.defense * zealotTalent.activationRate * 0.01;
+		const normalizedValue = Math.round(attackSpeedBuff * 100) / 100;
+		this.attackSpeed += normalizedValue;
+		playerClient.send(
+			'combat_log',
+			`${this.name} gains ${normalizedValue} attack speed!`
+		);
+	}
+
+	onAttacked(
+		clock: ClockTimer,
+		playerClient: Client,
+		attacker: Player,
+		damage: number
+	) {
+		const poisonTalent = attacker.talents.find(
+			(talent) => talent.talentId === TalentType.Poison
+		);
+		if (poisonTalent)
+			this.addPoison(clock, playerClient, poisonTalent.activationRate);
+
+		const thornyFenceTalent = this.talents.find(
+			(talent) => talent.talentId === TalentType.ThornyFence
+		);
+		if (thornyFenceTalent) {
+			this.reflectDamage(playerClient, damage, thornyFenceTalent, attacker);
+		}
+
+		const resilienceTalent = this.talents.find(
+			(talent) => talent.talentId === TalentType.Resilience
+		);
+		if (resilienceTalent) {
+			this.recoverHp(playerClient, damage, resilienceTalent);
+		}
+
+		const zealotTalent = this.talents.find(
+			(talent) => talent.talentId === TalentType.Zealot
+		);
+		if (zealotTalent) {
+      this.zealot(playerClient, zealotTalent);
 		}
 	}
 }
