@@ -367,7 +367,10 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.Rage
 		);
 		if (rageTalent) {
-			attacker.hp -= rageTalent.activationRate;
+			const selfDamage = Math.round(
+				rageTalent.activationRate * attacker.hp * 0.01
+			) + 1;
+			attacker.hp -= selfDamage;
 			attacker.attack += rageTalent.activationRate;
 			this.broadcast(
 				'combat_log',
@@ -375,7 +378,7 @@ export class FightRoom extends Room<FightState> {
 			);
 			this.broadcast('damage', {
 				playerId: attacker.playerId,
-				damage: rageTalent.activationRate,
+				damage: selfDamage,
 			});
 		}
 
@@ -605,7 +608,7 @@ export class FightRoom extends Room<FightState> {
 			const numberOfEnemyWeapons = enemy.getNumberOfWeapons();
 			enemy.attack -= numberOfEnemyWeapons + 5;
 			enemy.attackSpeed -=
-				numberOfEnemyWeapons * disarmingDealTalent.activationRate;
+				numberOfEnemyWeapons * disarmingDealTalent.activationRate + 0.3;
 			this.broadcast(
 				'combat_log',
 				`${player.name} disarms ${enemy.name}! ${
