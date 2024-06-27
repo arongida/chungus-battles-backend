@@ -393,6 +393,20 @@ export class FightRoom extends Room<FightState> {
 			});
 		}
 
+    //handle Stab Skill
+    const stabTalent = attacker.talents.find(
+      (talent) => talent.talentId === TalentType.Stab
+    );
+    if (stabTalent) {
+      const stabDamage = Math.round((defender.maxHp - defender.hp) * stabTalent.activationRate);
+      defender.hp -= stabDamage;
+      this.broadcast(
+        'combat_log',
+        `${attacker.name} stabs ${defender.name} for ${stabDamage} damage!`
+      );
+      this.broadcast('damage', {playerId: defender.playerId, damage: stabDamage});
+    }
+
 		//handle on attacked talents in defender player class
 		defender.onAttacked(this.clock, this.playerClient, attacker, damage);
 
@@ -641,6 +655,7 @@ export class FightRoom extends Room<FightState> {
 			// );
 		}
 
+
 		//handle upper middle class
 		if (
 			player.talents.find(
@@ -672,6 +687,22 @@ export class FightRoom extends Room<FightState> {
 			// 	`${enemy.name} looses ${attackSpeedBonus} attack speed!`
 			// );
 		}
+
+    //handle trickster
+    if (
+      player.talents.find(
+        (talent) => talent.talentId === TalentType.Trickster
+      )
+    ) {
+      const enemyAttack = enemy.attack;
+      const playerAttack = player.attack;
+      player.attack = enemyAttack;
+      enemy.attack = playerAttack;
+      this.broadcast(
+        'combat_log',
+        `${player.name} tricks ${enemy.name}!`
+      );
+    }
 
 		//handle bribe
 		// if (player.talents.find((talent) => talent.talentId === TalentType.Bribe)) {

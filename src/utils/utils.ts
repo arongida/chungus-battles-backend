@@ -35,6 +35,8 @@ export enum TalentType {
   ThornyFence = 26,
   Poison = 27,
   Zealot = 28,
+  Stab = 29,
+  Trickster = 30,
 }
 
 export function increaseStats(entity: any, stats: any, multiplier = 1) {
