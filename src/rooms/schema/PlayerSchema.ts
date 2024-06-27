@@ -133,7 +133,6 @@ export class Player extends Schema {
 				const poisonDamage = Math.round(
 					this.poisonStack * activationRate * this.maxHp
 				);
-				console.log('poison dam', poisonDamage);
 				this.hp -= poisonDamage;
 				playerClient.send(
 					'combat_log',
