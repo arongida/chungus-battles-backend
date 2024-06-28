@@ -306,7 +306,7 @@ export class FightRoom extends Room<FightState> {
 					if (talent.talentId === TalentType.ThrowMoney) {
 						//calculate defense
 						const damage =
-							7 + Math.round(player.gold * 0.7 * (100 / (100 + enemy.defense)));
+							7 + player.gold * 0.7 * (100 / (100 + enemy.defense));
 						enemy.hp -= damage;
 						this.broadcast(
 							'combat_log',
@@ -328,9 +328,7 @@ export class FightRoom extends Room<FightState> {
 		recalculateTimer = true
 	) {
 		//calculate defense
-		const damage = Math.floor(
-			attacker.attack * (100 / (100 + defender.defense))
-		);
+		const damage = attacker.attack * (100 / (100 + defender.defense));
 
 		//check if defender dodges the attack
 		const evasionTalent = defender.talents.find(
@@ -350,7 +348,7 @@ export class FightRoom extends Room<FightState> {
 				(talent) => talent.talentId === TalentType.Invigorate
 			)
 		) {
-			const leechAmount = Math.floor(damage * 0.15) + 2;
+			const leechAmount = damage * 0.15 + 2;
 			attacker.hp += leechAmount;
 			this.broadcast(
 				'combat_log',
@@ -379,8 +377,7 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.Rage
 		);
 		if (rageTalent) {
-			const selfDamage =
-				Math.round(rageTalent.activationRate * attacker.hp * 0.01) + 1;
+			const selfDamage = rageTalent.activationRate * attacker.hp * 0.01 + 1;
 			attacker.hp -= selfDamage;
 			attacker.attack += rageTalent.activationRate;
 			this.broadcast(
@@ -393,19 +390,23 @@ export class FightRoom extends Room<FightState> {
 			});
 		}
 
-    //handle Stab Skill
-    const stabTalent = attacker.talents.find(
-      (talent) => talent.talentId === TalentType.Stab
-    );
-    if (stabTalent) {
-      const stabDamage = Math.round((defender.maxHp - defender.hp) * stabTalent.activationRate);
-      defender.hp -= stabDamage;
-      this.broadcast(
-        'combat_log',
-        `${attacker.name} stabs ${defender.name} for ${stabDamage} damage!`
-      );
-      this.broadcast('damage', {playerId: defender.playerId, damage: stabDamage});
-    }
+		//handle Stab Skill
+		const stabTalent = attacker.talents.find(
+			(talent) => talent.talentId === TalentType.Stab
+		);
+		if (stabTalent) {
+			const stabDamage =
+				(defender.maxHp - defender.hp) * stabTalent.activationRate;
+			defender.hp -= stabDamage;
+			this.broadcast(
+				'combat_log',
+				`${attacker.name} stabs ${defender.name} for ${stabDamage} damage!`
+			);
+			this.broadcast('damage', {
+				playerId: defender.playerId,
+				damage: stabDamage,
+			});
+		}
 
 		//handle on attacked talents in defender player class
 		defender.onAttacked(this.clock, this.playerClient, attacker, damage);
@@ -468,7 +469,7 @@ export class FightRoom extends Room<FightState> {
 		);
 		if (smartInvestmentTalent) {
 			const goldBonus = Math.max(
-				Math.floor(
+				Math.round(
 					this.state.player.gold * smartInvestmentTalent.activationRate
 				),
 				2
@@ -619,10 +620,8 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.Strong
 		);
 		if (strongBodyTalent) {
-			const hpBonus = Math.ceil(player.hp * strongBodyTalent.activationRate);
-			const attackBonus = Math.ceil(
-				player.attack * strongBodyTalent.activationRate
-			);
+			const hpBonus = player.hp * strongBodyTalent.activationRate;
+			const attackBonus = player.attack * strongBodyTalent.activationRate;
 			// const defenseBonus = Math.ceil(
 			// 	player.defense * strongBodyTalent.activationRate
 			// );
@@ -655,16 +654,14 @@ export class FightRoom extends Room<FightState> {
 			// );
 		}
 
-
 		//handle upper middle class
 		if (
 			player.talents.find(
 				(talent) => talent.talentId === TalentType.IntimidatingWealth
 			)
 		) {
-			const attackBonus = Math.ceil(
-				Math.min(0.1 + player.gold * 0.0025, 0.4) * enemy.attack
-			);
+			const attackBonus =
+				Math.min(0.2 + player.gold * 0.0025, 0.4) * enemy.attack;
 			enemy.attack -= attackBonus;
 			this.broadcast(
 				'combat_log',
@@ -688,21 +685,16 @@ export class FightRoom extends Room<FightState> {
 			// );
 		}
 
-    //handle trickster
-    if (
-      player.talents.find(
-        (talent) => talent.talentId === TalentType.Trickster
-      )
-    ) {
-      const enemyAttack = enemy.attack;
-      const playerAttack = player.attack;
-      player.attack = enemyAttack;
-      enemy.attack = playerAttack;
-      this.broadcast(
-        'combat_log',
-        `${player.name} tricks ${enemy.name}!`
-      );
-    }
+		//handle trickster
+		if (
+			player.talents.find((talent) => talent.talentId === TalentType.Trickster)
+		) {
+			const enemyAttack = enemy.attack;
+			const playerAttack = player.attack;
+			player.attack = enemyAttack;
+			enemy.attack = playerAttack;
+			this.broadcast('combat_log', `${player.name} tricks ${enemy.name}!`);
+		}
 
 		//handle bribe
 		// if (player.talents.find((talent) => talent.talentId === TalentType.Bribe)) {

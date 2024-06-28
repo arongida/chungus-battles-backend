@@ -251,8 +251,8 @@ export class DraftRoom extends Room<DraftState> {
 		this.state.player.xp = leftoverXp;
 
 		// this.state.player.hp += 10;
+		// this.state.player.defense += 3;
 		// this.state.player.attack += 1;
-		// this.state.player.defense += 1;
 		// this.state.player.attackSpeed += 0.1;
 	}
 }

@@ -130,9 +130,7 @@ export class Player extends Schema {
 		}, 3000);
 		if (!this.poisonTimer) {
 			this.poisonTimer = clock.setInterval(() => {
-				const poisonDamage = Math.round(
-					this.poisonStack * activationRate * this.maxHp
-				);
+				const poisonDamage = this.poisonStack * activationRate * this.maxHp;
 				this.hp -= poisonDamage;
 				playerClient.send(
 					'combat_log',
@@ -152,13 +150,12 @@ export class Player extends Schema {
 		thornyFenceTalent: Talent,
 		attacker: Player
 	) {
-		const reflectDamage = Math.round(
-			damage * (0.2 + this.defense * thornyFenceTalent.activationRate * 0.01)
-		);
+		const reflectDamage =
+			damage * (0.2 + this.defense * thornyFenceTalent.activationRate * 0.01);
 		attacker.hp -= reflectDamage;
 		playerClient.send(
 			'combat_log',
-			`${this.name} reflects ${reflectDamage} damage to ${this.name}!`
+			`${this.name} reflects ${reflectDamage} damage to ${attacker.name}!`
 		);
 		playerClient.send('damage', {
 			playerId: attacker.playerId,
@@ -167,9 +164,7 @@ export class Player extends Schema {
 	}
 
 	recoverHp(playerClient: Client, resilienceTalent: Talent) {
-		const healingAmount = Math.round(
-			1 + resilienceTalent.activationRate * this.maxHp
-		);
+		const healingAmount = 1 + resilienceTalent.activationRate * this.maxHp;
 		this.hp += healingAmount;
 		playerClient.send(
 			'combat_log',
@@ -183,7 +178,7 @@ export class Player extends Schema {
 
 	zealot(playerClient: Client, zealotTalent: Talent) {
 		const attackSpeedBuff =
-			0.05 + this.defense * zealotTalent.activationRate * 0.01;
+			0.02 + this.defense * zealotTalent.activationRate * 0.01;
 		const normalizedValue = Math.round(attackSpeedBuff * 100) / 100;
 		this.attackSpeed += normalizedValue;
 		playerClient.send(
