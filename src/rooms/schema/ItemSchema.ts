@@ -15,4 +15,5 @@ export class Item extends Schema {
   @type('number') levelRequirement: number;
   @type('string') image: string;
   @type(['string']) tags: ArraySchema<string>;
+  @type('boolean') sold: boolean = false;
 }
