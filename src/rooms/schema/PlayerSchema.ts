@@ -112,7 +112,7 @@ export class Player extends Schema {
 		}, 0);
 	}
 
-	disarmWeapon(playerClient: Client) {
+	disarmWeapon(playerClient: Client, attacker: Player) {
 		const weapons: Item[] = this.inventory.filter((item) =>
 			item.tags.includes('weapon')
 		);
@@ -134,7 +134,7 @@ export class Player extends Schema {
 		} else {
 			playerClient.send('combat_log', `${this.name} has no weapons to disarm!`);
 		}
-    playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.Disarm})
+    playerClient.send('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.Disarm})
 	}
 
 	resetInventory() {
