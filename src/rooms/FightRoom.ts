@@ -569,22 +569,11 @@ export class FightRoom extends Room<FightState> {
 		if (!this.battleStarted) return;
 
 		//handle disarming deal talent
-		const disarmingDealTalent = player.talents.find(
-			(talent) => talent.talentId === TalentType.DisarmingDeal
+		const disarmTalent = player.talents.find(
+			(talent) => talent.talentId === TalentType.Disarm
 		);
-		if (disarmingDealTalent) {
-			const numberOfEnemyWeapons = enemy.getNumberOfWeapons();
-			enemy.attack -= numberOfEnemyWeapons + 4;
-			enemy.attackSpeed -=
-				numberOfEnemyWeapons * disarmingDealTalent.activationRate + 0.1;
-			this.broadcast(
-				'combat_log',
-				`${player.name} disarms ${enemy.name}! ${
-					enemy.name
-				} looses ${numberOfEnemyWeapons} attack and ${
-					numberOfEnemyWeapons * disarmingDealTalent.activationRate
-				} attack speed!`
-			);
+		if (disarmTalent) {
+			enemy.disarmWeapon(this.playerClient);
 		}
 
 		//handle weapon whisperer talent

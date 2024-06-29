@@ -31,7 +31,7 @@ export enum TalentType {
 	GoldGenie = 22,
 	AssassinAmusement = 23,
   Resilience = 24,
-  DisarmingDeal = 25,
+  Disarm = 25,
   ThornyFence = 26,
   Poison = 27,
   Zealot = 28,
