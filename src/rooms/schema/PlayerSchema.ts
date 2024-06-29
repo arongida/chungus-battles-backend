@@ -30,6 +30,7 @@ export class Player extends Schema {
 	attackTimer: Delayed;
 	poisonTimer: Delayed;
 	playerClient: Client;
+  talentsOnCooldown: TalentType[] = [];
 
 	get gold(): number {
 		return this._gold;
@@ -133,18 +134,20 @@ export class Player extends Schema {
 		} else {
 			playerClient.send('combat_log', `${this.name} has no weapons to disarm!`);
 		}
+    playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.Disarm})
 	}
 
 	resetInventory() {
 		this.inventory.splice(0, this.inventory.length, ...this.initialInventory);
 	}
 
-	addPoison(clock: ClockTimer, playerClient: Client, activationRate: number) {
+	addPoison(clock: ClockTimer, playerClient: Client, activationRate: number, attacker: Player) {
 		this.poisonStack += 1;
 		playerClient.send(
 			'combat_log',
 			`${this.name} is poisoned! ${this.poisonStack} stacks!`
 		);
+    playerClient.send('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.Poison})
 		clock.setTimeout(() => {
 			this.poisonStack -= 1;
 			if (this.poisonStack === 0 && this.poisonTimer) {
@@ -168,7 +171,37 @@ export class Player extends Schema {
 		}
 	}
 
-	reflectDamage(
+	eyeForAnEye(
+		playerClient: Client,
+		attacker: Player,
+		eyeForAnEyeTalent: Talent,
+		damage: number,
+    clock: ClockTimer
+	) {
+    if (this.talentsOnCooldown.includes(TalentType.EyeForAnEye)) {
+      console.log('Eye for an eye is on cooldown');
+      return;
+    }
+		const random = Math.random();
+		if (random < eyeForAnEyeTalent.activationRate) {
+			attacker.hp -= damage;
+			playerClient.send(
+				'combat_log',
+				`${this.name} reflects ${damage} damage to ${attacker.name}!`
+			);
+      playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.EyeForAnEye})
+			playerClient.send('damage', {
+				playerId: attacker.playerId,
+				damage: damage,
+			});
+      this.talentsOnCooldown.push(TalentType.EyeForAnEye);
+      clock.setTimeout(() => {
+        this.talentsOnCooldown = this.talentsOnCooldown.filter(talent => talent !== TalentType.EyeForAnEye);
+      }, 1000);
+		}
+	}
+
+	thornyDamage(
 		playerClient: Client,
 		damage: number,
 		thornyFenceTalent: Talent,
@@ -181,6 +214,7 @@ export class Player extends Schema {
 			'combat_log',
 			`${this.name} reflects ${reflectDamage} damage to ${attacker.name}!`
 		);
+    playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.ThornyFence})
 		playerClient.send('damage', {
 			playerId: attacker.playerId,
 			damage: reflectDamage,
@@ -194,6 +228,7 @@ export class Player extends Schema {
 			'combat_log',
 			`${this.name} recovers ${healingAmount} health!`
 		);
+    playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.Resilience})
 		playerClient.send('healing', {
 			playerId: this.playerId,
 			healing: healingAmount,
@@ -209,6 +244,7 @@ export class Player extends Schema {
 			'combat_log',
 			`${this.name} gains ${normalizedValue} attack speed!`
 		);
+    playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.Zealot})
 	}
 
 	onAttacked(
@@ -221,13 +257,13 @@ export class Player extends Schema {
 			(talent) => talent.talentId === TalentType.Poison
 		);
 		if (poisonTalent)
-			this.addPoison(clock, playerClient, poisonTalent.activationRate);
+			this.addPoison(clock, playerClient, poisonTalent.activationRate, attacker);
 
 		const thornyFenceTalent = this.talents.find(
 			(talent) => talent.talentId === TalentType.ThornyFence
 		);
 		if (thornyFenceTalent) {
-			this.reflectDamage(playerClient, damage, thornyFenceTalent, attacker);
+			this.thornyDamage(playerClient, damage, thornyFenceTalent, attacker);
 		}
 
 		const resilienceTalent = this.talents.find(
@@ -242,6 +278,13 @@ export class Player extends Schema {
 		);
 		if (zealotTalent) {
 			this.zealot(playerClient, zealotTalent);
+		}
+
+		const eyeForAnEyeTalent = this.talents.find(
+			(talent) => talent.talentId === TalentType.EyeForAnEye
+		);
+		if (eyeForAnEyeTalent) {
+			this.eyeForAnEye(playerClient, attacker, eyeForAnEyeTalent, damage, clock);
 		}
 	}
 }

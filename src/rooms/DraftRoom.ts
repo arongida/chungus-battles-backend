@@ -189,8 +189,8 @@ export class DraftRoom extends Room<DraftState> {
 
 	private buyItem(itemId: number, client: Client) {
 		const item = this.state.shop.find((item) => item.itemId === itemId);
-		if (this.state.player.gold < item.price) {
-			client.send('error', 'Not enough gold!');
+		if (this.state.player.gold < item.price || item.sold) {
+			client.send('error', 'Not possible to buy item!');
 			return;
 		}
 		if (item) {
@@ -198,9 +198,10 @@ export class DraftRoom extends Room<DraftState> {
 
 			increaseStats(this.state.player, item.affectedStats);
 
-			this.state.shop = this.state.shop.filter(
-				(item) => item.itemId !== itemId
-			);
+			// this.state.shop = this.state.shop.filter(
+			// 	(item) => item.itemId !== itemId
+			// );
+      item.sold = true;
 			this.state.player.inventory.push(item);
 		}
 	}
