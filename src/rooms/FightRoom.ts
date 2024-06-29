@@ -440,6 +440,11 @@ export class FightRoom extends Room<FightState> {
 		);
 		if (assassinAmusementTalent) {
 			attacker.attackSpeed += assassinAmusementTalent.activationRate;
+      this.broadcast(
+        'combat_log',
+        `${attacker.name} gains ${assassinAmusementTalent.activationRate} attack speed!`
+      );
+      this.broadcast('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.AssassinAmusement});
 		}
 
 		if (recalculateTimer) {
@@ -585,7 +590,7 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.Disarm
 		);
 		if (disarmTalent) {
-			enemy.disarmWeapon(this.playerClient);
+			enemy.disarmWeapon(this.playerClient, enemy);
 		}
 
 		//handle weapon whisperer talent
