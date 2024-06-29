@@ -1,7 +1,7 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { Talent } from './TalentSchema';
 import { Item } from './ItemSchema';
-import { Stats, TalentType } from '../../utils/utils';
+import { Stats, TalentType, increaseStats } from '../../utils/utils';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
 
@@ -109,6 +109,30 @@ export class Player extends Schema {
 			}
 			return count;
 		}, 0);
+	}
+
+	disarmWeapon(playerClient: Client) {
+		const weapons: Item[] = this.inventory.filter((item) =>
+			item.tags.includes('weapon')
+		);
+		if (weapons.length > 0) {
+			const mostExpensiveWeapon: Item = weapons.reduce(
+				(maxWeapon: Item, currentWeapon: Item) => {
+					return currentWeapon.price > maxWeapon.price
+						? currentWeapon
+						: maxWeapon;
+				},
+				weapons[0]
+			);
+
+			increaseStats(this, mostExpensiveWeapon.affectedStats, -1);
+			playerClient.send(
+				'combat_log',
+				`${this.name} is disarmed! ${mostExpensiveWeapon.name} is disabled for the fight!`
+			);
+		} else {
+			playerClient.send('combat_log', `${this.name} has no weapons to disarm!`);
+		}
 	}
 
 	resetInventory() {
