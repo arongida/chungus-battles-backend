@@ -355,7 +355,7 @@ export class FightRoom extends Room<FightState> {
 					defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
 						(talent) => talent !== TalentType.Evasion
 					);
-				}, 1000);
+				}, 1500);
 				return;
 			}
 		}
