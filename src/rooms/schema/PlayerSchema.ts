@@ -154,10 +154,10 @@ export class Player extends Schema {
 				this.poisonTimer.clear();
 				this.poisonTimer = null;
 			}
-		}, 3000);
+		}, 10000);
 		if (!this.poisonTimer) {
 			this.poisonTimer = clock.setInterval(() => {
-				const poisonDamage = this.poisonStack * activationRate * this.maxHp;
+				const poisonDamage = (this.poisonStack * (activationRate * this.maxHp)) * 0.1;
 				this.hp -= poisonDamage;
 				playerClient.send(
 					'combat_log',

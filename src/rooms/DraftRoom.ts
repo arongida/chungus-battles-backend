@@ -251,6 +251,31 @@ export class DraftRoom extends Room<DraftState> {
 		this.state.player.maxXp += this.state.player.level * 4;
 		this.state.player.xp = leftoverXp;
 
+    		//check if player took risky investment
+		const pennyStocksTalent = this.state.player.talents.find(
+			(talent) => talent.talentId === TalentType.PennyStocks
+		);
+		if (pennyStocksTalent) {
+			this.state.player.gold += pennyStocksTalent.activationRate;
+			this.broadcast(
+				'combat_log',
+				`Gained ${pennyStocksTalent.activationRate} gold! `
+			);
+      this.broadcast('trigger_talent', {playerId: this.state.player.playerId, talentId: TalentType.PennyStocks});
+			this.state.player.talents = this.state.player.talents.filter(
+				(talent) => talent.talentId !== TalentType.PennyStocks
+			);
+			this.state.player.talents.push(
+				new Talent({
+					talentId: 7,
+					name: 'Broken Penny Stocks',
+					description: 'Already used',
+					tier: 1,
+					activationRate: 0,
+				})
+			);
+		}
+
 		// this.state.player.hp += 10;
 		// this.state.player.defense += 3;
 		// this.state.player.attack += 1;

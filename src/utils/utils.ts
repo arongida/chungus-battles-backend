@@ -11,11 +11,11 @@ export enum FightResultType {
 export enum TalentType {
 	Rage = 1,
 	Pickpocket = 2,
-	RiskyInvestment = 3,
+	PennyStocks = 3,
 	GuardianAngel = 4,
 	Scam = 5,
 	NotSoGuardianAngel = 6,
-	BrokenRiskyInvestment = 7,
+	BrokenPennyStocks = 7,
 	Evasion = 9,
 	Bandage = 10,
 	ThrowMoney = 11,
@@ -37,6 +37,8 @@ export enum TalentType {
   Zealot = 28,
   Stab = 29,
   Trickster = 30,
+  Bear = 31,
+  FutureNow = 32,
 }
 
 export function increaseStats(entity: any, stats: any, multiplier = 1) {
