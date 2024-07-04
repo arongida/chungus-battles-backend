@@ -463,7 +463,7 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.Bear
 		);
 		if (bearTalent) {
-			const bearDamage = attacker.maxHp * bearTalent.activationRate;
+			const bearDamage = 1 + (attacker.maxHp * bearTalent.activationRate);
 			defender.hp -= bearDamage;
 			this.broadcast(
 				'combat_log',
