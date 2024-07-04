@@ -258,7 +258,10 @@ export class FightRoom extends Room<FightState> {
 								'combat_log',
 								`${player.name} steals ${stolenItem.name} from ${enemy.name}!`
 							);
-              this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.Steal});
+							this.broadcast('trigger_talent', {
+								playerId: player.playerId,
+								talentId: TalentType.Steal,
+							});
 							player.inventory.push(stolenItem);
 							increaseStats(player, stolenItem.affectedStats);
 							increaseStats(enemy, stolenItem.affectedStats, -1);
@@ -273,7 +276,10 @@ export class FightRoom extends Room<FightState> {
 							'combat_log',
 							`${player.name} stole 1 gold from ${enemy.name}!`
 						);
-            this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.Pickpocket});
+						this.broadcast('trigger_talent', {
+							playerId: player.playerId,
+							talentId: TalentType.Pickpocket,
+						});
 					}
 
 					//handle scam skill
@@ -285,7 +291,10 @@ export class FightRoom extends Room<FightState> {
 							'combat_log',
 							`${player.name} scams ${amount} health from ${enemy.name}!`
 						);
-            this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.Scam});
+						this.broadcast('trigger_talent', {
+							playerId: player.playerId,
+							talentId: TalentType.Scam,
+						});
 						this.broadcast('damage', {
 							playerId: enemy.playerId,
 							damage: amount,
@@ -304,7 +313,10 @@ export class FightRoom extends Room<FightState> {
 							'combat_log',
 							`${player.name} restores ${healing} health!`
 						);
-            this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.Bandage});
+						this.broadcast('trigger_talent', {
+							playerId: player.playerId,
+							talentId: TalentType.Bandage,
+						});
 						this.broadcast('healing', {
 							playerId: player.playerId,
 							healing: healing,
@@ -314,14 +326,16 @@ export class FightRoom extends Room<FightState> {
 					//handle throwing money skill
 					if (talent.talentId === TalentType.ThrowMoney) {
 						//calculate defense
-						const damage =
-							7 + player.gold * 0.7 * (100 / (100 + enemy.defense));
+						const damage = 5 + player.gold * 0.5;
 						enemy.hp -= damage;
 						this.broadcast(
 							'combat_log',
 							`${player.name} throws money for ${damage} damage!`
 						);
-            this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.ThrowMoney});
+						this.broadcast('trigger_talent', {
+							playerId: player.playerId,
+							talentId: TalentType.ThrowMoney,
+						});
 						this.broadcast('damage', {
 							playerId: enemy.playerId,
 							damage: damage,
@@ -349,7 +363,10 @@ export class FightRoom extends Room<FightState> {
 			const random = Math.random();
 			if (random < evasionTalent.activationRate) {
 				this.broadcast('combat_log', `${defender.name} dodged the attack!`);
-				this.broadcast('trigger_talent', {playerId: defender.playerId, talentId: TalentType.Evasion});
+				this.broadcast('trigger_talent', {
+					playerId: defender.playerId,
+					talentId: TalentType.Evasion,
+				});
 				defender.talentsOnCooldown.push(TalentType.Evasion);
 				this.clock.setTimeout(() => {
 					defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
@@ -375,7 +392,10 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				`${attacker.name} leeches ${leechAmount} health!`
 			);
-      this.broadcast('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.Invigorate});
+			this.broadcast('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.Invigorate,
+			});
 			this.broadcast('healing', {
 				playerId: attacker.playerId,
 				healing: leechAmount,
@@ -406,7 +426,10 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				`${attacker.name} rages, increased attack by 1!`
 			);
-      this.broadcast('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.Rage});
+			this.broadcast('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.Rage,
+			});
 			this.broadcast('damage', {
 				playerId: attacker.playerId,
 				damage: selfDamage,
@@ -425,10 +448,34 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				`${attacker.name} stabs ${defender.name} for ${stabDamage} damage!`
 			);
-      this.broadcast('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.Stab});
+			this.broadcast('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.Stab,
+			});
 			this.broadcast('damage', {
 				playerId: defender.playerId,
 				damage: stabDamage,
+			});
+		}
+
+		//handle Bear Skill
+		const bearTalent = attacker.talents.find(
+			(talent) => talent.talentId === TalentType.Bear
+		);
+		if (bearTalent) {
+			const bearDamage = attacker.maxHp * bearTalent.activationRate;
+			defender.hp -= bearDamage;
+			this.broadcast(
+				'combat_log',
+				`${attacker.name} mauls ${defender.name} for ${bearDamage} damage!`
+			);
+			this.broadcast('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.Bear,
+			});
+			this.broadcast('damage', {
+				playerId: defender.playerId,
+				damage: bearDamage,
 			});
 		}
 
@@ -440,11 +487,14 @@ export class FightRoom extends Room<FightState> {
 		);
 		if (assassinAmusementTalent) {
 			attacker.attackSpeed += assassinAmusementTalent.activationRate;
-      this.broadcast(
-        'combat_log',
-        `${attacker.name} gains ${assassinAmusementTalent.activationRate} attack speed!`
-      );
-      this.broadcast('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.AssassinAmusement});
+			this.broadcast(
+				'combat_log',
+				`${attacker.name} gains ${assassinAmusementTalent.activationRate} attack speed!`
+			);
+			this.broadcast('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.AssassinAmusement,
+			});
 		}
 
 		if (recalculateTimer) {
@@ -477,6 +527,26 @@ export class FightRoom extends Room<FightState> {
 				break;
 		}
 
+    let round = this.state.player.round;
+
+    const futureNowTalent = this.state.player.talents.find(
+      (talent) => talent.talentId === TalentType.FutureNow
+    );
+    if (futureNowTalent) {
+      this.broadcast('combat_log', 'You are in the future now! You gain extra gold and xp!');
+      this.broadcast('trigger_talent', {
+        playerId: this.state.player.playerId,
+        talentId: TalentType.FutureNow,
+      });
+      round++;
+    }
+
+    this.state.player.gold += round * 4;
+    this.state.player.xp += round * 2;
+
+    this.broadcast('combat_log', `You gained ${round * 4} gold!`);
+    this.broadcast('combat_log', `You gained ${round * 2} xp!`);
+
 		//check for fight end bonuses
 		const smartInvestmentTalent = this.state.player.talents.find(
 			(talent) => talent.talentId === TalentType.SmartInvestment
@@ -486,47 +556,23 @@ export class FightRoom extends Room<FightState> {
 				Math.round(
 					this.state.player.gold * smartInvestmentTalent.activationRate
 				),
-				2
+				5
 			);
 			this.state.player.gold += goldBonus;
 			this.broadcast(
 				'combat_log',
 				`You gained ${goldBonus} gold from selling loot!`
 			);
-      this.broadcast('trigger_talent', {playerId: this.state.player.playerId, talentId: TalentType.SmartInvestment});
+			this.broadcast('trigger_talent', {
+				playerId: this.state.player.playerId,
+				talentId: TalentType.SmartInvestment,
+			});
 		}
 	}
 
 	private handleWin() {
 		this.broadcast('combat_log', 'You win!');
 
-		//check if player took risky investment
-		const riskyInvestmentTalent = this.state.player.talents.find(
-			(talent) => talent.talentId === TalentType.RiskyInvestment
-		);
-		if (riskyInvestmentTalent) {
-			this.state.player.gold += riskyInvestmentTalent.activationRate;
-			this.broadcast(
-				'combat_log',
-				`You took a risky investment and gained ${riskyInvestmentTalent.activationRate} gold!`
-			);
-      this.broadcast('trigger_talent', {playerId: this.state.player.playerId, talentId: TalentType.RiskyInvestment});
-			this.state.player.talents = this.state.player.talents.filter(
-				(talent) => talent.talentId !== TalentType.RiskyInvestment
-			);
-			this.state.player.talents.push(
-				new Talent({
-					talentId: 7,
-					name: 'Broken Risky Investment',
-					description: 'Already used',
-					tier: 1,
-					activationRate: 0,
-				})
-			);
-		}
-
-		this.state.player.gold += this.state.player.round * 4;
-		this.state.player.xp += this.state.player.round * 2;
 		this.state.player.wins++;
 		this.broadcast('end_battle', 'The battle has ended!');
 		if (this.state.player.wins >= 10) {
@@ -536,9 +582,6 @@ export class FightRoom extends Room<FightState> {
 
 	private handleLoose() {
 		this.broadcast('combat_log', 'You loose!');
-
-		this.state.player.gold += this.state.player.round * 4;
-		this.state.player.xp += this.state.player.round * 2;
 
 		//check guardian talents
 		if (
@@ -550,7 +593,10 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				'You have been saved by the guardian angel!'
 			);
-      this.broadcast('trigger_talent', {playerId: this.state.player.playerId, talentId: TalentType.GuardianAngel});
+			this.broadcast('trigger_talent', {
+				playerId: this.state.player.playerId,
+				talentId: TalentType.GuardianAngel,
+			});
 			this.state.player.talents = this.state.player.talents.filter(
 				(talent) => talent.talentId !== TalentType.GuardianAngel
 			);
@@ -576,8 +622,6 @@ export class FightRoom extends Room<FightState> {
 
 	private handleDraw() {
 		this.broadcast('combat_log', "It's a draw!");
-		this.state.player.gold += this.state.player.round * 4;
-		this.state.player.xp += this.state.player.round * 2;
 		this.broadcast('end_battle', 'The battle has ended!');
 	}
 
@@ -606,7 +650,10 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				`${player.name} gains ${attackBonus} attack from Weapon Whisperer!`
 			);
-      this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.WeaponWhisperer});
+			this.broadcast('trigger_talent', {
+				playerId: player.playerId,
+				talentId: TalentType.WeaponWhisperer,
+			});
 		}
 
 		//handle talent buy effects
@@ -620,7 +667,10 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				`${player.name} gains ${defenseBonus} defense from Gold Genie!`
 			);
-      this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.GoldGenie});
+			this.broadcast('trigger_talent', {
+				playerId: player.playerId,
+				talentId: TalentType.GoldGenie,
+			});
 		}
 
 		//handle strong body talent
@@ -652,7 +702,10 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				`${player.name} gains ${attackBonus} attack!`
 			);
-      this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.Strong});
+			this.broadcast('trigger_talent', {
+				playerId: player.playerId,
+				talentId: TalentType.Strong,
+			});
 			// this.broadcast(
 			// 	'combat_log',
 			// 	`${player.name} gains ${defenseBonus} defense!`
@@ -680,7 +733,10 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				`${enemy.name} looses ${attackBonus} attack!`
 			);
-      this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.IntimidatingWealth});
+			this.broadcast('trigger_talent', {
+				playerId: player.playerId,
+				talentId: TalentType.IntimidatingWealth,
+			});
 			// this.broadcast(
 			// 	'combat_log',
 			// 	`${enemy.name} looses ${attackBonus} attack!`
@@ -704,7 +760,10 @@ export class FightRoom extends Room<FightState> {
 			player.attack = enemyAttack;
 			enemy.attack = playerAttack;
 			this.broadcast('combat_log', `${player.name} tricks ${enemy.name}!`);
-      this.broadcast('trigger_talent', {playerId: player.playerId, talentId: TalentType.Trickster});
+			this.broadcast('trigger_talent', {
+				playerId: player.playerId,
+				talentId: TalentType.Trickster,
+			});
 		}
 
 		//handle bribe
