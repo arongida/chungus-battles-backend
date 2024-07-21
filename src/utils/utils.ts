@@ -39,6 +39,10 @@ export enum TalentType {
   Trickster = 30,
   Bear = 31,
   FutureNow = 32,
+  Snitch = 33,
+  Robbery = 34,
+  ArmorAddict = 35,
+  CorrodingCollection = 36,
 }
 
 export function increaseStats(entity: any, stats: any, multiplier = 1) {

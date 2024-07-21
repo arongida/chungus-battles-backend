@@ -32,7 +32,7 @@ export class DraftRoom extends Room<DraftState> {
 		});
 
 		this.onMessage('refresh_talents', (client, message) => {
-      this.handleRefreshTalentSelection(client);
+			this.handleRefreshTalentSelection(client);
 		});
 
 		//this.setSimulationInterval((deltaTime) => this.update(deltaTime));
@@ -76,6 +76,23 @@ export class DraftRoom extends Room<DraftState> {
 		if (this.state.player.round === 1) await this.updateTalentSelection();
 		if (this.state.shop.length === 0)
 			await this.updateShop(this.state.shopSize);
+
+		//check robbery talent
+		const robberyTalent = this.state.player.talents.find(
+			(talent) => talent.talentId === TalentType.Robbery
+		);
+		if (robberyTalent) {
+			const randomItem =
+				this.state.shop[Math.floor(Math.random() * this.state.shop.length)];
+
+			if (randomItem) {
+				this.getItem(randomItem);
+				this.broadcast('trigger_talent', {
+					playerId: this.state.player.playerId,
+					talentId: TalentType.Robbery,
+				});
+			}
+		}
 	}
 
 	async onLeave(client: Client, consented: boolean) {
@@ -195,15 +212,14 @@ export class DraftRoom extends Room<DraftState> {
 		}
 		if (item) {
 			this.state.player.gold -= item.price;
-
-			increaseStats(this.state.player, item.affectedStats);
-
-			// this.state.shop = this.state.shop.filter(
-			// 	(item) => item.itemId !== itemId
-			// );
-      item.sold = true;
-			this.state.player.inventory.push(item);
+			this.getItem(item);
 		}
+	}
+
+	private getItem(item: Item) {
+		increaseStats(this.state.player, item.affectedStats);
+		item.sold = true;
+		this.state.player.inventory.push(item);
 	}
 
 	private async refreshShop(client: Client) {
@@ -251,7 +267,7 @@ export class DraftRoom extends Room<DraftState> {
 		this.state.player.maxXp += this.state.player.level * 4;
 		this.state.player.xp = leftoverXp;
 
-    		//check if player took risky investment
+		//check penny stock talent
 		const pennyStocksTalent = this.state.player.talents.find(
 			(talent) => talent.talentId === TalentType.PennyStocks
 		);
@@ -261,7 +277,7 @@ export class DraftRoom extends Room<DraftState> {
 				'combat_log',
 				`Gained ${pennyStocksTalent.activationRate} gold! `
 			);
-      this.broadcast('trigger_talent', {playerId: this.state.player.playerId, talentId: TalentType.PennyStocks});
+
 			this.state.player.talents = this.state.player.talents.filter(
 				(talent) => talent.talentId !== TalentType.PennyStocks
 			);
@@ -274,6 +290,12 @@ export class DraftRoom extends Room<DraftState> {
 					activationRate: 0,
 				})
 			);
+			setTimeout(() => {
+				this.broadcast('trigger_talent', {
+					playerId: this.state.player.playerId,
+					talentId: 7,
+				});
+			}, 100);
 		}
 
 		// this.state.player.hp += 10;

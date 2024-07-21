@@ -29,8 +29,7 @@ export class Player extends Schema {
 	maxHp: number;
 	attackTimer: Delayed;
 	poisonTimer: Delayed;
-	playerClient: Client;
-  talentsOnCooldown: TalentType[] = [];
+	talentsOnCooldown: TalentType[] = [];
 
 	get gold(): number {
 		return this._gold;
@@ -94,6 +93,34 @@ export class Player extends Schema {
 		this._defense = value < 0 ? 0 : value;
 	}
 
+	takeDamage(damage: number, playerClient: Client): number {
+		let reducedDamage = damage * (100 / (100 + this.defense));
+		const armorAddictTalent = this.talents.find(
+			(talent) => talent.talentId === TalentType.ArmorAddict
+		);
+		if (armorAddictTalent) {
+			const armorAddictReduction =
+				armorAddictTalent.activationRate * this.getNumberOfArmorItems();
+			reducedDamage -= armorAddictReduction;
+		}
+		reducedDamage = Math.max(reducedDamage, 1);
+		this.hp -= reducedDamage;
+		playerClient.send('damage', {
+			playerId: this.playerId,
+			damage: reducedDamage,
+		});
+    return reducedDamage;
+	}
+
+	getNumberOfArmorItems(): number {
+		return this.inventory.reduce((count, item) => {
+			if (item.tags.includes('armor')) {
+				return count + 1;
+			}
+			return count;
+		}, 0);
+	}
+
 	getNumberOfMeleeWeapons(): number {
 		return this.inventory.reduce((count, item) => {
 			if (item.tags.includes('weapon') && item.tags.includes('melee')) {
@@ -134,22 +161,34 @@ export class Player extends Schema {
 		} else {
 			playerClient.send('combat_log', `${this.name} has no weapons to disarm!`);
 		}
-    playerClient.send('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.Disarm})
+		playerClient.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Disarm,
+		});
 	}
 
 	resetInventory() {
 		this.inventory.splice(0, this.inventory.length, ...this.initialInventory);
 	}
 
-	addPoison(clock: ClockTimer, playerClient: Client, activationRate: number, attacker: Player) {
-		this.poisonStack += 1;
+	addPoison(
+		clock: ClockTimer,
+		playerClient: Client,
+		activationRate: number,
+		attacker: Player,
+    stack: number = 1
+	) {
+		this.poisonStack += stack;
 		playerClient.send(
 			'combat_log',
 			`${this.name} is poisoned! ${this.poisonStack} stacks!`
 		);
-    playerClient.send('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.Poison})
+		playerClient.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Poison,
+		});
 		clock.setTimeout(() => {
-			this.poisonStack -= 1;
+			this.poisonStack -= stack;
 			if (this.poisonStack === 0 && this.poisonTimer) {
 				this.poisonTimer.clear();
 				this.poisonTimer = null;
@@ -157,7 +196,8 @@ export class Player extends Schema {
 		}, 10000);
 		if (!this.poisonTimer) {
 			this.poisonTimer = clock.setInterval(() => {
-				const poisonDamage = (this.poisonStack * (activationRate * this.maxHp)) * 0.1;
+				const poisonDamage =
+					this.poisonStack * ((activationRate * this.maxHp) + (activationRate * 100)) * 0.1;
 				this.hp -= poisonDamage;
 				playerClient.send(
 					'combat_log',
@@ -176,12 +216,12 @@ export class Player extends Schema {
 		attacker: Player,
 		eyeForAnEyeTalent: Talent,
 		damage: number,
-    clock: ClockTimer
+		clock: ClockTimer
 	) {
-    if (this.talentsOnCooldown.includes(TalentType.EyeForAnEye)) {
-      console.log('Eye for an eye is on cooldown');
-      return;
-    }
+		if (this.talentsOnCooldown.includes(TalentType.EyeForAnEye)) {
+			console.log('Eye for an eye is on cooldown');
+			return;
+		}
 		const random = Math.random();
 		if (random < eyeForAnEyeTalent.activationRate) {
 			attacker.hp -= damage;
@@ -189,15 +229,20 @@ export class Player extends Schema {
 				'combat_log',
 				`${this.name} reflects ${damage} damage to ${attacker.name}!`
 			);
-      playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.EyeForAnEye})
+			playerClient.send('trigger_talent', {
+				playerId: this.playerId,
+				talentId: TalentType.EyeForAnEye,
+			});
 			playerClient.send('damage', {
 				playerId: attacker.playerId,
 				damage: damage,
 			});
-      this.talentsOnCooldown.push(TalentType.EyeForAnEye);
-      clock.setTimeout(() => {
-        this.talentsOnCooldown = this.talentsOnCooldown.filter(talent => talent !== TalentType.EyeForAnEye);
-      }, 1000);
+			this.talentsOnCooldown.push(TalentType.EyeForAnEye);
+			clock.setTimeout(() => {
+				this.talentsOnCooldown = this.talentsOnCooldown.filter(
+					(talent) => talent !== TalentType.EyeForAnEye
+				);
+			}, 1000);
 		}
 	}
 
@@ -214,7 +259,10 @@ export class Player extends Schema {
 			'combat_log',
 			`${this.name} reflects ${reflectDamage} damage to ${attacker.name}!`
 		);
-    playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.ThornyFence})
+		playerClient.send('trigger_talent', {
+			playerId: this.playerId,
+			talentId: TalentType.ThornyFence,
+		});
 		playerClient.send('damage', {
 			playerId: attacker.playerId,
 			damage: reflectDamage,
@@ -228,7 +276,10 @@ export class Player extends Schema {
 			'combat_log',
 			`${this.name} recovers ${healingAmount} health!`
 		);
-    playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.Resilience})
+		playerClient.send('trigger_talent', {
+			playerId: this.playerId,
+			talentId: TalentType.Resilience,
+		});
 		playerClient.send('healing', {
 			playerId: this.playerId,
 			healing: healingAmount,
@@ -244,7 +295,10 @@ export class Player extends Schema {
 			'combat_log',
 			`${this.name} gains ${normalizedValue} attack speed!`
 		);
-    playerClient.send('trigger_talent', {playerId: this.playerId, talentId: TalentType.Zealot})
+		playerClient.send('trigger_talent', {
+			playerId: this.playerId,
+			talentId: TalentType.Zealot,
+		});
 	}
 
 	onAttacked(
@@ -257,7 +311,12 @@ export class Player extends Schema {
 			(talent) => talent.talentId === TalentType.Poison
 		);
 		if (poisonTalent)
-			this.addPoison(clock, playerClient, poisonTalent.activationRate, attacker);
+			this.addPoison(
+				clock,
+				playerClient,
+				poisonTalent.activationRate,
+				attacker
+			);
 
 		const thornyFenceTalent = this.talents.find(
 			(talent) => talent.talentId === TalentType.ThornyFence
@@ -284,7 +343,13 @@ export class Player extends Schema {
 			(talent) => talent.talentId === TalentType.EyeForAnEye
 		);
 		if (eyeForAnEyeTalent) {
-			this.eyeForAnEye(playerClient, attacker, eyeForAnEyeTalent, damage, clock);
+			this.eyeForAnEye(
+				playerClient,
+				attacker,
+				eyeForAnEyeTalent,
+				damage,
+				clock
+			);
 		}
 	}
 }
