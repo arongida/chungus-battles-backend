@@ -797,7 +797,7 @@ export class FightRoom extends Room<FightState> {
 				this.playerClient,
 				poisonTalent.activationRate,
 				player,
-				numberOfItems * 2
+				Math.round(numberOfItems * poisonTalent.activationRate)
 			);
 			this.broadcast('trigger_talent', {
 				playerId: player.playerId,
