@@ -91,6 +91,10 @@ export class DraftRoom extends Room<DraftState> {
 					playerId: this.state.player.playerId,
 					talentId: TalentType.Robbery,
 				});
+        this.broadcast(
+          'draft_log',
+          `Robbery talent activated! Gained ${randomItem.name}!`
+        );
 			}
 		}
 	}
@@ -274,7 +278,7 @@ export class DraftRoom extends Room<DraftState> {
 		if (pennyStocksTalent) {
 			this.state.player.gold += pennyStocksTalent.activationRate;
 			this.broadcast(
-				'combat_log',
+				'draft_log',
 				`Gained ${pennyStocksTalent.activationRate} gold! `
 			);
 
