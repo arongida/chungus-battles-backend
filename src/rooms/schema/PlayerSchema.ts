@@ -101,7 +101,7 @@ export class Player extends Schema {
 		if (armorAddictTalent) {
 			const armorAddictReduction =
 				armorAddictTalent.activationRate * this.getNumberOfArmorItems();
-			reducedDamage -= Math.round(armorAddictReduction);
+			reducedDamage -= armorAddictReduction;
 		}
 		reducedDamage = Math.max(reducedDamage, 1);
 		this.hp -= reducedDamage;
