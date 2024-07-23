@@ -154,6 +154,7 @@ export class DraftRoom extends Room<DraftState> {
 	}
 
 	private async updateTalentSelection() {
+    const exceptions = this.state.availableTalents.map(talent => talent.talentId);
 		this.state.availableTalents.clear();
 		//if player has no talent points, return
 		if (this.state.remainingTalentPoints <= 0) return;
@@ -164,7 +165,7 @@ export class DraftRoom extends Room<DraftState> {
 			nextTalentLevel =
 				this.state.player.talents.sort((a, b) => b.tier - a.tier)[0].tier + 1;
 		//assign talents from db to state
-		const talents = await getRandomTalents(2, nextTalentLevel);
+		const talents = await getRandomTalents(2, nextTalentLevel, exceptions);
 		talents.forEach((talent) => {
 			const newTalent = new Talent();
 			newTalent.assign(talent);
