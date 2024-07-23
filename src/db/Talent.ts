@@ -14,11 +14,12 @@ export const talentModel = mongoose.model('Talent', talentMongooseSchema);
 
 export async function getRandomTalents(
   selectionSize: number,
-  level: number
+  level: number,
+  exceptions: number[]
 ): Promise<{}[]> {
   // const talentSchemaArray = await talentModel.find().lean().limit(selectionSize);
   const talentSchemaArray = await talentModel.aggregate([
-    { $match: { tier: level, tags: {$ne: 'used'} } },
+    { $match: { tier: level, tags: {$ne: 'used'}, talentId: {$nin: exceptions} } },
     { $sample: { size: selectionSize } },
   ]);
   return talentSchemaArray;
