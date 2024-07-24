@@ -3,18 +3,8 @@ import { FightState } from './schema/FightState';
 import { getPlayer, getSameRoundPlayer, updatePlayer } from '../db/Player';
 import { Player } from './schema/PlayerSchema';
 import { Delayed } from 'colyseus';
-import {
-	delay,
-	FightResultType,
-	TalentType,
-	increaseStats,
-	setStats,
-} from '../utils/utils';
-import {
-	DamageMessage,
-	HealingMessage,
-	TriggerTalentMessage,
-} from '../utils/MessageTypes';
+import { delay, increaseStats, setStats } from '../common/utils';
+import { FightResultType, TalentType } from '../common/types';
 import { getTalentsById } from '../db/Talent';
 import { getItemsById } from '../db/Item';
 import { AffectedStats, Item } from './schema/ItemSchema';
@@ -489,7 +479,12 @@ export class FightRoom extends Room<FightState> {
 		}
 
 		//handle on attacked talents in defender player class
-		defender.onAttacked(this.clock, this.playerClient, attacker, damage);
+		defender.tirggerOnAttackedEffects(
+			this.clock,
+			this.playerClient,
+			attacker,
+			damage
+		);
 
 		const assassinAmusementTalent = attacker.talents.find(
 			(talent) => talent.talentId === TalentType.AssassinAmusement
@@ -646,7 +641,7 @@ export class FightRoom extends Room<FightState> {
 			(talent) => talent.talentId === TalentType.Disarm
 		);
 		if (disarmTalent) {
-			enemy.disarmWeapon(this.playerClient, enemy);
+			enemy.handleDisarmWeapon(this.playerClient, enemy);
 		}
 
 		//handle weapon whisperer talent
@@ -779,11 +774,10 @@ export class FightRoom extends Room<FightState> {
 		}
 
 		//handle corroding collection
-		if (
-			player.talents.find(
-				(talent) => talent.talentId === TalentType.CorrodingCollection
-			)
-		) {
+		const corrodingCollectionTalent = player.talents.find(
+			(talent) => talent.talentId === TalentType.CorrodingCollection
+		);
+		if (corrodingCollectionTalent) {
 			const numberOfItems = enemy.inventory.length;
 			const [poisonTalent] = (await getTalentsById([
 				TalentType.Poison,
@@ -792,12 +786,13 @@ export class FightRoom extends Room<FightState> {
 				'combat_log',
 				`${player.name} corrodes ${enemy.name}'s collection!`
 			);
+
 			enemy.addPoison(
 				this.clock,
 				this.playerClient,
 				poisonTalent.activationRate,
 				player,
-				Math.round(numberOfItems * poisonTalent.activationRate)
+				Math.round(numberOfItems * corrodingCollectionTalent.activationRate)
 			);
 			this.broadcast('trigger_talent', {
 				playerId: player.playerId,
