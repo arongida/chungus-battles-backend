@@ -1,13 +1,13 @@
 import { Room, Client } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
 import { AffectedStats, Item } from './schema/ItemSchema';
-import { Talent } from './schema/TalentSchema';
+import { Talent } from './schema/talent/TalentSchema';
 import { copyPlayer, createNewPlayer } from '../db/Player';
 import { getNumberOfItems, getItemsById } from '../db/Item';
 import { getPlayer, updatePlayer } from '../db/Player';
 import { Player } from './schema/PlayerSchema';
 import { delay, increaseStats } from '../common/utils';
-import { TalentType } from '../common/types';
+import { TalentType } from './schema/talent/TalentTypes';
 import { getRandomTalents, getTalentsById } from '../db/Talent';
 
 export class DraftRoom extends Room<DraftState> {

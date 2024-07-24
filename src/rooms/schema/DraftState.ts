@@ -1,7 +1,7 @@
 import { Schema, Context, type, ArraySchema } from '@colyseus/schema';
 import { Player } from './PlayerSchema';
 import { Item } from './ItemSchema';
-import { Talent } from './TalentSchema';
+import { Talent } from './talent/TalentSchema';
 
 export class DraftState extends Schema {
 	@type(Player) player: Player = new Player();

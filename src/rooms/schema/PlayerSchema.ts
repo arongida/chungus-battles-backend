@@ -1,8 +1,9 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
-import { Talent } from './TalentSchema';
+import { Talent } from './talent/TalentSchema';
 import { Item } from './ItemSchema';
 import { increaseStats } from '../../common/utils';
-import { IStats, TalentType } from '../../common/types';
+import { IStats } from '../../common/types';
+import { TalentType } from './talent/TalentTypes';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
 
@@ -110,7 +111,7 @@ export class Player extends Schema {
 			playerId: this.playerId,
 			damage: reducedDamage,
 		});
-    return reducedDamage;
+		return reducedDamage;
 	}
 
 	getNumberOfArmorItems(): number {
@@ -176,18 +177,14 @@ export class Player extends Schema {
 		clock: ClockTimer,
 		playerClient: Client,
 		activationRate: number,
-		attacker: Player,
-    stack: number = 1
+		stack: number = 1
 	) {
 		this.poisonStack += stack;
 		playerClient.send(
 			'combat_log',
 			`${this.name} is poisoned! ${this.poisonStack} stacks!`
 		);
-		playerClient.send('trigger_talent', {
-			playerId: attacker.playerId,
-			talentId: TalentType.Poison,
-		});
+
 		clock.setTimeout(() => {
 			this.poisonStack -= stack;
 			if (this.poisonStack === 0 && this.poisonTimer) {
@@ -198,7 +195,9 @@ export class Player extends Schema {
 		if (!this.poisonTimer) {
 			this.poisonTimer = clock.setInterval(() => {
 				const poisonDamage =
-					this.poisonStack * ((activationRate * this.maxHp) + (activationRate * 100)) * 0.1;
+					this.poisonStack *
+					(activationRate * this.maxHp + activationRate * 100) *
+					0.1;
 				this.hp -= poisonDamage;
 				playerClient.send(
 					'combat_log',
@@ -302,28 +301,22 @@ export class Player extends Schema {
 		});
 	}
 
-	tirggerOnAttackedEffects(
+	triggerOnAttackedEffects(
 		clock: ClockTimer,
 		playerClient: Client,
 		attacker: Player,
 		damage: number
 	) {
-		const poisonTalent = attacker.talents.find(
-			(talent) => talent.talentId === TalentType.Poison
-		);
-		if (poisonTalent)
-			this.addPoison(
-				clock,
-				playerClient,
-				poisonTalent.activationRate,
-				attacker
-			);
-
 		const thornyFenceTalent = this.talents.find(
 			(talent) => talent.talentId === TalentType.ThornyFence
 		);
 		if (thornyFenceTalent) {
-			this.handleThornyDamage(playerClient, damage, thornyFenceTalent, attacker);
+			this.handleThornyDamage(
+				playerClient,
+				damage,
+				thornyFenceTalent,
+				attacker
+			);
 		}
 
 		const resilienceTalent = this.talents.find(
