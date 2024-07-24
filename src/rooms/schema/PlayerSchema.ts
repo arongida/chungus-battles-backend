@@ -1,7 +1,8 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { Talent } from './TalentSchema';
 import { Item } from './ItemSchema';
-import { Stats, TalentType, increaseStats } from '../../utils/utils';
+import { increaseStats } from '../../common/utils';
+import { IStats, TalentType } from '../../common/types';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
 
@@ -23,7 +24,7 @@ export class Player extends Schema {
 	@type('string') avatarUrl: string;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
-	initialStats: Stats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
+	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
 	maxHp: number;
@@ -139,7 +140,7 @@ export class Player extends Schema {
 		}, 0);
 	}
 
-	disarmWeapon(playerClient: Client, attacker: Player) {
+	handleDisarmWeapon(playerClient: Client, attacker: Player) {
 		const weapons: Item[] = this.inventory.filter((item) =>
 			item.tags.includes('weapon')
 		);
@@ -211,7 +212,7 @@ export class Player extends Schema {
 		}
 	}
 
-	eyeForAnEye(
+	handleEyeForAnEye(
 		playerClient: Client,
 		attacker: Player,
 		eyeForAnEyeTalent: Talent,
@@ -246,7 +247,7 @@ export class Player extends Schema {
 		}
 	}
 
-	thornyDamage(
+	handleThornyDamage(
 		playerClient: Client,
 		damage: number,
 		thornyFenceTalent: Talent,
@@ -269,7 +270,7 @@ export class Player extends Schema {
 		});
 	}
 
-	recoverHp(playerClient: Client, resilienceTalent: Talent) {
+	handleResilience(playerClient: Client, resilienceTalent: Talent) {
 		const healingAmount = 1 + resilienceTalent.activationRate * this.maxHp;
 		this.hp += healingAmount;
 		playerClient.send(
@@ -286,7 +287,7 @@ export class Player extends Schema {
 		});
 	}
 
-	zealot(playerClient: Client, zealotTalent: Talent) {
+	handleZealot(playerClient: Client, zealotTalent: Talent) {
 		const attackSpeedBuff =
 			0.02 + this.defense * zealotTalent.activationRate * 0.01;
 		const normalizedValue = Math.round(attackSpeedBuff * 100) / 100;
@@ -301,7 +302,7 @@ export class Player extends Schema {
 		});
 	}
 
-	onAttacked(
+	tirggerOnAttackedEffects(
 		clock: ClockTimer,
 		playerClient: Client,
 		attacker: Player,
@@ -322,28 +323,28 @@ export class Player extends Schema {
 			(talent) => talent.talentId === TalentType.ThornyFence
 		);
 		if (thornyFenceTalent) {
-			this.thornyDamage(playerClient, damage, thornyFenceTalent, attacker);
+			this.handleThornyDamage(playerClient, damage, thornyFenceTalent, attacker);
 		}
 
 		const resilienceTalent = this.talents.find(
 			(talent) => talent.talentId === TalentType.Resilience
 		);
 		if (resilienceTalent) {
-			this.recoverHp(playerClient, resilienceTalent);
+			this.handleResilience(playerClient, resilienceTalent);
 		}
 
 		const zealotTalent = this.talents.find(
 			(talent) => talent.talentId === TalentType.Zealot
 		);
 		if (zealotTalent) {
-			this.zealot(playerClient, zealotTalent);
+			this.handleZealot(playerClient, zealotTalent);
 		}
 
 		const eyeForAnEyeTalent = this.talents.find(
 			(talent) => talent.talentId === TalentType.EyeForAnEye
 		);
 		if (eyeForAnEyeTalent) {
-			this.eyeForAnEye(
+			this.handleEyeForAnEye(
 				playerClient,
 				attacker,
 				eyeForAnEyeTalent,
