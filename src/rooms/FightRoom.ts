@@ -10,6 +10,7 @@ import { getTalentsById } from '../db/Talent';
 import { getItemsById } from '../db/Item';
 import { AffectedStats, Item } from './schema/ItemSchema';
 import { Talent } from './schema/talent/TalentSchema';
+import { TalentBehaviorContext } from './schema/talent/TalentBehaviorContext';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
@@ -234,11 +235,19 @@ export class FightRoom extends Room<FightState> {
 
 	//start active skill loops for player and enemy
 	startSkillLoop(player: Player, enemy: Player) {
-		//start player skills loops
-		player.talents.forEach((talent) => {
+		//start active skills' loops
+		const activeTalents: Talent[] = player.talents.filter((talent) =>
+			talent.tags.includes('active')
+		);
+		const activeTalentBehaviorContext: TalentBehaviorContext = {
+			client: this.playerClient,
+			attacker: player,
+			defender: enemy,
+		};
+		activeTalents.forEach((talent) => {
 			this.skillsTimers.push(
 				this.clock.setInterval(() => {
-					talent.executeBehavior(this.playerClient, player, enemy);
+					talent.executeBehavior(activeTalentBehaviorContext);
 				}, (1 / talent.activationRate) * 1000)
 			);
 		});
@@ -284,27 +293,31 @@ export class FightRoom extends Room<FightState> {
 		);
 		this.broadcast('attack', attacker.playerId);
 
+		const attackTalentContext: TalentBehaviorContext = {
+			client: this.playerClient,
+			attacker: attacker,
+			defender: defender,
+			damage: damage,
+			clock: this.clock,
+		};
+
 		//handle on attack talents
 		const talentsToTrigger: Talent[] = attacker.talents.filter((talent) =>
 			talent.tags.includes('on-attack')
 		);
+
 		talentsToTrigger.forEach((talent) => {
-			talent.executeBehavior(
-				this.playerClient,
-				attacker,
-				defender,
-				damage,
-				this.clock
-			);
+			talent.executeBehavior(attackTalentContext);
 		});
 
-		//handle on attacked talents in defender player class
-		defender.triggerOnAttackedEffects(
-			this.clock,
-			this.playerClient,
-			attacker,
-			damage
+		//handle on attacked talents
+		const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
+			(talent) => talent.tags.includes('on-attacked')
 		);
+
+		talentsToTriggerOnDefender.forEach((talent) => {
+			talent.executeBehavior(attackTalentContext);
+		});
 
 		if (recalculateTimer) {
 			//reset attack timers
@@ -441,137 +454,18 @@ export class FightRoom extends Room<FightState> {
 	private async applyFightStartEffects(player: Player, enemy?: Player) {
 		if (!this.battleStarted) return;
 
-		//handle disarming deal talent
-		const disarmTalent = player.talents.find(
-			(talent) => talent.talentId === TalentType.Disarm
+		//handle on fight start talents
+		const onFightStartTalents: Talent[] = player.talents.filter((talent) =>
+			talent.tags.includes('fight-start')
 		);
-		if (disarmTalent) {
-			enemy.handleDisarmWeapon(this.playerClient, enemy);
-		}
-
-		//handle weapon whisperer talent
-		const weaponWhispererTalent = player.talents.find(
-			(talent) => talent.talentId === TalentType.WeaponWhisperer
-		);
-		if (weaponWhispererTalent) {
-			const numberOfMeleeWeapons = player.getNumberOfMeleeWeapons();
-			const attackBonus =
-				numberOfMeleeWeapons * weaponWhispererTalent.activationRate;
-			player.attack += attackBonus;
-			this.broadcast(
-				'combat_log',
-				`${player.name} gains ${attackBonus} attack from Weapon Whisperer!`
-			);
-			this.broadcast('trigger_talent', {
-				playerId: player.playerId,
-				talentId: TalentType.WeaponWhisperer,
-			});
-		}
-
-		//handle talent buy effects
-		const goldGenieTalent = player.talents.find(
-			(talent) => talent.talentId === TalentType.GoldGenie
-		);
-		if (goldGenieTalent) {
-			const defenseBonus = player.gold * 2;
-			player.defense += defenseBonus;
-			this.broadcast(
-				'combat_log',
-				`${player.name} gains ${defenseBonus} defense from Gold Genie!`
-			);
-			this.broadcast('trigger_talent', {
-				playerId: player.playerId,
-				talentId: TalentType.GoldGenie,
-			});
-		}
-
-		//handle strong body talent
-		const strongBodyTalent = player.talents.find(
-			(talent) => talent.talentId === TalentType.Strong
-		);
-		if (strongBodyTalent) {
-			const hpBonus = player.hp * strongBodyTalent.activationRate;
-			const attackBonus = player.attack * strongBodyTalent.activationRate;
-			player.hp += hpBonus;
-			player.maxHp = player.hp;
-			player.attack += attackBonus;
-			this.broadcast(
-				'combat_log',
-				`${player.name} is strong hence gets an increase to stats!`
-			);
-			this.broadcast('combat_log', `${player.name} gains ${hpBonus} hp!`);
-			this.broadcast(
-				'combat_log',
-				`${player.name} gains ${attackBonus} attack!`
-			);
-			this.broadcast('trigger_talent', {
-				playerId: player.playerId,
-				talentId: TalentType.Strong,
-			});
-		}
-
-		//handle upper middle class
-		if (
-			player.talents.find(
-				(talent) => talent.talentId === TalentType.IntimidatingWealth
-			)
-		) {
-			const attackBonus =
-				Math.min(0.2 + player.gold * 0.0025, 0.4) * enemy.attack;
-			enemy.attack -= attackBonus;
-			this.broadcast(
-				'combat_log',
-				`${player.name} intimidates ${enemy.name} with their wealth!`
-			);
-			this.broadcast(
-				'combat_log',
-				`${enemy.name} looses ${attackBonus} attack!`
-			);
-			this.broadcast('trigger_talent', {
-				playerId: player.playerId,
-				talentId: TalentType.IntimidatingWealth,
-			});
-		}
-
-		//handle trickster
-		if (
-			player.talents.find((talent) => talent.talentId === TalentType.Trickster)
-		) {
-			const enemyAttack = enemy.attack;
-			const playerAttack = player.attack;
-			player.attack = enemyAttack;
-			enemy.attack = playerAttack;
-			this.broadcast('combat_log', `${player.name} tricks ${enemy.name}!`);
-			this.broadcast('trigger_talent', {
-				playerId: player.playerId,
-				talentId: TalentType.Trickster,
-			});
-		}
-
-		//handle corroding collection
-		const corrodingCollectionTalent = player.talents.find(
-			(talent) => talent.talentId === TalentType.CorrodingCollection
-		);
-		if (corrodingCollectionTalent) {
-			const numberOfItems = enemy.inventory.length;
-			const [poisonTalent] = (await getTalentsById([
-				TalentType.Poison,
-			])) as Talent[];
-			this.broadcast(
-				'combat_log',
-				`${player.name} corrodes ${enemy.name}'s collection!`
-			);
-
-			enemy.addPoison(
-				this.clock,
-				this.playerClient,
-				poisonTalent.activationRate,
-				Math.round(numberOfItems * corrodingCollectionTalent.activationRate)
-			);
-			this.broadcast('trigger_talent', {
-				playerId: player.playerId,
-				talentId: TalentType.CorrodingCollection,
-			});
-		}
+		const onFightStartTalentsContext: TalentBehaviorContext = {
+			client: this.playerClient,
+			attacker: player,
+			defender: enemy,
+			clock: this.clock,
+		};
+		onFightStartTalents.forEach((talent) => {
+			talent.executeBehavior(onFightStartTalentsContext);
+		});
 	}
 }
