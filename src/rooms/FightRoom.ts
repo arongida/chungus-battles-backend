@@ -166,7 +166,9 @@ export class FightRoom extends Room<FightState> {
 	startAttackTimer(player: Player, enemy: Player) {
 		//start player attack loop
 		player.attackTimer = this.clock.setInterval(() => {
-			this.attack(player, enemy);
+			player.tryAttack(enemy, this.playerClient, this.clock);
+      player.attackTimer.clear();
+      this.startAttackTimer(player, enemy);
 		}, (1 / player.attackSpeed) * 1000);
 	}
 
@@ -253,78 +255,6 @@ export class FightRoom extends Room<FightState> {
 		});
 	}
 
-	private async attack(
-		attacker: Player,
-		defender: Player,
-		recalculateTimer = true
-	) {
-		//check if defender dodges the attack
-		const evasionTalent = defender.talents.find(
-			(talent) => talent.talentId === TalentType.Evasion
-		);
-		if (evasionTalent) {
-			if (!defender.talentsOnCooldown.includes(TalentType.Evasion)) {
-				const random = Math.random();
-				if (random < evasionTalent.activationRate) {
-					this.broadcast('combat_log', `${defender.name} dodged the attack!`);
-					this.broadcast('trigger_talent', {
-						playerId: defender.playerId,
-						talentId: TalentType.Evasion,
-					});
-					defender.talentsOnCooldown.push(TalentType.Evasion);
-					this.clock.setTimeout(() => {
-						defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
-							(talent) => talent !== TalentType.Evasion
-						);
-					}, 2000);
-					return;
-				} else {
-					this.broadcast('combat_log', `Evasion was on cooldown!`);
-				}
-			}
-		}
-
-		const damage = defender.takeDamage(attacker.attack, this.playerClient);
-
-		//broadcast attack and damage
-		this.broadcast(
-			'combat_log',
-			`${attacker.name} attacks ${defender.name} for ${damage} damage!`
-		);
-		this.broadcast('attack', attacker.playerId);
-
-		const attackTalentContext: TalentBehaviorContext = {
-			client: this.playerClient,
-			attacker: attacker,
-			defender: defender,
-			damage: damage,
-			clock: this.clock,
-		};
-
-		//handle on attack talents
-		const talentsToTrigger: Talent[] = attacker.talents.filter((talent) =>
-			talent.tags.includes('on-attack')
-		);
-
-		talentsToTrigger.forEach((talent) => {
-			talent.executeBehavior(attackTalentContext);
-		});
-
-		//handle on attacked talents
-		const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
-			(talent) => talent.tags.includes('on-attacked')
-		);
-
-		talentsToTriggerOnDefender.forEach((talent) => {
-			talent.executeBehavior(attackTalentContext);
-		});
-
-		if (recalculateTimer) {
-			//reset attack timers
-			attacker.attackTimer.clear();
-			this.startAttackTimer(attacker, defender);
-		}
-	}
 
 	private handleFightEnd() {
 		if (!this.fightResult) {

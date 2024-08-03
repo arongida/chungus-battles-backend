@@ -1,6 +1,5 @@
 import { TalentType } from './TalentTypes';
 import { TalentBehaviorContext } from './TalentBehaviorContext';
-import { Talent } from './TalentSchema';
 import { increaseStats } from '../../../common/utils';
 import { Item } from '../ItemSchema';
 
@@ -26,7 +25,8 @@ export const TalentBehaviors = {
 		const stabDamage =
 			talent.activationRate * 100 +
 			(defender.maxHp - defender.hp) * talent.activationRate;
-		const calculatedStabDamage = defender.takeDamage(stabDamage, client);
+		const calculatedStabDamage = defender.getDamageAfterReductions(stabDamage, client);
+    defender.takeDamage(calculatedStabDamage, client);
 		client.send(
 			'combat_log',
 			`${attacker.name} stabs ${defender.name} for ${calculatedStabDamage} damage!`
@@ -41,7 +41,8 @@ export const TalentBehaviors = {
 		const { talent, attacker, defender, client } = context;
 		const bearDamage =
 			talent.activationRate * 100 + attacker.maxHp * talent.activationRate;
-		const calculatedBearDamage = defender.takeDamage(bearDamage, client);
+		const calculatedBearDamage = defender.getDamageAfterReductions(bearDamage, client);
+    defender.takeDamage(calculatedBearDamage, client);
 		client.send(
 			'combat_log',
 			`${attacker.name} mauls ${defender.name} for ${calculatedBearDamage} damage!`
@@ -185,7 +186,8 @@ export const TalentBehaviors = {
 	[TalentType.ThrowMoney]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
 		const initialDamage = 7 + attacker.gold * 0.7;
-		const damage = defender.takeDamage(initialDamage, client);
+		const damage = defender.getDamageAfterReductions(initialDamage, client);
+    defender.takeDamage(damage, client);
 		client.send(
 			'combat_log',
 			`${attacker.name} throws money for ${damage} damage!`
@@ -293,7 +295,12 @@ export const TalentBehaviors = {
 	[TalentType.CorrodingCollection]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, clock, talent } = context;
 		const numberOfItems = defender.inventory.length;
-		defender.addPoisonStacks(clock, client, talent.activationRate, numberOfItems);
+		defender.addPoisonStacks(
+			clock,
+			client,
+			talent.activationRate,
+			numberOfItems
+		);
 
 		client.send(
 			'combat_log',
@@ -340,9 +347,9 @@ export const TalentBehaviors = {
 	},
 
 	[TalentType.ThornyFence]: (context: TalentBehaviorContext) => {
-		const { attacker, defender, client, talent, damage } = context;
+		const { attacker, defender, client, talent } = context;
 		const reflectDamage =
-			damage * (0.2 + defender.defense * talent.activationRate * 0.01);
+			talent.activationRate * 100 + talent.activationRate * defender.defense;
 		attacker.hp -= reflectDamage;
 		client.send(
 			'combat_log',
@@ -405,7 +412,7 @@ export const TalentBehaviors = {
 		const { defender, client, talent, damage } = context;
 		const armorAddictReduction =
 			talent.activationRate * defender.getNumberOfArmorItems();
-      defender.damageToTake = damage - armorAddictReduction;
+		defender.damageToTake = damage - armorAddictReduction;
 		console.log(
 			`Reduced damage by ${armorAddictReduction}, new damage: ${defender.damageToTake}`
 		);
@@ -413,5 +420,28 @@ export const TalentBehaviors = {
 			playerId: defender.playerId,
 			talentId: TalentType.ArmorAddict,
 		});
+	},
+
+	[TalentType.Evasion]: (context: TalentBehaviorContext) => {
+		const { defender, client, talent, clock } = context;
+		if (!defender.talentsOnCooldown.includes(TalentType.Evasion)) {
+			const random = Math.random();
+			if (random < talent.activationRate) {
+				client.send('combat_log', `${defender.name} dodged the attack!`);
+				client.send('trigger_talent', {
+					playerId: defender.playerId,
+					talentId: TalentType.Evasion,
+				});
+				defender.talentsOnCooldown.push(TalentType.Evasion);
+				defender.dodging = true;
+				clock.setTimeout(() => {
+					defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
+						(talent) => talent !== TalentType.Evasion
+					);
+				}, 2000);
+			}
+		} else {
+			client.send('combat_log', `Evasion was on cooldown!`);
+		}
 	},
 };

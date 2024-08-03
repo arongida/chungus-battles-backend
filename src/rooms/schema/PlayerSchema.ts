@@ -34,6 +34,7 @@ export class Player extends Schema {
 	poisonTimer: Delayed;
 	talentsOnCooldown: TalentType[] = [];
 	damageToTake: number;
+	dodging: boolean = false;
 
 	get gold(): number {
 		return this._gold;
@@ -97,8 +98,19 @@ export class Player extends Schema {
 		this._defense = value < 0 ? 0 : value;
 	}
 
-	takeDamage(damage: number, playerClient: Client): number {
-		let reducedDamage = damage * (100 / (100 + this.defense));
+	takeDamage(damage: number, playerClient: Client) {
+		this.hp -= damage;
+		playerClient.send('damage', {
+			playerId: this.playerId,
+			damage: damage,
+		});
+	}
+
+	getDamageAfterReductions(
+		initialDamage: number,
+		playerClient: Client,
+	): number {
+		let reducedDamage = initialDamage * (100 / (100 + this.defense));
 		this.damageToTake = reducedDamage;
 		const onDamageTalents: Talent[] = this.talents.filter((talent) =>
 			talent.tags.includes('on-damage')
@@ -112,13 +124,7 @@ export class Player extends Schema {
 		onDamageTalents.forEach((talent) => {
 			talent.executeBehavior(onDamageTalentBehaviorContext);
 		});
-
 		reducedDamage = Math.max(this.damageToTake, 1);
-		this.hp -= reducedDamage;
-		playerClient.send('damage', {
-			playerId: this.playerId,
-			damage: reducedDamage,
-		});
 		return reducedDamage;
 	}
 
@@ -189,5 +195,52 @@ export class Player extends Schema {
 				});
 			}, 1000);
 		}
+	}
+
+	public tryAttack(defender: Player, playerClient: Client, clock: ClockTimer) {
+		const damage = defender.getDamageAfterReductions(this.attack, playerClient);
+
+		const attackTalentContext: TalentBehaviorContext = {
+			client: playerClient,
+			attacker: this,
+			defender: defender,
+			damage: damage,
+			clock: clock,
+		};
+
+    //currently only handles evasio
+        const talentsToTriggerBeforeAttacked: Talent[] = this.talents.filter( 
+      (talent) => talent.tags.includes('before-attacked')
+    );
+    talentsToTriggerBeforeAttacked.forEach((talent) => {
+      talent.executeBehavior(attackTalentContext);
+    });
+
+    if (defender.dodging) return;
+
+		//handle on attacked talents
+		const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
+			(talent) => talent.tags.includes('on-attacked')
+		);
+		talentsToTriggerOnDefender.forEach((talent) => {
+			talent.executeBehavior(attackTalentContext);
+		});
+
+		//handle on attack talents
+		const talentsToTrigger: Talent[] = this.talents.filter((talent) =>
+			talent.tags.includes('on-attack')
+		);
+		talentsToTrigger.forEach((talent) => {
+			talent.executeBehavior(attackTalentContext);
+		});
+
+		defender.takeDamage(defender.damageToTake, playerClient);
+
+		//broadcast attack and damage
+		playerClient.send(
+			'combat_log',
+			`${this.name} attacks ${defender.name} for ${damage} damage!`
+		);
+		playerClient.send('attack', this.playerId);
 	}
 }
