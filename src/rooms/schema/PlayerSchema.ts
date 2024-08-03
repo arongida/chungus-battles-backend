@@ -34,7 +34,9 @@ export class Player extends Schema {
 	poisonTimer: Delayed;
 	talentsOnCooldown: TalentType[] = [];
 	damageToTake: number;
-	dodging: boolean = false;
+	isDodging: boolean = false;
+  rewardRound: number;
+
 
 	get gold(): number {
 		return this._gold;
@@ -208,7 +210,7 @@ export class Player extends Schema {
 			clock: clock,
 		};
 
-    //currently only handles evasio
+    //currently only handles evasion
         const talentsToTriggerBeforeAttacked: Talent[] = this.talents.filter( 
       (talent) => talent.tags.includes('before-attacked')
     );
@@ -216,7 +218,7 @@ export class Player extends Schema {
       talent.executeBehavior(attackTalentContext);
     });
 
-    if (defender.dodging) return;
+    if (defender.isDodging) return;
 
 		//handle on attacked talents
 		const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(

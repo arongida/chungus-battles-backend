@@ -20,6 +20,7 @@ export class FightRoom extends Room<FightState> {
 	endBurnTimer: Delayed;
 	endBurnDamage: number = 10;
 	playerClient: Client;
+  
 
 	onCreate(options: any) {
 		this.setState(new FightState());
@@ -279,50 +280,26 @@ export class FightRoom extends Room<FightState> {
 				break;
 		}
 
-		let round = this.state.player.round;
+		this.state.player.rewardRound = this.state.player.round;
 
-		const futureNowTalent = this.state.player.talents.find(
-			(talent) => talent.talentId === TalentType.FutureNow
-		);
-		if (futureNowTalent) {
-			this.broadcast(
-				'combat_log',
-				'You are in the future now! You gain extra gold and xp!'
-			);
-			this.broadcast('trigger_talent', {
-				playerId: this.state.player.playerId,
-				talentId: TalentType.FutureNow,
-			});
-			round += futureNowTalent.activationRate;
-		}
+    //trigger fight-end talents
+    const fightEndTalents: Talent[] = this.state.player.talents.filter((talent) =>
+      talent.tags.includes('fight-end')
+    );
+    const fightEndTalentsContext: TalentBehaviorContext = {
+      client: this.playerClient,
+      attacker: this.state.player,
+      clock: this.clock,
+    };
+    fightEndTalents.forEach((talent) => {
+      talent.executeBehavior(fightEndTalentsContext);
+    });
 
-		this.state.player.gold += round * 4;
-		this.state.player.xp += round * 2;
+		this.state.player.gold += this.state.player.rewardRound * 4;
+		this.state.player.xp += this.state.player.rewardRound * 2;
 
-		this.broadcast('combat_log', `You gained ${round * 4} gold!`);
-		this.broadcast('combat_log', `You gained ${round * 2} xp!`);
-
-		//check for fight end bonuses
-		const smartInvestmentTalent = this.state.player.talents.find(
-			(talent) => talent.talentId === TalentType.SmartInvestment
-		);
-		if (smartInvestmentTalent) {
-			const goldBonus = Math.max(
-				Math.round(
-					this.state.player.gold * smartInvestmentTalent.activationRate
-				),
-				5
-			);
-			this.state.player.gold += goldBonus;
-			this.broadcast(
-				'combat_log',
-				`You gained ${goldBonus} gold from selling loot!`
-			);
-			this.broadcast('trigger_talent', {
-				playerId: this.state.player.playerId,
-				talentId: TalentType.SmartInvestment,
-			});
-		}
+		this.broadcast('combat_log', `You gained ${this.state.player.rewardRound * 4} gold!`);
+		this.broadcast('combat_log', `You gained ${this.state.player.rewardRound * 2} xp!`);
 	}
 
 	private handleWin() {
@@ -338,35 +315,7 @@ export class FightRoom extends Room<FightState> {
 	private handleLoose() {
 		this.broadcast('combat_log', 'You loose!');
 
-		//check guardian talents
-		if (
-			this.state.player.talents.find(
-				(talent) => talent.talentId === TalentType.GuardianAngel
-			)
-		) {
-			this.broadcast(
-				'combat_log',
-				'You have been saved by the guardian angel!'
-			);
-			this.broadcast('trigger_talent', {
-				playerId: this.state.player.playerId,
-				talentId: TalentType.GuardianAngel,
-			});
-			this.state.player.talents = this.state.player.talents.filter(
-				(talent) => talent.talentId !== TalentType.GuardianAngel
-			);
-			this.state.player.talents.push(
-				new Talent({
-					talentId: 6,
-					name: 'Broken Guardian Angel',
-					description: 'Already used',
-					tier: 0,
-					activationRate: 0,
-				})
-			);
-		} else {
-			this.state.player.lives--;
-		}
+    this.state.player.lives--;
 
 		if (this.state.player.lives <= 0) {
 			this.broadcast('game_over', 'You have lost the game!');

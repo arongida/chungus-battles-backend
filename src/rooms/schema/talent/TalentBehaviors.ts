@@ -2,6 +2,7 @@ import { TalentType } from './TalentTypes';
 import { TalentBehaviorContext } from './TalentBehaviorContext';
 import { increaseStats } from '../../../common/utils';
 import { Item } from '../ItemSchema';
+import { Talent } from './TalentSchema';
 
 export const TalentBehaviors = {
 	[TalentType.Rage]: (context: TalentBehaviorContext) => {
@@ -25,8 +26,11 @@ export const TalentBehaviors = {
 		const stabDamage =
 			talent.activationRate * 100 +
 			(defender.maxHp - defender.hp) * talent.activationRate;
-		const calculatedStabDamage = defender.getDamageAfterReductions(stabDamage, client);
-    defender.takeDamage(calculatedStabDamage, client);
+		const calculatedStabDamage = defender.getDamageAfterReductions(
+			stabDamage,
+			client
+		);
+		defender.takeDamage(calculatedStabDamage, client);
 		client.send(
 			'combat_log',
 			`${attacker.name} stabs ${defender.name} for ${calculatedStabDamage} damage!`
@@ -41,8 +45,11 @@ export const TalentBehaviors = {
 		const { talent, attacker, defender, client } = context;
 		const bearDamage =
 			talent.activationRate * 100 + attacker.maxHp * talent.activationRate;
-		const calculatedBearDamage = defender.getDamageAfterReductions(bearDamage, client);
-    defender.takeDamage(calculatedBearDamage, client);
+		const calculatedBearDamage = defender.getDamageAfterReductions(
+			bearDamage,
+			client
+		);
+		defender.takeDamage(calculatedBearDamage, client);
 		client.send(
 			'combat_log',
 			`${attacker.name} mauls ${defender.name} for ${calculatedBearDamage} damage!`
@@ -187,7 +194,7 @@ export const TalentBehaviors = {
 		const { attacker, defender, client } = context;
 		const initialDamage = 7 + attacker.gold * 0.7;
 		const damage = defender.getDamageAfterReductions(initialDamage, client);
-    defender.takeDamage(damage, client);
+		defender.takeDamage(damage, client);
 		client.send(
 			'combat_log',
 			`${attacker.name} throws money for ${damage} damage!`
@@ -433,7 +440,7 @@ export const TalentBehaviors = {
 					talentId: TalentType.Evasion,
 				});
 				defender.talentsOnCooldown.push(TalentType.Evasion);
-				defender.dodging = true;
+				defender.isDodging = true;
 				clock.setTimeout(() => {
 					defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
 						(talent) => talent !== TalentType.Evasion
@@ -444,4 +451,55 @@ export const TalentBehaviors = {
 			client.send('combat_log', `Evasion was on cooldown!`);
 		}
 	},
+
+	[TalentType.FutureNow]: (context: TalentBehaviorContext) => {
+		const { attacker, client, talent } = context;
+		client.send(
+			'combat_log',
+			'You are in the future now! You gain extra gold and xp!'
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: talent.talentId,
+		});
+		attacker.rewardRound += talent.activationRate;
+	},
+
+	[TalentType.SmartInvestment]: (context: TalentBehaviorContext) => {
+		const { attacker, client, talent } = context;
+		const goldBonus = Math.max(
+			Math.round(attacker.gold * talent.activationRate),
+			5
+		);
+		attacker.gold += goldBonus;
+		client.send(
+			'combat_log',
+			`You gained ${goldBonus} gold from selling loot!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.SmartInvestment,
+		});
+	},
+
+	[TalentType.GuardianAngel]: (context: TalentBehaviorContext) => {
+		const { attacker, client } = context;
+		client.send('combat_log', 'You have been gifted by the guardian angel!');
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.GuardianAngel,
+		});
+    attacker.lives += 1;
+		attacker.talents = attacker.talents.filter(
+			(talent) => talent.talentId !== TalentType.GuardianAngel
+		);
+		attacker.talents.push(
+			new Talent({
+				talentId: 6,
+				name: 'Guardianless Angel',
+				description: 'Why are they not helping anymore?',
+			})
+		);
+	},
+  
 };
