@@ -7,11 +7,15 @@ import { getNumberOfItems, getItemsById } from '../db/Item';
 import { getPlayer, updatePlayer } from '../db/Player';
 import { Player } from './schema/PlayerSchema';
 import { delay, increaseStats } from '../common/utils';
-import { TalentType } from './schema/talent/TalentTypes';
 import { getRandomTalents, getTalentsById } from '../db/Talent';
+import { Dispatcher } from '@colyseus/command';
+import { ShopStartTalentTriggerCommand } from './schema/talent/commands/ShopStartTalentTriggerCommand';
+import { LevelUpTalentTriggerCommand } from './schema/talent/commands/LevelUpTalentTriggerCommand';
 
 export class DraftRoom extends Room<DraftState> {
 	maxClients = 1;
+
+	dispatcher = new Dispatcher(this);
 
 	async onCreate(options: any) {
 		this.setState(new DraftState());
@@ -78,26 +82,10 @@ export class DraftRoom extends Room<DraftState> {
 		if (this.state.shop.length === 0)
 			await this.updateShop(this.state.shopSize);
 
-		//check robbery talent
-		const robberyTalent = this.state.player.talents.find(
-			(talent) => talent.talentId === TalentType.Robbery
-		);
-		if (robberyTalent) {
-			const randomItem =
-				this.state.shop[Math.floor(Math.random() * this.state.shop.length)];
-
-			if (randomItem) {
-				this.getItem(randomItem);
-				this.broadcast('trigger_talent', {
-					playerId: this.state.player.playerId,
-					talentId: TalentType.Robbery,
-				});
-        this.broadcast(
-          'draft_log',
-          `Robbery talent activated! Gained ${randomItem.name}!`
-        );
-			}
-		}
+		//robbery command
+		this.dispatcher.dispatch(new ShopStartTalentTriggerCommand(), {
+			playerClient: client,
+		});
 	}
 
 	async onLeave(client: Client, consented: boolean) {
@@ -155,7 +143,9 @@ export class DraftRoom extends Room<DraftState> {
 	}
 
 	private async updateTalentSelection() {
-    const exceptions = this.state.availableTalents.map(talent => talent.talentId);
+		const exceptions = this.state.availableTalents.map(
+			(talent) => talent.talentId
+		);
 		this.state.availableTalents.clear();
 		//if player has no talent points, return
 		if (this.state.remainingTalentPoints <= 0) return;
@@ -218,14 +208,10 @@ export class DraftRoom extends Room<DraftState> {
 		}
 		if (item) {
 			this.state.player.gold -= item.price;
-			this.getItem(item);
+			increaseStats(this.state.player, item.affectedStats);
+			item.sold = true;
+			this.state.player.inventory.push(item);
 		}
-	}
-
-	private getItem(item: Item) {
-		increaseStats(this.state.player, item.affectedStats);
-		item.sold = true;
-		this.state.player.inventory.push(item);
 	}
 
 	private async refreshShop(client: Client) {
@@ -273,40 +259,6 @@ export class DraftRoom extends Room<DraftState> {
 		this.state.player.maxXp += this.state.player.level * 4;
 		this.state.player.xp = leftoverXp;
 
-		//check penny stock talent
-		const pennyStocksTalent = this.state.player.talents.find(
-			(talent) => talent.talentId === TalentType.PennyStocks
-		);
-		if (pennyStocksTalent) {
-			this.state.player.gold += pennyStocksTalent.activationRate;
-			this.broadcast(
-				'draft_log',
-				`Gained ${pennyStocksTalent.activationRate} gold! `
-			);
-
-			this.state.player.talents = this.state.player.talents.filter(
-				(talent) => talent.talentId !== TalentType.PennyStocks
-			);
-			this.state.player.talents.push(
-				new Talent({
-					talentId: 7,
-					name: 'Broken Penny Stocks',
-					description: 'Already used',
-					tier: 1,
-					activationRate: 0,
-				})
-			);
-			setTimeout(() => {
-				this.broadcast('trigger_talent', {
-					playerId: this.state.player.playerId,
-					talentId: 7,
-				});
-			}, 100);
-		}
-
-		// this.state.player.hp += 10;
-		// this.state.player.defense += 3;
-		// this.state.player.attack += 1;
-		// this.state.player.attackSpeed += 0.1;
+		this.dispatcher.dispatch(new LevelUpTalentTriggerCommand(), {playerClient: this.clients[0]});
 	}
 }
