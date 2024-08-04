@@ -430,26 +430,16 @@ export const TalentBehaviors = {
 	},
 
 	[TalentType.Evasion]: (context: TalentBehaviorContext) => {
-		const { defender, client, talent, clock } = context;
-		if (!defender.talentsOnCooldown.includes(TalentType.Evasion)) {
-			const random = Math.random();
-			if (random < talent.activationRate) {
-				client.send('combat_log', `${defender.name} dodged the attack!`);
-				client.send('trigger_talent', {
-					playerId: defender.playerId,
-					talentId: TalentType.Evasion,
-				});
-				defender.talentsOnCooldown.push(TalentType.Evasion);
-				defender.isDodging = true;
-				clock.setTimeout(() => {
-					defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
-						(talent) => talent !== TalentType.Evasion
-					);
-				}, 2000);
-			}
-		} else {
-			client.send('combat_log', `Evasion was on cooldown!`);
-		}
+		const { attacker, client, talent } = context;
+    attacker.dodgeRate += talent.activationRate;
+		client.send(
+			'combat_log',
+			`${attacker.name} gains ${talent.activationRate * 100}% dodge chance!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Evasion,
+		});
 	},
 
 	[TalentType.FutureNow]: (context: TalentBehaviorContext) => {
@@ -489,7 +479,7 @@ export const TalentBehaviors = {
 			playerId: attacker.playerId,
 			talentId: TalentType.GuardianAngel,
 		});
-    attacker.lives += 1;
+		attacker.lives += 1;
 		attacker.talents = attacker.talents.filter(
 			(talent) => talent.talentId !== TalentType.GuardianAngel
 		);
@@ -501,5 +491,4 @@ export const TalentBehaviors = {
 			})
 		);
 	},
-  
 };

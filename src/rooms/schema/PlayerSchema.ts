@@ -26,6 +26,7 @@ export class Player extends Schema {
 	@type('string') avatarUrl: string;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
+	@type('number') dodgeRate: number = 0;
 	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
@@ -34,9 +35,7 @@ export class Player extends Schema {
 	poisonTimer: Delayed;
 	talentsOnCooldown: TalentType[] = [];
 	damageToTake: number;
-	isDodging: boolean = false;
-  rewardRound: number;
-
+	rewardRound: number;
 
 	get gold(): number {
 		return this._gold;
@@ -110,7 +109,7 @@ export class Player extends Schema {
 
 	getDamageAfterReductions(
 		initialDamage: number,
-		playerClient: Client,
+		playerClient: Client
 	): number {
 		let reducedDamage = initialDamage * (100 / (100 + this.defense));
 		this.damageToTake = reducedDamage;
@@ -210,15 +209,21 @@ export class Player extends Schema {
 			clock: clock,
 		};
 
-    //currently only handles evasion
-        const talentsToTriggerBeforeAttacked: Talent[] = this.talents.filter( 
-      (talent) => talent.tags.includes('before-attacked')
-    );
-    talentsToTriggerBeforeAttacked.forEach((talent) => {
-      talent.executeBehavior(attackTalentContext);
-    });
+		if (defender.dodgeRate > 0 && Math.random() < defender.dodgeRate) {
+			const dodgeRateCache = defender.dodgeRate;
+			defender.dodgeRate = 0;
+      
+			clock.setTimeout(() => {
+				defender.dodgeRate = dodgeRateCache;
+			}, 1500);
 
-    if (defender.isDodging) return;
+      playerClient.send(
+        'combat_log',
+        `${defender.name} dodged the attack!`
+      );
+
+			return;
+		}
 
 		//handle on attacked talents
 		const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
