@@ -1,10 +1,12 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
-import { Talent } from './TalentSchema';
+import { Talent } from './talent/TalentSchema';
 import { Item } from './ItemSchema';
 import { increaseStats } from '../../common/utils';
-import { IStats, TalentType } from '../../common/types';
+import { IStats } from '../../common/types';
+import { TalentType } from './talent/TalentTypes';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
+import { TalentBehaviorContext } from './talent/TalentBehaviorContext';
 
 export class Player extends Schema {
 	@type('number') playerId: number;
@@ -24,6 +26,7 @@ export class Player extends Schema {
 	@type('string') avatarUrl: string;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
+	@type('number') dodgeRate: number = 0;
 	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
@@ -31,6 +34,8 @@ export class Player extends Schema {
 	attackTimer: Delayed;
 	poisonTimer: Delayed;
 	talentsOnCooldown: TalentType[] = [];
+	damageToTake: number;
+	rewardRound: number;
 
 	get gold(): number {
 		return this._gold;
@@ -94,23 +99,34 @@ export class Player extends Schema {
 		this._defense = value < 0 ? 0 : value;
 	}
 
-	takeDamage(damage: number, playerClient: Client): number {
-		let reducedDamage = damage * (100 / (100 + this.defense));
-		const armorAddictTalent = this.talents.find(
-			(talent) => talent.talentId === TalentType.ArmorAddict
-		);
-		if (armorAddictTalent) {
-			const armorAddictReduction =
-				armorAddictTalent.activationRate * this.getNumberOfArmorItems();
-			reducedDamage -= armorAddictReduction;
-		}
-		reducedDamage = Math.max(reducedDamage, 1);
-		this.hp -= reducedDamage;
+	takeDamage(damage: number, playerClient: Client) {
+		this.hp -= damage;
 		playerClient.send('damage', {
 			playerId: this.playerId,
-			damage: reducedDamage,
+			damage: damage,
 		});
-    return reducedDamage;
+	}
+
+	getDamageAfterReductions(
+		initialDamage: number,
+		playerClient: Client
+	): number {
+		let reducedDamage = initialDamage * (100 / (100 + this.defense));
+		this.damageToTake = reducedDamage;
+		const onDamageTalents: Talent[] = this.talents.filter((talent) =>
+			talent.tags.includes('on-damage')
+		);
+
+		const onDamageTalentBehaviorContext: TalentBehaviorContext = {
+			client: playerClient,
+			defender: this,
+			damage: reducedDamage,
+		};
+		onDamageTalents.forEach((talent) => {
+			talent.executeBehavior(onDamageTalentBehaviorContext);
+		});
+		reducedDamage = Math.max(this.damageToTake, 1);
+		return reducedDamage;
 	}
 
 	getNumberOfArmorItems(): number {
@@ -140,54 +156,22 @@ export class Player extends Schema {
 		}, 0);
 	}
 
-	handleDisarmWeapon(playerClient: Client, attacker: Player) {
-		const weapons: Item[] = this.inventory.filter((item) =>
-			item.tags.includes('weapon')
-		);
-		if (weapons.length > 0) {
-			const mostExpensiveWeapon: Item = weapons.reduce(
-				(maxWeapon: Item, currentWeapon: Item) => {
-					return currentWeapon.price > maxWeapon.price
-						? currentWeapon
-						: maxWeapon;
-				},
-				weapons[0]
-			);
-
-			increaseStats(this, mostExpensiveWeapon.affectedStats, -1);
-			playerClient.send(
-				'combat_log',
-				`${this.name} is disarmed! ${mostExpensiveWeapon.name} is disabled for the fight!`
-			);
-		} else {
-			playerClient.send('combat_log', `${this.name} has no weapons to disarm!`);
-		}
-		playerClient.send('trigger_talent', {
-			playerId: attacker.playerId,
-			talentId: TalentType.Disarm,
-		});
-	}
-
 	resetInventory() {
 		this.inventory.splice(0, this.inventory.length, ...this.initialInventory);
 	}
 
-	addPoison(
+	addPoisonStacks(
 		clock: ClockTimer,
 		playerClient: Client,
 		activationRate: number,
-		attacker: Player,
-    stack: number = 1
+		stack: number = 1
 	) {
 		this.poisonStack += stack;
 		playerClient.send(
 			'combat_log',
 			`${this.name} is poisoned! ${this.poisonStack} stacks!`
 		);
-		playerClient.send('trigger_talent', {
-			playerId: attacker.playerId,
-			talentId: TalentType.Poison,
-		});
+
 		clock.setTimeout(() => {
 			this.poisonStack -= stack;
 			if (this.poisonStack === 0 && this.poisonTimer) {
@@ -198,7 +182,9 @@ export class Player extends Schema {
 		if (!this.poisonTimer) {
 			this.poisonTimer = clock.setInterval(() => {
 				const poisonDamage =
-					this.poisonStack * ((activationRate * this.maxHp) + (activationRate * 100)) * 0.1;
+					this.poisonStack *
+					(activationRate * this.maxHp + activationRate * 100) *
+					0.1;
 				this.hp -= poisonDamage;
 				playerClient.send(
 					'combat_log',
@@ -212,145 +198,56 @@ export class Player extends Schema {
 		}
 	}
 
-	handleEyeForAnEye(
-		playerClient: Client,
-		attacker: Player,
-		eyeForAnEyeTalent: Talent,
-		damage: number,
-		clock: ClockTimer
-	) {
-		if (this.talentsOnCooldown.includes(TalentType.EyeForAnEye)) {
-			console.log('Eye for an eye is on cooldown');
+	public tryAttack(defender: Player, playerClient: Client, clock: ClockTimer) {
+		const damage = defender.getDamageAfterReductions(this.attack, playerClient);
+
+		const attackTalentContext: TalentBehaviorContext = {
+			client: playerClient,
+			attacker: this,
+			defender: defender,
+			damage: damage,
+			clock: clock,
+		};
+
+		if (defender.dodgeRate > 0 && Math.random() < defender.dodgeRate) {
+			const dodgeRateCache = defender.dodgeRate;
+			defender.dodgeRate = 0;
+      
+			clock.setTimeout(() => {
+				defender.dodgeRate = dodgeRateCache;
+			}, 1500);
+
+      playerClient.send(
+        'combat_log',
+        `${defender.name} dodged the attack!`
+      );
+
 			return;
 		}
-		const random = Math.random();
-		if (random < eyeForAnEyeTalent.activationRate) {
-			attacker.hp -= damage;
-			playerClient.send(
-				'combat_log',
-				`${this.name} reflects ${damage} damage to ${attacker.name}!`
-			);
-			playerClient.send('trigger_talent', {
-				playerId: this.playerId,
-				talentId: TalentType.EyeForAnEye,
-			});
-			playerClient.send('damage', {
-				playerId: attacker.playerId,
-				damage: damage,
-			});
-			this.talentsOnCooldown.push(TalentType.EyeForAnEye);
-			clock.setTimeout(() => {
-				this.talentsOnCooldown = this.talentsOnCooldown.filter(
-					(talent) => talent !== TalentType.EyeForAnEye
-				);
-			}, 1000);
-		}
-	}
 
-	handleThornyDamage(
-		playerClient: Client,
-		damage: number,
-		thornyFenceTalent: Talent,
-		attacker: Player
-	) {
-		const reflectDamage =
-			damage * (0.2 + this.defense * thornyFenceTalent.activationRate * 0.01);
-		attacker.hp -= reflectDamage;
+		//handle on attacked talents
+		const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
+			(talent) => talent.tags.includes('on-attacked')
+		);
+		talentsToTriggerOnDefender.forEach((talent) => {
+			talent.executeBehavior(attackTalentContext);
+		});
+
+		//handle on attack talents
+		const talentsToTrigger: Talent[] = this.talents.filter((talent) =>
+			talent.tags.includes('on-attack')
+		);
+		talentsToTrigger.forEach((talent) => {
+			talent.executeBehavior(attackTalentContext);
+		});
+
+		defender.takeDamage(defender.damageToTake, playerClient);
+
+		//broadcast attack and damage
 		playerClient.send(
 			'combat_log',
-			`${this.name} reflects ${reflectDamage} damage to ${attacker.name}!`
+			`${this.name} attacks ${defender.name} for ${damage} damage!`
 		);
-		playerClient.send('trigger_talent', {
-			playerId: this.playerId,
-			talentId: TalentType.ThornyFence,
-		});
-		playerClient.send('damage', {
-			playerId: attacker.playerId,
-			damage: reflectDamage,
-		});
-	}
-
-	handleResilience(playerClient: Client, resilienceTalent: Talent) {
-		const healingAmount = 1 + resilienceTalent.activationRate * this.maxHp;
-		this.hp += healingAmount;
-		playerClient.send(
-			'combat_log',
-			`${this.name} recovers ${healingAmount} health!`
-		);
-		playerClient.send('trigger_talent', {
-			playerId: this.playerId,
-			talentId: TalentType.Resilience,
-		});
-		playerClient.send('healing', {
-			playerId: this.playerId,
-			healing: healingAmount,
-		});
-	}
-
-	handleZealot(playerClient: Client, zealotTalent: Talent) {
-		const attackSpeedBuff =
-			0.02 + this.defense * zealotTalent.activationRate * 0.01;
-		const normalizedValue = Math.round(attackSpeedBuff * 100) / 100;
-		this.attackSpeed += normalizedValue;
-		playerClient.send(
-			'combat_log',
-			`${this.name} gains ${normalizedValue} attack speed!`
-		);
-		playerClient.send('trigger_talent', {
-			playerId: this.playerId,
-			talentId: TalentType.Zealot,
-		});
-	}
-
-	tirggerOnAttackedEffects(
-		clock: ClockTimer,
-		playerClient: Client,
-		attacker: Player,
-		damage: number
-	) {
-		const poisonTalent = attacker.talents.find(
-			(talent) => talent.talentId === TalentType.Poison
-		);
-		if (poisonTalent)
-			this.addPoison(
-				clock,
-				playerClient,
-				poisonTalent.activationRate,
-				attacker
-			);
-
-		const thornyFenceTalent = this.talents.find(
-			(talent) => talent.talentId === TalentType.ThornyFence
-		);
-		if (thornyFenceTalent) {
-			this.handleThornyDamage(playerClient, damage, thornyFenceTalent, attacker);
-		}
-
-		const resilienceTalent = this.talents.find(
-			(talent) => talent.talentId === TalentType.Resilience
-		);
-		if (resilienceTalent) {
-			this.handleResilience(playerClient, resilienceTalent);
-		}
-
-		const zealotTalent = this.talents.find(
-			(talent) => talent.talentId === TalentType.Zealot
-		);
-		if (zealotTalent) {
-			this.handleZealot(playerClient, zealotTalent);
-		}
-
-		const eyeForAnEyeTalent = this.talents.find(
-			(talent) => talent.talentId === TalentType.EyeForAnEye
-		);
-		if (eyeForAnEyeTalent) {
-			this.handleEyeForAnEye(
-				playerClient,
-				attacker,
-				eyeForAnEyeTalent,
-				damage,
-				clock
-			);
-		}
+		playerClient.send('attack', this.playerId);
 	}
 }

@@ -1,0 +1,494 @@
+import { TalentType } from './TalentTypes';
+import { TalentBehaviorContext } from './TalentBehaviorContext';
+import { increaseStats } from '../../../common/utils';
+import { Item } from '../ItemSchema';
+import { Talent } from './TalentSchema';
+
+export const TalentBehaviors = {
+	[TalentType.Rage]: (context: TalentBehaviorContext) => {
+		const { talent, attacker, client } = context;
+		const selfDamage = talent.activationRate * attacker.hp * 0.01 + 1;
+		attacker.hp -= selfDamage;
+		attacker.attack += talent.activationRate;
+		client.send('combat_log', `${attacker.name} rages, increased attack by 1!`);
+		client.send('damage', {
+			playerId: attacker.playerId,
+			damage: selfDamage,
+		});
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Rage,
+		});
+	},
+
+	[TalentType.Stab]: (context: TalentBehaviorContext) => {
+		const { talent, attacker, defender, client } = context;
+		const stabDamage =
+			talent.activationRate * 100 +
+			(defender.maxHp - defender.hp) * talent.activationRate;
+		const calculatedStabDamage = defender.getDamageAfterReductions(
+			stabDamage,
+			client
+		);
+		defender.takeDamage(calculatedStabDamage, client);
+		client.send(
+			'combat_log',
+			`${attacker.name} stabs ${defender.name} for ${calculatedStabDamage} damage!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Stab,
+		});
+	},
+
+	[TalentType.Bear]: (context: TalentBehaviorContext) => {
+		const { talent, attacker, defender, client } = context;
+		const bearDamage =
+			talent.activationRate * 100 + attacker.maxHp * talent.activationRate;
+		const calculatedBearDamage = defender.getDamageAfterReductions(
+			bearDamage,
+			client
+		);
+		defender.takeDamage(calculatedBearDamage, client);
+		client.send(
+			'combat_log',
+			`${attacker.name} mauls ${defender.name} for ${calculatedBearDamage} damage!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Bear,
+		});
+	},
+
+	[TalentType.AssassinAmusement]: (context: TalentBehaviorContext) => {
+		const { attacker, client, talent } = context;
+		attacker.attackSpeed += talent.activationRate;
+		client.send(
+			'combat_log',
+			`${attacker.name} gains ${talent.activationRate} attack speed!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.AssassinAmusement,
+		});
+	},
+
+	[TalentType.Poison]: (context: TalentBehaviorContext) => {
+		const { talent, attacker, defender, client, clock } = context;
+		defender.addPoisonStacks(clock, client, talent.activationRate);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Poison,
+		});
+	},
+
+	[TalentType.Invigorate]: (context: TalentBehaviorContext) => {
+		const { attacker, damage, client } = context;
+		const leechAmount = damage * 0.15 + 2;
+		attacker.hp += leechAmount;
+		client.send(
+			'combat_log',
+			`${attacker.name} leeches ${leechAmount} health!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Invigorate,
+		});
+		client.send('healing', {
+			playerId: attacker.playerId,
+			healing: leechAmount,
+		});
+	},
+
+	[TalentType.Snitch]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client } = context;
+		if (attacker.attack > 1) {
+			defender.attack -= 1;
+			attacker.attack += 1;
+			client.send(
+				'combat_log',
+				`${attacker.name} snitches 1 attack from ${defender.name}!`
+			);
+			client.send('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.Snitch,
+			});
+		}
+	},
+
+	[TalentType.Steal]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client } = context;
+		const stolenItemIndex = Math.floor(
+			Math.random() * defender.inventory.length
+		);
+		const stolenItem = defender.inventory[stolenItemIndex];
+		if (stolenItem) {
+			defender.inventory.splice(stolenItemIndex, 1);
+			client.send(
+				'combat_log',
+				`${attacker.name} steals ${stolenItem.name} from ${defender.name}!`
+			);
+			client.send('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.Steal,
+			});
+			attacker.inventory.push(stolenItem);
+			increaseStats(attacker, stolenItem.affectedStats);
+			increaseStats(defender, stolenItem.affectedStats, -1);
+		}
+	},
+
+	[TalentType.Pickpocket]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client } = context;
+		attacker.gold += 1;
+		if (defender.gold > 0) defender.gold -= 1;
+		client.send(
+			'combat_log',
+			`${attacker.name} stole 1 gold from ${defender.name}!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Pickpocket,
+		});
+	},
+
+	[TalentType.Scam]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client } = context;
+		const amount = 2 + attacker.level;
+		defender.hp -= amount;
+		attacker.hp += amount;
+		client.send(
+			'combat_log',
+			`${attacker.name} scams ${amount} health from ${defender.name}!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Scam,
+		});
+		client.send('damage', {
+			playerId: defender.playerId,
+			damage: amount,
+		});
+		client.send('healing', {
+			playerId: attacker.playerId,
+			healing: amount,
+		});
+	},
+
+	[TalentType.Bandage]: (context: TalentBehaviorContext) => {
+		const { attacker, client } = context;
+		const healing = 5 + attacker.level;
+		attacker.hp += healing;
+		client.send('combat_log', `${attacker.name} restores ${healing} health!`);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Bandage,
+		});
+		client.send('healing', {
+			playerId: attacker.playerId,
+			healing: healing,
+		});
+	},
+
+	[TalentType.ThrowMoney]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client } = context;
+		const initialDamage = 7 + attacker.gold * 0.7;
+		const damage = defender.getDamageAfterReductions(initialDamage, client);
+		defender.takeDamage(damage, client);
+		client.send(
+			'combat_log',
+			`${attacker.name} throws money for ${damage} damage!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.ThrowMoney,
+		});
+	},
+
+	[TalentType.Disarm]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client } = context;
+		const weapons: Item[] = defender.inventory.filter((item) =>
+			item.tags.includes('weapon')
+		);
+		if (weapons.length > 0) {
+			const mostExpensiveWeapon: Item = weapons.reduce(
+				(maxWeapon: Item, currentWeapon: Item) => {
+					return currentWeapon.price > maxWeapon.price
+						? currentWeapon
+						: maxWeapon;
+				},
+				weapons[0]
+			);
+
+			increaseStats(defender, mostExpensiveWeapon.affectedStats, -1);
+			client.send(
+				'combat_log',
+				`${defender.name} is disarmed! ${mostExpensiveWeapon.name} is disabled for the fight!`
+			);
+		} else {
+			client.send('combat_log', `${defender.name} has no weapons to disarm!`);
+		}
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Disarm,
+		});
+	},
+
+	[TalentType.WeaponWhisperer]: (context: TalentBehaviorContext) => {
+		const { attacker, talent, client } = context;
+
+		const numberOfMeleeWeapons = attacker.getNumberOfMeleeWeapons();
+		const attackBonus = numberOfMeleeWeapons * talent.activationRate;
+		attacker.attack += attackBonus;
+		client.send(
+			'combat_log',
+			`${attacker.name} gains ${attackBonus} attack from Weapon Whisperer!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.WeaponWhisperer,
+		});
+	},
+
+	[TalentType.GoldGenie]: (context: TalentBehaviorContext) => {
+		const { attacker, client } = context;
+		const defenseBonus = attacker.gold * 2;
+		attacker.defense += defenseBonus;
+		client.send(
+			'combat_log',
+			`${attacker.name} gains ${defenseBonus} defense from Gold Genie!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.GoldGenie,
+		});
+	},
+
+	[TalentType.Strong]: (context: TalentBehaviorContext) => {
+		const { attacker, talent, client } = context;
+		const hpBonus = attacker.hp * talent.activationRate;
+		const attackBonus = attacker.attack * talent.activationRate;
+		attacker.hp += hpBonus;
+		attacker.maxHp = attacker.hp;
+		attacker.attack += attackBonus;
+		client.send(
+			'combat_log',
+			`${attacker.name} is strong hence gets an increase to stats!`
+		);
+		client.send('combat_log', `${attacker.name} gains ${hpBonus} hp!`);
+		client.send('combat_log', `${attacker.name} gains ${attackBonus} attack!`);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Strong,
+		});
+	},
+
+	[TalentType.IntimidatingWealth]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client } = context;
+		const attackBonus =
+			Math.min(0.2 + attacker.gold * 0.0025, 0.4) * defender.attack;
+		defender.attack -= attackBonus;
+		client.send(
+			'combat_log',
+			`${attacker.name} intimidates ${defender.name} with their wealth!`
+		);
+		client.send('combat_log', `${defender.name} looses ${attackBonus} attack!`);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.IntimidatingWealth,
+		});
+	},
+
+	[TalentType.CorrodingCollection]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client, clock, talent } = context;
+		const numberOfItems = defender.inventory.length;
+		defender.addPoisonStacks(
+			clock,
+			client,
+			talent.activationRate,
+			numberOfItems
+		);
+
+		client.send(
+			'combat_log',
+			`${attacker.name} corrodes ${defender.name}'s collection!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.CorrodingCollection,
+		});
+	},
+
+	[TalentType.Zealot]: (context: TalentBehaviorContext) => {
+		const { defender, client, talent } = context;
+		const attackSpeedBuff =
+			0.02 + defender.defense * talent.activationRate * 0.01;
+		const normalizedValue = Math.round(attackSpeedBuff * 100) / 100;
+		defender.attackSpeed += normalizedValue;
+		client.send(
+			'combat_log',
+			`${defender.name} gains ${normalizedValue} attack speed!`
+		);
+		client.send('trigger_talent', {
+			playerId: defender.playerId,
+			talentId: TalentType.Zealot,
+		});
+	},
+
+	[TalentType.Resilience]: (context: TalentBehaviorContext) => {
+		const { defender, client, talent } = context;
+		const healingAmount = 1 + talent.activationRate * defender.maxHp;
+		defender.hp += healingAmount;
+		client.send(
+			'combat_log',
+			`${defender.name} recovers ${healingAmount} health!`
+		);
+		client.send('trigger_talent', {
+			playerId: defender.playerId,
+			talentId: TalentType.Resilience,
+		});
+		client.send('healing', {
+			playerId: defender.playerId,
+			healing: healingAmount,
+		});
+	},
+
+	[TalentType.ThornyFence]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client, talent } = context;
+		const reflectDamage =
+			talent.activationRate * 100 + talent.activationRate * defender.defense;
+		attacker.hp -= reflectDamage;
+		client.send(
+			'combat_log',
+			`${defender.name} reflects ${reflectDamage} damage to ${attacker.name}!`
+		);
+		client.send('trigger_talent', {
+			playerId: defender.playerId,
+			talentId: TalentType.ThornyFence,
+		});
+		client.send('damage', {
+			playerId: attacker.playerId,
+			damage: reflectDamage,
+		});
+	},
+
+	[TalentType.EyeForAnEye]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client, talent, damage, clock } = context;
+		if (defender.talentsOnCooldown.includes(TalentType.EyeForAnEye)) {
+			console.log('Eye for an eye is on cooldown');
+			return;
+		}
+		const random = Math.random();
+		if (random < talent.activationRate) {
+			attacker.hp -= damage;
+			client.send(
+				'combat_log',
+				`${defender.name} reflects ${damage} damage to ${attacker.name}!`
+			);
+			client.send('trigger_talent', {
+				playerId: defender.playerId,
+				talentId: TalentType.EyeForAnEye,
+			});
+			client.send('damage', {
+				playerId: attacker.playerId,
+				damage: damage,
+			});
+			defender.talentsOnCooldown.push(TalentType.EyeForAnEye);
+			clock.setTimeout(() => {
+				defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
+					(talent) => talent !== TalentType.EyeForAnEye
+				);
+			}, 1000);
+		}
+	},
+
+	[TalentType.Trickster]: (context: TalentBehaviorContext) => {
+		const { client, attacker, defender } = context;
+		const enemyAttack = defender.attack;
+		const playerAttack = attacker.attack;
+		attacker.attack = enemyAttack;
+		defender.attack = playerAttack;
+		client.send('combat_log', `${attacker.name} tricks ${defender.name}!`);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Trickster,
+		});
+	},
+
+	[TalentType.ArmorAddict]: (context: TalentBehaviorContext) => {
+		const { defender, client, talent, damage } = context;
+		const armorAddictReduction =
+			talent.activationRate * defender.getNumberOfArmorItems();
+		defender.damageToTake = damage - armorAddictReduction;
+		console.log(
+			`Reduced damage by ${armorAddictReduction}, new damage: ${defender.damageToTake}`
+		);
+		client.send('trigger_talent', {
+			playerId: defender.playerId,
+			talentId: TalentType.ArmorAddict,
+		});
+	},
+
+	[TalentType.Evasion]: (context: TalentBehaviorContext) => {
+		const { attacker, client, talent } = context;
+    attacker.dodgeRate += talent.activationRate;
+		client.send(
+			'combat_log',
+			`${attacker.name} gains ${talent.activationRate * 100}% dodge chance!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.Evasion,
+		});
+	},
+
+	[TalentType.FutureNow]: (context: TalentBehaviorContext) => {
+		const { attacker, client, talent } = context;
+		client.send(
+			'combat_log',
+			'You are in the future now! You gain extra gold and xp!'
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: talent.talentId,
+		});
+		attacker.rewardRound += talent.activationRate;
+	},
+
+	[TalentType.SmartInvestment]: (context: TalentBehaviorContext) => {
+		const { attacker, client, talent } = context;
+		const goldBonus = Math.max(
+			Math.round(attacker.gold * talent.activationRate),
+			5
+		);
+		attacker.gold += goldBonus;
+		client.send(
+			'combat_log',
+			`You gained ${goldBonus} gold from selling loot!`
+		);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.SmartInvestment,
+		});
+	},
+
+	[TalentType.GuardianAngel]: (context: TalentBehaviorContext) => {
+		const { attacker, client } = context;
+		client.send('combat_log', 'You have been gifted by the guardian angel!');
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.GuardianAngel,
+		});
+		attacker.lives += 1;
+		attacker.talents = attacker.talents.filter(
+			(talent) => talent.talentId !== TalentType.GuardianAngel
+		);
+		attacker.talents.push(
+			new Talent({
+				talentId: 6,
+				name: 'Guardianless Angel',
+				description: 'Why are they not helping anymore?',
+			})
+		);
+	},
+};
