@@ -1,16 +1,16 @@
 import { Room, Client } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
-import { AffectedStats, Item } from './schema/ItemSchema';
-import { Talent } from './schema/talent/TalentSchema';
+import { AffectedStats, Item } from '../items/schema/ItemSchema';
+import { Talent } from '../talents/schema/TalentSchema';
 import { copyPlayer, createNewPlayer } from '../db/Player';
 import { getNumberOfItems, getItemsById } from '../db/Item';
 import { getPlayer, updatePlayer } from '../db/Player';
-import { Player } from './schema/PlayerSchema';
+import { Player } from '../players/schema/PlayerSchema';
 import { delay, increaseStats } from '../common/utils';
 import { getRandomTalents, getTalentsById } from '../db/Talent';
 import { Dispatcher } from '@colyseus/command';
-import { ShopStartTalentTriggerCommand } from './schema/talent/commands/ShopStartTalentTriggerCommand';
-import { LevelUpTalentTriggerCommand } from './schema/talent/commands/LevelUpTalentTriggerCommand';
+import { ShopStartTriggerCommand } from '../commands/ShopStartTriggerCommand';
+import { LevelUpTriggerCommand } from '../commands/LevelUpTriggerCommand';
 
 export class DraftRoom extends Room<DraftState> {
 	maxClients = 1;
@@ -83,7 +83,7 @@ export class DraftRoom extends Room<DraftState> {
 			await this.updateShop(this.state.shopSize);
 
 		//robbery command
-		this.dispatcher.dispatch(new ShopStartTalentTriggerCommand(), {
+		this.dispatcher.dispatch(new ShopStartTriggerCommand(), {
 			playerClient: client,
 		});
 	}
@@ -259,6 +259,6 @@ export class DraftRoom extends Room<DraftState> {
 		this.state.player.maxXp += this.state.player.level * 4;
 		this.state.player.xp = leftoverXp;
 
-		this.dispatcher.dispatch(new LevelUpTalentTriggerCommand(), {playerClient: this.clients[0]});
+		this.dispatcher.dispatch(new LevelUpTriggerCommand(), {playerClient: this.clients[0]});
 	}
 }

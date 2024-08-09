@@ -1,12 +1,12 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
-import { Talent } from './talent/TalentSchema';
-import { Item } from './ItemSchema';
+import { Talent } from '../../talents/schema/TalentSchema';
+import { Item } from '../../items/schema/ItemSchema';
 import { increaseStats } from '../../common/utils';
 import { IStats } from '../../common/types';
-import { TalentType } from './talent/TalentTypes';
+import { TalentType } from '../../talents/types/TalentTypes';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
-import { TalentBehaviorContext } from './talent/TalentBehaviorContext';
+import { TalentBehaviorContext } from '../../talents/behavior/TalentBehaviorContext';
 
 export class Player extends Schema {
 	@type('number') playerId: number;

@@ -10,3 +10,10 @@ export interface IStats {
 	defense: number;
 	attackSpeed: number;
 }
+
+export enum TriggerType {
+  LEVEL_UP = 'level-up',
+  SHOP_START = 'shop-start',
+  ACTIVE = 'active',
+
+}

@@ -2,8 +2,6 @@ export function delay(ms: number, clock: any): Promise<void> {
 	return new Promise((resolve) => clock.setTimeout(resolve, ms));
 }
 
-
-
 export function increaseStats(entity: any, stats: any, multiplier = 1) {
 	entity.hp += multiplier * stats.hp;
 	entity.attack += multiplier * stats.attack;

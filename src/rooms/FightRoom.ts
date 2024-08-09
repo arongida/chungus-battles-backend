@@ -1,26 +1,19 @@
 import { Room, Client } from '@colyseus/core';
 import { FightState } from './schema/FightState';
 import { getPlayer, getSameRoundPlayer, updatePlayer } from '../db/Player';
-import { Player } from './schema/PlayerSchema';
+import { Player } from '../players/schema/PlayerSchema';
 import { Delayed } from 'colyseus';
 import { delay, increaseStats, setStats } from '../common/utils';
 import { FightResultType } from '../common/types';
-import { TalentType } from './schema/talent/TalentTypes';
+import { TalentType } from '../talents/types/TalentTypes';
 import { getTalentsById } from '../db/Talent';
 import { getItemsById } from '../db/Item';
-import { AffectedStats, Item } from './schema/ItemSchema';
-import { Talent } from './schema/talent/TalentSchema';
-import { TalentBehaviorContext } from './schema/talent/TalentBehaviorContext';
+import { AffectedStats, Item } from '../items/schema/ItemSchema';
+import { Talent } from '../talents/schema/TalentSchema';
+import { TalentBehaviorContext } from '../talents/behavior/TalentBehaviorContext';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
-	battleStarted = false;
-	skillsTimers: Delayed[] = [];
-	fightResult: FightResultType;
-	endBurnTimer: Delayed;
-	endBurnDamage: number = 10;
-	playerClient: Client;
-  
 
 	onCreate(options: any) {
 		this.setState(new FightState());
@@ -52,7 +45,7 @@ export class FightRoom extends Room<FightState> {
 		await this.setUpState(player);
 		setStats(this.state.player.initialStats, this.state.player);
 		this.state.player.maxHp = this.state.player.hp;
-		this.playerClient = client;
+		this.state.playerClient = client;
 
 		//set up enemy state
 		if (!this.state.enemy.playerId) {
@@ -85,7 +78,7 @@ export class FightRoom extends Room<FightState> {
 		this.clock.setTimeout(async () => {
 			countdownTimer.clear();
 			this.broadcast('combat_log', 'The battle begins!');
-			this.battleStarted = true;
+			this.state.battleStarted = true;
 			this.startBattle();
 		}, 5500);
 	}
@@ -99,7 +92,7 @@ export class FightRoom extends Room<FightState> {
 			// allow disconnected client to reconnect into this room until 20 seconds
 			await this.allowReconnection(client, 20);
 			console.log('client reconnected!');
-			if (this.fightResult) {
+			if (this.state.fightResult) {
 				if (this.state.player.lives > 0 && this.state.player.wins < 10)
 					this.broadcast('end_battle', 'The battle has ended!');
 				else if (this.state.player.lives <= 0 && this.state.player.wins < 10)
@@ -126,17 +119,17 @@ export class FightRoom extends Room<FightState> {
 	//this is running all the time
 	update(deltaTime: number) {
 		//check for battle end
-		if (this.battleStarted) {
-			if (this.clock.elapsedTime > 65000 && !this.endBurnTimer) {
+		if (this.state.battleStarted) {
+			if (this.clock.elapsedTime > 65000 && !this.state.endBurnTimer) {
 				this.startEndBurnTimer();
 			}
 			if (this.state.player.hp <= 0 || this.state.enemy.hp <= 0) {
 				//set state and clear intervals
-				this.battleStarted = false;
+				this.state.battleStarted = false;
 				this.state.player.attackTimer.clear();
 				this.state.enemy.attackTimer.clear();
-				if (this.endBurnTimer) this.endBurnTimer.clear();
-				this.skillsTimers.forEach((timer) => timer.clear());
+				if (this.state.endBurnTimer) this.state.endBurnTimer.clear();
+				this.state.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast('combat_log', 'The battle has ended!');
 				this.handleFightEnd();
 			}
@@ -144,9 +137,9 @@ export class FightRoom extends Room<FightState> {
 	}
 
 	startEndBurnTimer() {
-		if (this.endBurnTimer) return;
-		this.endBurnTimer = this.clock.setInterval(() => {
-			const burnDamage = this.endBurnDamage++;
+		if (this.state.endBurnTimer) return;
+		this.state.endBurnTimer = this.clock.setInterval(() => {
+			const burnDamage = this.state.endBurnDamage++;
 			this.state.player.hp -= burnDamage;
 			this.state.enemy.hp -= burnDamage;
 			this.broadcast(
@@ -167,7 +160,7 @@ export class FightRoom extends Room<FightState> {
 	startAttackTimer(player: Player, enemy: Player) {
 		//start player attack loop
 		player.attackTimer = this.clock.setInterval(() => {
-			player.tryAttack(enemy, this.playerClient, this.clock);
+			player.tryAttack(enemy, this.state.playerClient, this.clock);
       player.attackTimer.clear();
       this.startAttackTimer(player, enemy);
 		}, (1 / player.attackSpeed) * 1000);
@@ -243,12 +236,12 @@ export class FightRoom extends Room<FightState> {
 			talent.tags.includes('active')
 		);
 		const activeTalentBehaviorContext: TalentBehaviorContext = {
-			client: this.playerClient,
+			client: this.state.playerClient,
 			attacker: player,
 			defender: enemy,
 		};
 		activeTalents.forEach((talent) => {
-			this.skillsTimers.push(
+			this.state.skillsTimers.push(
 				this.clock.setInterval(() => {
 					talent.executeBehavior(activeTalentBehaviorContext);
 				}, (1 / talent.activationRate) * 1000)
@@ -258,17 +251,17 @@ export class FightRoom extends Room<FightState> {
 
 
 	private handleFightEnd() {
-		if (!this.fightResult) {
+		if (!this.state.fightResult) {
 			if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
-				this.fightResult = FightResultType.DRAW;
+				this.state.fightResult = FightResultType.DRAW;
 			} else if (this.state.player.hp <= 0) {
-				this.fightResult = FightResultType.LOSE;
+				this.state.fightResult = FightResultType.LOSE;
 			} else {
-				this.fightResult = FightResultType.WIN;
+				this.state.fightResult = FightResultType.WIN;
 			}
 		}
 
-		switch (this.fightResult) {
+		switch (this.state.fightResult) {
 			case FightResultType.WIN:
 				this.handleWin();
 				break;
@@ -287,7 +280,7 @@ export class FightRoom extends Room<FightState> {
       talent.tags.includes('fight-end')
     );
     const fightEndTalentsContext: TalentBehaviorContext = {
-      client: this.playerClient,
+      client: this.state.playerClient,
       attacker: this.state.player,
       clock: this.clock,
     };
@@ -331,14 +324,14 @@ export class FightRoom extends Room<FightState> {
 
 	//apply fight start effects for player/enemy
 	private async applyFightStartEffects(player: Player, enemy?: Player) {
-		if (!this.battleStarted) return;
+		if (!this.state.battleStarted) return;
 
 		//handle on fight start talents
 		const onFightStartTalents: Talent[] = player.talents.filter((talent) =>
 			talent.tags.includes('fight-start')
 		);
 		const onFightStartTalentsContext: TalentBehaviorContext = {
-			client: this.playerClient,
+			client: this.state.playerClient,
 			attacker: player,
 			defender: enemy,
 			clock: this.clock,

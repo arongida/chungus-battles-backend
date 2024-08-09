@@ -1,8 +1,8 @@
-import { TalentType } from './TalentTypes';
+import { TalentType } from '../types/TalentTypes';
 import { TalentBehaviorContext } from './TalentBehaviorContext';
-import { increaseStats } from '../../../common/utils';
-import { Item } from '../ItemSchema';
-import { Talent } from './TalentSchema';
+import { increaseStats } from '../../common/utils';
+import { Item } from '../../items/schema/ItemSchema';
+import { Talent } from '../schema/TalentSchema';
 
 export const TalentBehaviors = {
 	[TalentType.Rage]: (context: TalentBehaviorContext) => {
@@ -491,4 +491,52 @@ export const TalentBehaviors = {
 			})
 		);
 	},
+
+  [TalentType.PennyStocks]: (context: TalentBehaviorContext) => {
+    const { client, attacker, clock, talent } = context;
+    attacker.gold += talent.activationRate;
+			client.send(
+				'draft_log',
+				`Gained ${talent.activationRate} gold!`
+			);
+
+    attacker.talents = attacker.talents.filter(
+      (talent) => talent.talentId !== TalentType.PennyStocks
+    );
+    attacker.talents.push(
+      new Talent({
+        talentId: 7,
+        name: 'Broken Penny Stocks',
+        description: 'Already used',
+        tier: 1,
+        activationRate: 0,
+        tags: ['talent', 'merchant', 'used']
+      })
+    );
+    clock.setTimeout(() => {
+      client.send('trigger_talent', {
+        playerId: attacker.playerId,
+        talentId: 7,
+      });
+    }, 100);
+  },
+
+  [TalentType.Robbery]: (context: TalentBehaviorContext) => {
+    const { attacker, client, shop } = context;
+    const randomItem =
+				shop[Math.floor(Math.random() * shop.length)];
+    if (randomItem) {
+      increaseStats(attacker, randomItem.affectedStats);
+      randomItem.sold = true;
+      attacker.inventory.push(randomItem);
+      client.send('trigger_talent', {
+        playerId: attacker.playerId,
+        talentId: TalentType.Robbery,
+      });
+      client.send(
+        'draft_log',
+        `Robbery talent activated! Gained ${randomItem.name}!`
+      );
+    }
+  }
 };
