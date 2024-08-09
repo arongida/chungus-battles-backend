@@ -1,12 +1,14 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
-import { Talent } from './talent/TalentSchema';
-import { Item } from './ItemSchema';
-import { increaseStats } from '../../common/utils';
-import { IStats } from '../../common/types';
-import { TalentType } from './talent/TalentTypes';
+import { Talent } from '../../talents/schema/TalentSchema';
+import { Item } from '../../items/schema/ItemSchema';
+import { IStats, TriggerType } from '../../common/types';
+import { TalentType } from '../../talents/types/TalentTypes';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
-import { TalentBehaviorContext } from './talent/TalentBehaviorContext';
+import { TalentBehaviorContext } from '../../talents/behavior/TalentBehaviorContext';
+import { Dispatcher } from '@colyseus/command';
+import { FightRoom } from '../../rooms/FightRoom';
+import { OnDamageTriggerCommand } from '../../commands/OnDamageTriggerCommand';
 
 export class Player extends Schema {
 	@type('number') playerId: number;
@@ -107,26 +109,8 @@ export class Player extends Schema {
 		});
 	}
 
-	getDamageAfterReductions(
-		initialDamage: number,
-		playerClient: Client
-	): number {
-		let reducedDamage = initialDamage * (100 / (100 + this.defense));
-		this.damageToTake = reducedDamage;
-		const onDamageTalents: Talent[] = this.talents.filter((talent) =>
-			talent.tags.includes('on-damage')
-		);
-
-		const onDamageTalentBehaviorContext: TalentBehaviorContext = {
-			client: playerClient,
-			defender: this,
-			damage: reducedDamage,
-		};
-		onDamageTalents.forEach((talent) => {
-			talent.executeBehavior(onDamageTalentBehaviorContext);
-		});
-		reducedDamage = Math.max(this.damageToTake, 1);
-		return reducedDamage;
+	getDamageAfterDefense(initialDamage: number): number {
+		return initialDamage * (100 / (100 + this.defense));
 	}
 
 	getNumberOfArmorItems(): number {
@@ -196,58 +180,5 @@ export class Player extends Schema {
 				});
 			}, 1000);
 		}
-	}
-
-	public tryAttack(defender: Player, playerClient: Client, clock: ClockTimer) {
-		const damage = defender.getDamageAfterReductions(this.attack, playerClient);
-
-		const attackTalentContext: TalentBehaviorContext = {
-			client: playerClient,
-			attacker: this,
-			defender: defender,
-			damage: damage,
-			clock: clock,
-		};
-
-		if (defender.dodgeRate > 0 && Math.random() < defender.dodgeRate) {
-			const dodgeRateCache = defender.dodgeRate;
-			defender.dodgeRate = 0;
-      
-			clock.setTimeout(() => {
-				defender.dodgeRate = dodgeRateCache;
-			}, 1500);
-
-      playerClient.send(
-        'combat_log',
-        `${defender.name} dodged the attack!`
-      );
-
-			return;
-		}
-
-		//handle on attacked talents
-		const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
-			(talent) => talent.tags.includes('on-attacked')
-		);
-		talentsToTriggerOnDefender.forEach((talent) => {
-			talent.executeBehavior(attackTalentContext);
-		});
-
-		//handle on attack talents
-		const talentsToTrigger: Talent[] = this.talents.filter((talent) =>
-			talent.tags.includes('on-attack')
-		);
-		talentsToTrigger.forEach((talent) => {
-			talent.executeBehavior(attackTalentContext);
-		});
-
-		defender.takeDamage(defender.damageToTake, playerClient);
-
-		//broadcast attack and damage
-		playerClient.send(
-			'combat_log',
-			`${this.name} attacks ${defender.name} for ${damage} damage!`
-		);
-		playerClient.send('attack', this.playerId);
 	}
 }

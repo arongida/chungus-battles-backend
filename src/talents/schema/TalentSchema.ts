@@ -1,6 +1,6 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
-import { TalentBehaviors } from './TalentBehaviors';
-import { TalentBehaviorContext } from './TalentBehaviorContext';
+import { TalentBehaviors } from '../behavior/TalentBehaviors';
+import { TalentBehaviorContext } from '../behavior/TalentBehaviorContext';
 
 export class Talent extends Schema {
 	@type('number') talentId: number;
