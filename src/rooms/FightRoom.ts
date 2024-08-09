@@ -2,18 +2,21 @@ import { Room, Client } from '@colyseus/core';
 import { FightState } from './schema/FightState';
 import { getPlayer, getSameRoundPlayer, updatePlayer } from '../db/Player';
 import { Player } from '../players/schema/PlayerSchema';
-import { Delayed } from 'colyseus';
-import { delay, increaseStats, setStats } from '../common/utils';
+import { delay, setStats } from '../common/utils';
 import { FightResultType } from '../common/types';
-import { TalentType } from '../talents/types/TalentTypes';
 import { getTalentsById } from '../db/Talent';
 import { getItemsById } from '../db/Item';
 import { AffectedStats, Item } from '../items/schema/ItemSchema';
 import { Talent } from '../talents/schema/TalentSchema';
-import { TalentBehaviorContext } from '../talents/behavior/TalentBehaviorContext';
+import { Dispatcher } from '@colyseus/command';
+import { ActiveTriggerCommand } from '../commands/ActiveTriggerCommand';
+import { FightStartTriggerCommand } from '../commands/FightStartTriggerCommand';
+import { FightEndTriggerCommand } from '../commands/FightEndTriggerCommand';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
+
+  dispatcher = new Dispatcher(this);
 
 	onCreate(options: any) {
 		this.setState(new FightState());
@@ -171,14 +174,13 @@ export class FightRoom extends Room<FightState> {
 		//start attack timers
 		this.startAttackTimer(this.state.player, this.state.enemy);
 		this.startAttackTimer(this.state.enemy, this.state.player);
-		//start player skill loop
-		this.startSkillLoop(this.state.player, this.state.enemy);
-		//start enemy skill loops
-		this.startSkillLoop(this.state.enemy, this.state.player);
 
-		//apply fight start effects
-		await this.applyFightStartEffects(this.state.player, this.state.enemy);
-		await this.applyFightStartEffects(this.state.enemy, this.state.player);
+    //start fight start effects
+		this.dispatcher.dispatch(new FightStartTriggerCommand());
+
+    //start active skill loops
+    this.dispatcher.dispatch(new ActiveTriggerCommand());
+
 	}
 
 	//get player, enemy and talents from db and map them to the room state
@@ -229,27 +231,6 @@ export class FightRoom extends Room<FightState> {
 		}
 	}
 
-	//start active skill loops for player and enemy
-	startSkillLoop(player: Player, enemy: Player) {
-		//start active skills' loops
-		const activeTalents: Talent[] = player.talents.filter((talent) =>
-			talent.tags.includes('active')
-		);
-		const activeTalentBehaviorContext: TalentBehaviorContext = {
-			client: this.state.playerClient,
-			attacker: player,
-			defender: enemy,
-		};
-		activeTalents.forEach((talent) => {
-			this.state.skillsTimers.push(
-				this.clock.setInterval(() => {
-					talent.executeBehavior(activeTalentBehaviorContext);
-				}, (1 / talent.activationRate) * 1000)
-			);
-		});
-	}
-
-
 	private handleFightEnd() {
 		if (!this.state.fightResult) {
 			if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
@@ -275,18 +256,9 @@ export class FightRoom extends Room<FightState> {
 
 		this.state.player.rewardRound = this.state.player.round;
 
-    //trigger fight-end talents
-    const fightEndTalents: Talent[] = this.state.player.talents.filter((talent) =>
-      talent.tags.includes('fight-end')
-    );
-    const fightEndTalentsContext: TalentBehaviorContext = {
-      client: this.state.playerClient,
-      attacker: this.state.player,
-      clock: this.clock,
-    };
-    fightEndTalents.forEach((talent) => {
-      talent.executeBehavior(fightEndTalentsContext);
-    });
+    //trigger fight-end effects
+    this.dispatcher.dispatch(new FightEndTriggerCommand());
+
 
 		this.state.player.gold += this.state.player.rewardRound * 4;
 		this.state.player.xp += this.state.player.rewardRound * 2;
@@ -297,7 +269,6 @@ export class FightRoom extends Room<FightState> {
 
 	private handleWin() {
 		this.broadcast('combat_log', 'You win!');
-
 		this.state.player.wins++;
 		this.broadcast('end_battle', 'The battle has ended!');
 		if (this.state.player.wins >= 10) {
@@ -307,9 +278,7 @@ export class FightRoom extends Room<FightState> {
 
 	private handleLoose() {
 		this.broadcast('combat_log', 'You loose!');
-
     this.state.player.lives--;
-
 		if (this.state.player.lives <= 0) {
 			this.broadcast('game_over', 'You have lost the game!');
 		} else {
@@ -320,24 +289,5 @@ export class FightRoom extends Room<FightState> {
 	private handleDraw() {
 		this.broadcast('combat_log', "It's a draw!");
 		this.broadcast('end_battle', 'The battle has ended!');
-	}
-
-	//apply fight start effects for player/enemy
-	private async applyFightStartEffects(player: Player, enemy?: Player) {
-		if (!this.state.battleStarted) return;
-
-		//handle on fight start talents
-		const onFightStartTalents: Talent[] = player.talents.filter((talent) =>
-			talent.tags.includes('fight-start')
-		);
-		const onFightStartTalentsContext: TalentBehaviorContext = {
-			client: this.state.playerClient,
-			attacker: player,
-			defender: enemy,
-			clock: this.clock,
-		};
-		onFightStartTalents.forEach((talent) => {
-			talent.executeBehavior(onFightStartTalentsContext);
-		});
 	}
 }

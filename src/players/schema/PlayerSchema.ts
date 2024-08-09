@@ -1,7 +1,6 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { Talent } from '../../talents/schema/TalentSchema';
 import { Item } from '../../items/schema/ItemSchema';
-import { increaseStats } from '../../common/utils';
 import { IStats } from '../../common/types';
 import { TalentType } from '../../talents/types/TalentTypes';
 import { Client, Delayed } from 'colyseus';
