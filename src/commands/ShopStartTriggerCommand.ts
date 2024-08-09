@@ -1,4 +1,3 @@
-// OnJoinCommand.ts
 import { Command } from '@colyseus/command';
 import { DraftRoom } from '../rooms/DraftRoom';
 import { Client } from 'colyseus';

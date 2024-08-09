@@ -26,10 +26,7 @@ export const TalentBehaviors = {
 		const stabDamage =
 			talent.activationRate * 100 +
 			(defender.maxHp - defender.hp) * talent.activationRate;
-		const calculatedStabDamage = defender.getDamageAfterReductions(
-			stabDamage,
-			client
-		);
+		const calculatedStabDamage = defender.getDamageAfterDefense(stabDamage);
 		defender.takeDamage(calculatedStabDamage, client);
 		client.send(
 			'combat_log',
@@ -45,10 +42,7 @@ export const TalentBehaviors = {
 		const { talent, attacker, defender, client } = context;
 		const bearDamage =
 			talent.activationRate * 100 + attacker.maxHp * talent.activationRate;
-		const calculatedBearDamage = defender.getDamageAfterReductions(
-			bearDamage,
-			client
-		);
+		const calculatedBearDamage = defender.getDamageAfterDefense(bearDamage);
 		defender.takeDamage(calculatedBearDamage, client);
 		client.send(
 			'combat_log',
@@ -193,7 +187,7 @@ export const TalentBehaviors = {
 	[TalentType.ThrowMoney]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
 		const initialDamage = 7 + attacker.gold * 0.7;
-		const damage = defender.getDamageAfterReductions(initialDamage, client);
+		const damage = defender.getDamageAfterDefense(initialDamage);
 		defender.takeDamage(damage, client);
 		client.send(
 			'combat_log',
@@ -431,7 +425,7 @@ export const TalentBehaviors = {
 
 	[TalentType.Evasion]: (context: TalentBehaviorContext) => {
 		const { attacker, client, talent } = context;
-    attacker.dodgeRate += talent.activationRate;
+		attacker.dodgeRate += talent.activationRate;
 		client.send(
 			'combat_log',
 			`${attacker.name} gains ${talent.activationRate * 100}% dodge chance!`
@@ -492,51 +486,47 @@ export const TalentBehaviors = {
 		);
 	},
 
-  [TalentType.PennyStocks]: (context: TalentBehaviorContext) => {
-    const { client, attacker, clock, talent } = context;
-    attacker.gold += talent.activationRate;
+	[TalentType.PennyStocks]: (context: TalentBehaviorContext) => {
+		const { client, attacker, clock, talent } = context;
+		attacker.gold += talent.activationRate;
+		client.send('draft_log', `Gained ${talent.activationRate} gold!`);
+
+		attacker.talents = attacker.talents.filter(
+			(talent) => talent.talentId !== TalentType.PennyStocks
+		);
+		attacker.talents.push(
+			new Talent({
+				talentId: 7,
+				name: 'Broken Penny Stocks',
+				description: 'Already used',
+				tier: 1,
+				activationRate: 0,
+				tags: ['talent', 'merchant', 'used'],
+			})
+		);
+		clock.setTimeout(() => {
+			client.send('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: 7,
+			});
+		}, 100);
+	},
+
+	[TalentType.Robbery]: (context: TalentBehaviorContext) => {
+		const { attacker, client, shop } = context;
+		const randomItem = shop[Math.floor(Math.random() * shop.length)];
+		if (randomItem) {
+			increaseStats(attacker, randomItem.affectedStats);
+			randomItem.sold = true;
+			attacker.inventory.push(randomItem);
+			client.send('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.Robbery,
+			});
 			client.send(
 				'draft_log',
-				`Gained ${talent.activationRate} gold!`
+				`Robbery talent activated! Gained ${randomItem.name}!`
 			);
-
-    attacker.talents = attacker.talents.filter(
-      (talent) => talent.talentId !== TalentType.PennyStocks
-    );
-    attacker.talents.push(
-      new Talent({
-        talentId: 7,
-        name: 'Broken Penny Stocks',
-        description: 'Already used',
-        tier: 1,
-        activationRate: 0,
-        tags: ['talent', 'merchant', 'used']
-      })
-    );
-    clock.setTimeout(() => {
-      client.send('trigger_talent', {
-        playerId: attacker.playerId,
-        talentId: 7,
-      });
-    }, 100);
-  },
-
-  [TalentType.Robbery]: (context: TalentBehaviorContext) => {
-    const { attacker, client, shop } = context;
-    const randomItem =
-				shop[Math.floor(Math.random() * shop.length)];
-    if (randomItem) {
-      increaseStats(attacker, randomItem.affectedStats);
-      randomItem.sold = true;
-      attacker.inventory.push(randomItem);
-      client.send('trigger_talent', {
-        playerId: attacker.playerId,
-        talentId: TalentType.Robbery,
-      });
-      client.send(
-        'draft_log',
-        `Robbery talent activated! Gained ${randomItem.name}!`
-      );
-    }
-  }
+		}
+	},
 };
