@@ -11,6 +11,8 @@ import { getRandomTalents, getTalentsById } from '../db/Talent';
 import { Dispatcher } from '@colyseus/command';
 import { ShopStartTriggerCommand } from '../commands/ShopStartTriggerCommand';
 import { LevelUpTriggerCommand } from '../commands/LevelUpTriggerCommand';
+import { getAllItemCollections } from '../db/ItemCollection';
+import { ItemCollection } from '../item-collections/schema/ItemCollectionSchema';
 
 export class DraftRoom extends Room<DraftState> {
 	maxClients = 1;
@@ -77,10 +79,13 @@ export class DraftRoom extends Room<DraftState> {
 			this.state.remainingTalentPoints = 1;
 		}
 
-		//set room shop and talents
+		//set room state
 		if (this.state.player.round === 1) await this.updateTalentSelection();
 		if (this.state.shop.length === 0)
 			await this.updateShop(this.state.shopSize);
+    const allItemCollections = await getAllItemCollections() as ItemCollection[];
+    console.log(allItemCollections);
+    //this.state.availableItemCollections.push(...allItemCollections);
 
 		//robbery command
 		this.dispatcher.dispatch(new ShopStartTriggerCommand(), {
@@ -129,6 +134,8 @@ export class DraftRoom extends Room<DraftState> {
 			this.state.shop.push(newItem);
 		});
 	}
+
+
 
 	private async handleRefreshTalentSelection(client: Client) {
 		const price = this.state.player.level * 2;

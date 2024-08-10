@@ -1,14 +1,10 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { Talent } from '../../talents/schema/TalentSchema';
 import { Item } from '../../items/schema/ItemSchema';
-import { IStats, TriggerType } from '../../common/types';
+import { IStats } from '../../common/types';
 import { TalentType } from '../../talents/types/TalentTypes';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
-import { TalentBehaviorContext } from '../../talents/behavior/TalentBehaviorContext';
-import { Dispatcher } from '@colyseus/command';
-import { FightRoom } from '../../rooms/FightRoom';
-import { OnDamageTriggerCommand } from '../../commands/OnDamageTriggerCommand';
 
 export class Player extends Schema {
 	@type('number') playerId: number;
