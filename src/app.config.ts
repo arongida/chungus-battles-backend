@@ -8,7 +8,7 @@ import cors from 'cors';
  */
 import { FightRoom } from './rooms/FightRoom';
 import { DraftRoom } from './rooms/DraftRoom';
-import { getNextPlayerId } from './db/Player';
+import { getNextPlayerId } from './players/db/Player';
 
 export default config({
   initializeGameServer: (gameServer) => {

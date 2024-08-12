@@ -516,9 +516,7 @@ export const TalentBehaviors = {
 		const { attacker, client, shop } = context;
 		const randomItem = shop[Math.floor(Math.random() * shop.length)];
 		if (randomItem) {
-			increaseStats(attacker, randomItem.affectedStats);
-			randomItem.sold = true;
-			attacker.inventory.push(randomItem);
+			attacker.getItem(randomItem);
 			client.send('trigger_talent', {
 				playerId: attacker.playerId,
 				talentId: TalentType.ROBBERY,

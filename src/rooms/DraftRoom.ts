@@ -2,7 +2,12 @@ import { Room, Client } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
 import { AffectedStats, Item } from '../items/schema/ItemSchema';
 import { Talent } from '../talents/schema/TalentSchema';
-import { copyPlayer, getPlayer, updatePlayer, createNewPlayer } from '../players/db/Player';
+import {
+	copyPlayer,
+	getPlayer,
+	updatePlayer,
+	createNewPlayer,
+} from '../players/db/Player';
 import { getNumberOfItems, getItemsById } from '../items/db/Item';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay, increaseStats } from '../common/utils';
@@ -10,7 +15,7 @@ import { getRandomTalents, getTalentsById } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
 import { ShopStartTriggerCommand } from '../commands/ShopStartTriggerCommand';
 import { LevelUpTriggerCommand } from '../commands/LevelUpTriggerCommand';
-import { getAllItemCollections } from '../item-collections/db/ItemCollection';
+import { getItemCollectionsById } from '../item-collections/db/ItemCollection';
 import { ItemCollection } from '../item-collections/schema/ItemCollectionSchema';
 
 export class DraftRoom extends Room<DraftState> {
@@ -82,24 +87,14 @@ export class DraftRoom extends Room<DraftState> {
 		if (this.state.player.round === 1) await this.updateTalentSelection();
 		if (this.state.shop.length === 0)
 			await this.updateShop(this.state.shopSize);
-    const allItemCollections = await getAllItemCollections() as ItemCollection[];
-    console.log(allItemCollections);
 
-    allItemCollections.forEach((itemCollection) => {
-      const newItemCollection = new ItemCollection();
-      newItemCollection.assign(itemCollection);
-      this.state.availableItemCollections.push(newItemCollection);
-    });
-
-    //this.state.availableItemCollections.push(...allItemCollections);
+		//this.state.availableItemCollections.push(...allItemCollections);
 
 		//robbery command
 		this.dispatcher.dispatch(new ShopStartTriggerCommand(), {
 			playerClient: client,
 		});
 	}
-
-
 
 	async onLeave(client: Client, consented: boolean) {
 		try {
@@ -123,10 +118,6 @@ export class DraftRoom extends Room<DraftState> {
 		console.log('room', this.roomId, 'disposing...');
 	}
 
-	// update(deltaTime) {
-
-	// }
-
 	private async updateShop(newShopSize: number) {
 		const itemQueryResults = await getNumberOfItems(
 			newShopSize,
@@ -141,9 +132,35 @@ export class DraftRoom extends Room<DraftState> {
 			newItem.assign(newItemObject);
 			this.state.shop.push(newItem);
 		});
+		await this.updateAvailableItemCollections();
 	}
 
 
+
+	private async updateAvailableItemCollections() {
+		const neededCollectionIds = Array.from(
+			new Set(
+				this.state.shop
+					.map((item) =>
+						item.itemCollections.map((collectionId) => collectionId)
+					)
+					.flat()
+			)
+		);
+
+		console.log('neededCollectionIds', neededCollectionIds);
+		const availableItemCollections = (await getItemCollectionsById(
+			neededCollectionIds
+		)) as ItemCollection[];
+
+		availableItemCollections.forEach((itemCollection) => {
+			const newItemCollection = new ItemCollection();
+			newItemCollection.assign(itemCollection);
+			this.state.availableItemCollections.push(newItemCollection);
+		});
+
+
+	}
 
 	private async handleRefreshTalentSelection(client: Client) {
 		const price = this.state.player.level * 2;
@@ -222,10 +239,7 @@ export class DraftRoom extends Room<DraftState> {
 			return;
 		}
 		if (item) {
-			this.state.player.gold -= item.price;
-			increaseStats(this.state.player, item.affectedStats);
-			item.sold = true;
-			this.state.player.inventory.push(item);
+			this.state.player.getItem(item);
 		}
 	}
 
@@ -274,6 +288,8 @@ export class DraftRoom extends Room<DraftState> {
 		this.state.player.maxXp += this.state.player.level * 4;
 		this.state.player.xp = leftoverXp;
 
-		this.dispatcher.dispatch(new LevelUpTriggerCommand(), {playerClient: this.clients[0]});
+		this.dispatcher.dispatch(new LevelUpTriggerCommand(), {
+			playerClient: this.clients[0],
+		});
 	}
 }
