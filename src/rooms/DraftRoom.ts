@@ -153,10 +153,12 @@ export class DraftRoom extends Room<DraftState> {
 			neededCollectionIds
 		)) as ItemCollection[];
 
+    this.state.player.availableItemCollections.clear();
+
 		availableItemCollections.forEach((itemCollection) => {
 			const newItemCollection = new ItemCollection();
 			newItemCollection.assign(itemCollection);
-			this.state.availableItemCollections.push(newItemCollection);
+			this.state.player.availableItemCollections.push(newItemCollection);
 		});
 
 

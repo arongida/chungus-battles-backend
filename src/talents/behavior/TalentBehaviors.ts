@@ -231,7 +231,7 @@ export const TalentBehaviors = {
 	[TalentType.WEAPON_WHISPERER]: (context: TalentBehaviorContext) => {
 		const { attacker, talent, client } = context;
 
-		const numberOfMeleeWeapons = attacker.getNumberOfMeleeWeapons();
+		const numberOfMeleeWeapons = attacker.getNumberOfItemsForTags(['weapon', 'melee']);
 		const attackBonus = numberOfMeleeWeapons * talent.activationRate;
 		attacker.attack += attackBonus;
 		client.send(
@@ -412,7 +412,7 @@ export const TalentBehaviors = {
 	[TalentType.ARMOR_ADDICT]: (context: TalentBehaviorContext) => {
 		const { defender, client, talent, damage } = context;
 		const armorAddictReduction =
-			talent.activationRate * defender.getNumberOfArmorItems();
+			talent.activationRate * defender.getNumberOfItemsForTags(['armor']);
 		defender.damageToTake = damage - armorAddictReduction;
 		console.log(
 			`Reduced damage by ${armorAddictReduction}, new damage: ${defender.damageToTake}`

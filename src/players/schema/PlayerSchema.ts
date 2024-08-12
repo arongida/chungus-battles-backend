@@ -28,6 +28,9 @@ export class Player extends Schema {
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> =
 		new ArraySchema<ItemCollection>();
+	@type([ItemCollection])
+	availableItemCollections: ArraySchema<ItemCollection> =
+		new ArraySchema<ItemCollection>();
 	@type('number') dodgeRate: number = 0;
 	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	initialInventory: Item[] = [];
@@ -113,27 +116,9 @@ export class Player extends Schema {
 		return initialDamage * (100 / (100 + this.defense));
 	}
 
-	getNumberOfArmorItems(): number {
+	getNumberOfItemsForTags(tags: string[]): number {
 		return this.inventory.reduce((count, item) => {
-			if (item.tags.includes('armor')) {
-				return count + 1;
-			}
-			return count;
-		}, 0);
-	}
-
-	getNumberOfMeleeWeapons(): number {
-		return this.inventory.reduce((count, item) => {
-			if (item.tags.includes('weapon') && item.tags.includes('melee')) {
-				return count + 1;
-			}
-			return count;
-		}, 0);
-	}
-
-	getNumberOfWeapons(): number {
-		return this.inventory.reduce((count, item) => {
-			if (item.tags.includes('weapon')) {
+			if (tags.some((tag) => item.tags.includes(tag))) {
 				return count + 1;
 			}
 			return count;
@@ -193,20 +178,32 @@ export class Player extends Schema {
 			)
 		);
 
-    console.log('neededCollectionIds', neededCollectionIds);
+		console.log('neededCollectionIds', neededCollectionIds);
 
-    // neededCollectionIds.forEach((collectionId) => {
-    //   switch (collectionId) {
-    //     case 1 | 2 | 3 | 4 | 5:
-    //       const numberOfUniqueShields = this.inventory.reduce((count, item) => {
-    //         if (item.itemCollections.includes(collectionId)) {
-    //           return count + 1;
-    //         }
-    //         return count;
-    //       }, 0);
-    //   }
-    // }
-
+		neededCollectionIds.forEach((collectionId) => {
+			switch (collectionId) {
+				case 1 || 2 || 3 || 4 || 5:
+					const numberOfUniqueShields = this.inventory.reduce((count, item) => {
+						if (item.itemCollections.includes(collectionId)) {
+							return count + 1;
+						}
+						return count;
+					}, 0);
+					for (let i = 1; i <= numberOfUniqueShields; i++) {
+						this.activeItemCollections.push(
+							this.availableItemCollections.find(
+								(itemCollection) =>
+									itemCollection.itemCollectionId === collectionId
+							)
+						);
+					}
+					break;
+				case 6:
+					break;
+				default:
+					break;
+			}
+		});
 	}
 
 	getItem(item: Item) {
@@ -214,6 +211,6 @@ export class Player extends Schema {
 		increaseStats(this, item.affectedStats);
 		item.sold = true;
 		this.inventory.push(item);
-		// this.updateActiveItemCollections();
+		this.updateActiveItemCollections();
 	}
 }
