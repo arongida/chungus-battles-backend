@@ -2,16 +2,15 @@ import { Room, Client } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
 import { AffectedStats, Item } from '../items/schema/ItemSchema';
 import { Talent } from '../talents/schema/TalentSchema';
-import { copyPlayer, createNewPlayer } from '../db/Player';
-import { getNumberOfItems, getItemsById } from '../db/Item';
-import { getPlayer, updatePlayer } from '../db/Player';
+import { copyPlayer, getPlayer, updatePlayer, createNewPlayer } from '../players/db/Player';
+import { getNumberOfItems, getItemsById } from '../items/db/Item';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay, increaseStats } from '../common/utils';
-import { getRandomTalents, getTalentsById } from '../db/Talent';
+import { getRandomTalents, getTalentsById } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
 import { ShopStartTriggerCommand } from '../commands/ShopStartTriggerCommand';
 import { LevelUpTriggerCommand } from '../commands/LevelUpTriggerCommand';
-import { getAllItemCollections } from '../db/ItemCollection';
+import { getAllItemCollections } from '../item-collections/db/ItemCollection';
 import { ItemCollection } from '../item-collections/schema/ItemCollectionSchema';
 
 export class DraftRoom extends Room<DraftState> {
@@ -85,6 +84,13 @@ export class DraftRoom extends Room<DraftState> {
 			await this.updateShop(this.state.shopSize);
     const allItemCollections = await getAllItemCollections() as ItemCollection[];
     console.log(allItemCollections);
+
+    allItemCollections.forEach((itemCollection) => {
+      const newItemCollection = new ItemCollection();
+      newItemCollection.assign(itemCollection);
+      this.state.availableItemCollections.push(newItemCollection);
+    });
+
     //this.state.availableItemCollections.push(...allItemCollections);
 
 		//robbery command
@@ -92,6 +98,8 @@ export class DraftRoom extends Room<DraftState> {
 			playerClient: client,
 		});
 	}
+
+
 
 	async onLeave(client: Client, consented: boolean) {
 		try {

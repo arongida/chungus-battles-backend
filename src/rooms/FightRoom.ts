@@ -1,11 +1,11 @@
 import { Room, Client } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import { getPlayer, getSameRoundPlayer, updatePlayer } from '../db/Player';
+import { getPlayer, getSameRoundPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay, setStats } from '../common/utils';
 import { FightResultType } from '../common/types';
-import { getTalentsById } from '../db/Talent';
-import { getItemsById } from '../db/Item';
+import { getTalentsById } from '../talents/db/Talent';
+import { getItemsById } from '../items/db/Item';
 import { AffectedStats, Item } from '../items/schema/ItemSchema';
 import { Talent } from '../talents/schema/TalentSchema';
 import { Dispatcher } from '@colyseus/command';

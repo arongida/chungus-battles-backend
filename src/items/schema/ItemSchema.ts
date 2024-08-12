@@ -16,4 +16,5 @@ export class Item extends Schema {
   @type('string') image: string;
   @type(['string']) tags: ArraySchema<string>;
   @type('boolean') sold: boolean = false;
+  @type(['number']) itemCollections: ArraySchema<number>;
 }

@@ -5,7 +5,7 @@ import { Item } from '../../items/schema/ItemSchema';
 import { Talent } from '../schema/TalentSchema';
 
 export const TalentBehaviors = {
-	[TalentType.Rage]: (context: TalentBehaviorContext) => {
+	[TalentType.RAGE]: (context: TalentBehaviorContext) => {
 		const { talent, attacker, client } = context;
 		const selfDamage = talent.activationRate * attacker.hp * 0.01 + 1;
 		attacker.hp -= selfDamage;
@@ -17,11 +17,11 @@ export const TalentBehaviors = {
 		});
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Rage,
+			talentId: TalentType.RAGE,
 		});
 	},
 
-	[TalentType.Stab]: (context: TalentBehaviorContext) => {
+	[TalentType.STAB]: (context: TalentBehaviorContext) => {
 		const { talent, attacker, defender, client } = context;
 		const stabDamage =
 			talent.activationRate * 100 +
@@ -34,11 +34,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Stab,
+			talentId: TalentType.STAB,
 		});
 	},
 
-	[TalentType.Bear]: (context: TalentBehaviorContext) => {
+	[TalentType.BEAR]: (context: TalentBehaviorContext) => {
 		const { talent, attacker, defender, client } = context;
 		const bearDamage =
 			talent.activationRate * 100 + attacker.maxHp * talent.activationRate;
@@ -50,11 +50,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Bear,
+			talentId: TalentType.BEAR,
 		});
 	},
 
-	[TalentType.AssassinAmusement]: (context: TalentBehaviorContext) => {
+	[TalentType.ASSASSIN_AMUSEMENT]: (context: TalentBehaviorContext) => {
 		const { attacker, client, talent } = context;
 		attacker.attackSpeed += talent.activationRate;
 		client.send(
@@ -63,20 +63,20 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.AssassinAmusement,
+			talentId: TalentType.ASSASSIN_AMUSEMENT,
 		});
 	},
 
-	[TalentType.Poison]: (context: TalentBehaviorContext) => {
+	[TalentType.POISON]: (context: TalentBehaviorContext) => {
 		const { talent, attacker, defender, client, clock } = context;
 		defender.addPoisonStacks(clock, client, talent.activationRate);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Poison,
+			talentId: TalentType.POISON,
 		});
 	},
 
-	[TalentType.Invigorate]: (context: TalentBehaviorContext) => {
+	[TalentType.INVIGORATE]: (context: TalentBehaviorContext) => {
 		const { attacker, damage, client } = context;
 		const leechAmount = damage * 0.15 + 2;
 		attacker.hp += leechAmount;
@@ -86,7 +86,7 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Invigorate,
+			talentId: TalentType.INVIGORATE,
 		});
 		client.send('healing', {
 			playerId: attacker.playerId,
@@ -94,7 +94,7 @@ export const TalentBehaviors = {
 		});
 	},
 
-	[TalentType.Snitch]: (context: TalentBehaviorContext) => {
+	[TalentType.SNITCH]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
 		if (attacker.attack > 1) {
 			defender.attack -= 1;
@@ -105,12 +105,12 @@ export const TalentBehaviors = {
 			);
 			client.send('trigger_talent', {
 				playerId: attacker.playerId,
-				talentId: TalentType.Snitch,
+				talentId: TalentType.SNITCH,
 			});
 		}
 	},
 
-	[TalentType.Steal]: (context: TalentBehaviorContext) => {
+	[TalentType.STEAL]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
 		const stolenItemIndex = Math.floor(
 			Math.random() * defender.inventory.length
@@ -124,7 +124,7 @@ export const TalentBehaviors = {
 			);
 			client.send('trigger_talent', {
 				playerId: attacker.playerId,
-				talentId: TalentType.Steal,
+				talentId: TalentType.STEAL,
 			});
 			attacker.inventory.push(stolenItem);
 			increaseStats(attacker, stolenItem.affectedStats);
@@ -132,7 +132,7 @@ export const TalentBehaviors = {
 		}
 	},
 
-	[TalentType.Pickpocket]: (context: TalentBehaviorContext) => {
+	[TalentType.PICKPOCKET]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
 		attacker.gold += 1;
 		if (defender.gold > 0) defender.gold -= 1;
@@ -142,11 +142,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Pickpocket,
+			talentId: TalentType.PICKPOCKET,
 		});
 	},
 
-	[TalentType.Scam]: (context: TalentBehaviorContext) => {
+	[TalentType.SCAM]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
 		const amount = 2 + attacker.level;
 		defender.hp -= amount;
@@ -157,7 +157,7 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Scam,
+			talentId: TalentType.SCAM,
 		});
 		client.send('damage', {
 			playerId: defender.playerId,
@@ -169,14 +169,14 @@ export const TalentBehaviors = {
 		});
 	},
 
-	[TalentType.Bandage]: (context: TalentBehaviorContext) => {
+	[TalentType.BANDAGE]: (context: TalentBehaviorContext) => {
 		const { attacker, client } = context;
 		const healing = 5 + attacker.level;
 		attacker.hp += healing;
 		client.send('combat_log', `${attacker.name} restores ${healing} health!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Bandage,
+			talentId: TalentType.BANDAGE,
 		});
 		client.send('healing', {
 			playerId: attacker.playerId,
@@ -184,7 +184,7 @@ export const TalentBehaviors = {
 		});
 	},
 
-	[TalentType.ThrowMoney]: (context: TalentBehaviorContext) => {
+	[TalentType.THROW_MONEY]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
 		const initialDamage = 7 + attacker.gold * 0.7;
 		const damage = defender.getDamageAfterDefense(initialDamage);
@@ -195,11 +195,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.ThrowMoney,
+			talentId: TalentType.THROW_MONEY,
 		});
 	},
 
-	[TalentType.Disarm]: (context: TalentBehaviorContext) => {
+	[TalentType.DISARM]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
 		const weapons: Item[] = defender.inventory.filter((item) =>
 			item.tags.includes('weapon')
@@ -224,11 +224,11 @@ export const TalentBehaviors = {
 		}
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Disarm,
+			talentId: TalentType.DISARM,
 		});
 	},
 
-	[TalentType.WeaponWhisperer]: (context: TalentBehaviorContext) => {
+	[TalentType.WEAPON_WHISPERER]: (context: TalentBehaviorContext) => {
 		const { attacker, talent, client } = context;
 
 		const numberOfMeleeWeapons = attacker.getNumberOfMeleeWeapons();
@@ -240,11 +240,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.WeaponWhisperer,
+			talentId: TalentType.WEAPON_WHISPERER,
 		});
 	},
 
-	[TalentType.GoldGenie]: (context: TalentBehaviorContext) => {
+	[TalentType.GOLD_GENIE]: (context: TalentBehaviorContext) => {
 		const { attacker, client } = context;
 		const defenseBonus = attacker.gold * 2;
 		attacker.defense += defenseBonus;
@@ -254,11 +254,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.GoldGenie,
+			talentId: TalentType.GOLD_GENIE,
 		});
 	},
 
-	[TalentType.Strong]: (context: TalentBehaviorContext) => {
+	[TalentType.STRONG]: (context: TalentBehaviorContext) => {
 		const { attacker, talent, client } = context;
 		const hpBonus = attacker.hp * talent.activationRate;
 		const attackBonus = attacker.attack * talent.activationRate;
@@ -273,11 +273,11 @@ export const TalentBehaviors = {
 		client.send('combat_log', `${attacker.name} gains ${attackBonus} attack!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Strong,
+			talentId: TalentType.STRONG,
 		});
 	},
 
-	[TalentType.IntimidatingWealth]: (context: TalentBehaviorContext) => {
+	[TalentType.INTIMIDATING_WEALTH]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
 		const attackBonus =
 			Math.min(0.2 + attacker.gold * 0.0025, 0.4) * defender.attack;
@@ -289,11 +289,11 @@ export const TalentBehaviors = {
 		client.send('combat_log', `${defender.name} looses ${attackBonus} attack!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.IntimidatingWealth,
+			talentId: TalentType.INTIMIDATING_WEALTH,
 		});
 	},
 
-	[TalentType.CorrodingCollection]: (context: TalentBehaviorContext) => {
+	[TalentType.CORRODING_COLLECTION]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, clock, talent } = context;
 		const numberOfItems = defender.inventory.length;
 		defender.addPoisonStacks(
@@ -309,11 +309,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.CorrodingCollection,
+			talentId: TalentType.CORRODING_COLLECTION,
 		});
 	},
 
-	[TalentType.Zealot]: (context: TalentBehaviorContext) => {
+	[TalentType.ZEALOT]: (context: TalentBehaviorContext) => {
 		const { defender, client, talent } = context;
 		const attackSpeedBuff =
 			0.02 + defender.defense * talent.activationRate * 0.01;
@@ -325,11 +325,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
-			talentId: TalentType.Zealot,
+			talentId: TalentType.ZEALOT,
 		});
 	},
 
-	[TalentType.Resilience]: (context: TalentBehaviorContext) => {
+	[TalentType.RESILIENCE]: (context: TalentBehaviorContext) => {
 		const { defender, client, talent } = context;
 		const healingAmount = 1 + talent.activationRate * defender.maxHp;
 		defender.hp += healingAmount;
@@ -339,7 +339,7 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
-			talentId: TalentType.Resilience,
+			talentId: TalentType.RESILIENCE,
 		});
 		client.send('healing', {
 			playerId: defender.playerId,
@@ -347,7 +347,7 @@ export const TalentBehaviors = {
 		});
 	},
 
-	[TalentType.ThornyFence]: (context: TalentBehaviorContext) => {
+	[TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, talent } = context;
 		const reflectDamage =
 			talent.activationRate * 100 + talent.activationRate * defender.defense;
@@ -358,7 +358,7 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
-			talentId: TalentType.ThornyFence,
+			talentId: TalentType.THORNY_FENCE,
 		});
 		client.send('damage', {
 			playerId: attacker.playerId,
@@ -366,9 +366,9 @@ export const TalentBehaviors = {
 		});
 	},
 
-	[TalentType.EyeForAnEye]: (context: TalentBehaviorContext) => {
+	[TalentType.EYE_FOR_AN_EYE]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, talent, damage, clock } = context;
-		if (defender.talentsOnCooldown.includes(TalentType.EyeForAnEye)) {
+		if (defender.talentsOnCooldown.includes(TalentType.EYE_FOR_AN_EYE)) {
 			console.log('Eye for an eye is on cooldown');
 			return;
 		}
@@ -381,22 +381,22 @@ export const TalentBehaviors = {
 			);
 			client.send('trigger_talent', {
 				playerId: defender.playerId,
-				talentId: TalentType.EyeForAnEye,
+				talentId: TalentType.EYE_FOR_AN_EYE,
 			});
 			client.send('damage', {
 				playerId: attacker.playerId,
 				damage: damage,
 			});
-			defender.talentsOnCooldown.push(TalentType.EyeForAnEye);
+			defender.talentsOnCooldown.push(TalentType.EYE_FOR_AN_EYE);
 			clock.setTimeout(() => {
 				defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
-					(talent) => talent !== TalentType.EyeForAnEye
+					(talent) => talent !== TalentType.EYE_FOR_AN_EYE
 				);
 			}, 1000);
 		}
 	},
 
-	[TalentType.Trickster]: (context: TalentBehaviorContext) => {
+	[TalentType.TRICKSTER]: (context: TalentBehaviorContext) => {
 		const { client, attacker, defender } = context;
 		const enemyAttack = defender.attack;
 		const playerAttack = attacker.attack;
@@ -405,11 +405,11 @@ export const TalentBehaviors = {
 		client.send('combat_log', `${attacker.name} tricks ${defender.name}!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Trickster,
+			talentId: TalentType.TRICKSTER,
 		});
 	},
 
-	[TalentType.ArmorAddict]: (context: TalentBehaviorContext) => {
+	[TalentType.ARMOR_ADDICT]: (context: TalentBehaviorContext) => {
 		const { defender, client, talent, damage } = context;
 		const armorAddictReduction =
 			talent.activationRate * defender.getNumberOfArmorItems();
@@ -419,11 +419,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
-			talentId: TalentType.ArmorAddict,
+			talentId: TalentType.ARMOR_ADDICT,
 		});
 	},
 
-	[TalentType.Evasion]: (context: TalentBehaviorContext) => {
+	[TalentType.EVASION]: (context: TalentBehaviorContext) => {
 		const { attacker, client, talent } = context;
 		attacker.dodgeRate += talent.activationRate;
 		client.send(
@@ -432,11 +432,11 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.Evasion,
+			talentId: TalentType.EVASION,
 		});
 	},
 
-	[TalentType.FutureNow]: (context: TalentBehaviorContext) => {
+	[TalentType.FUTURE_NOW]: (context: TalentBehaviorContext) => {
 		const { attacker, client, talent } = context;
 		client.send(
 			'combat_log',
@@ -449,7 +449,7 @@ export const TalentBehaviors = {
 		attacker.rewardRound += talent.activationRate;
 	},
 
-	[TalentType.SmartInvestment]: (context: TalentBehaviorContext) => {
+	[TalentType.SMART_INVESTMENT]: (context: TalentBehaviorContext) => {
 		const { attacker, client, talent } = context;
 		const goldBonus = Math.max(
 			Math.round(attacker.gold * talent.activationRate),
@@ -462,20 +462,20 @@ export const TalentBehaviors = {
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.SmartInvestment,
+			talentId: TalentType.SMART_INVESTMENT,
 		});
 	},
 
-	[TalentType.GuardianAngel]: (context: TalentBehaviorContext) => {
+	[TalentType.GUARDIAN_ANGEL]: (context: TalentBehaviorContext) => {
 		const { attacker, client } = context;
 		client.send('combat_log', 'You have been gifted by the guardian angel!');
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
-			talentId: TalentType.GuardianAngel,
+			talentId: TalentType.GUARDIAN_ANGEL,
 		});
 		attacker.lives += 1;
 		attacker.talents = attacker.talents.filter(
-			(talent) => talent.talentId !== TalentType.GuardianAngel
+			(talent) => talent.talentId !== TalentType.GUARDIAN_ANGEL
 		);
 		attacker.talents.push(
 			new Talent({
@@ -486,13 +486,13 @@ export const TalentBehaviors = {
 		);
 	},
 
-	[TalentType.PennyStocks]: (context: TalentBehaviorContext) => {
+	[TalentType.PENNY_STOCKS]: (context: TalentBehaviorContext) => {
 		const { client, attacker, clock, talent } = context;
 		attacker.gold += talent.activationRate;
 		client.send('draft_log', `Gained ${talent.activationRate} gold!`);
 
 		attacker.talents = attacker.talents.filter(
-			(talent) => talent.talentId !== TalentType.PennyStocks
+			(talent) => talent.talentId !== TalentType.PENNY_STOCKS
 		);
 		attacker.talents.push(
 			new Talent({
@@ -512,7 +512,7 @@ export const TalentBehaviors = {
 		}, 100);
 	},
 
-	[TalentType.Robbery]: (context: TalentBehaviorContext) => {
+	[TalentType.ROBBERY]: (context: TalentBehaviorContext) => {
 		const { attacker, client, shop } = context;
 		const randomItem = shop[Math.floor(Math.random() * shop.length)];
 		if (randomItem) {
@@ -521,7 +521,7 @@ export const TalentBehaviors = {
 			attacker.inventory.push(randomItem);
 			client.send('trigger_talent', {
 				playerId: attacker.playerId,
-				talentId: TalentType.Robbery,
+				talentId: TalentType.ROBBERY,
 			});
 			client.send(
 				'draft_log',
