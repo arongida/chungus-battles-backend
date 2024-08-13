@@ -1,16 +1,17 @@
 import { Command } from '@colyseus/command';
 import { Talent } from '../../talents/schema/TalentSchema';
-import { TalentBehaviorContext } from '../../talents/behavior/TalentBehaviorContext';
+import { TalentBehaviorContext as BehaviorContext } from '../../talents/behavior/TalentBehaviorContext';
 import { TriggerType } from '../../common/types';
 import { FightRoom } from '../../rooms/FightRoom';
 import { Player } from '../../players/schema/PlayerSchema';
+import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
 
 export class OnAttackedTriggerCommand extends Command<
 	FightRoom,
-	{ damage: number; attacker: Player; defender: Player; }
+	{ damage: number; attacker: Player; defender: Player }
 > {
 	execute({ damage, attacker, defender } = this.payload) {
-		const attackTalentContext: TalentBehaviorContext = {
+		const attackContext: BehaviorContext = {
 			client: this.state.playerClient,
 			attacker: attacker,
 			defender: defender,
@@ -22,7 +23,15 @@ export class OnAttackedTriggerCommand extends Command<
 			(talent) => talent.tags.includes(TriggerType.ON_ATTACKED)
 		);
 		talentsToTriggerOnDefender.forEach((talent) => {
-			talent.executeBehavior(attackTalentContext);
+			talent.executeBehavior(attackContext);
+		});
+
+		const itemCollectionsToTriggerOnDefender: ItemCollection[] =
+			defender.activeItemCollections.filter((itemCollection) =>
+				itemCollection.tags.includes(TriggerType.ON_ATTACKED)
+			);
+		itemCollectionsToTriggerOnDefender.forEach((itemCollection) => {
+			itemCollection.executeBehavior(attackContext);
 		});
 	}
 }

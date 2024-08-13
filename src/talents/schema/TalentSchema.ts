@@ -1,5 +1,6 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { TalentBehaviors } from '../behavior/TalentBehaviors';
+import { BehaviorContext } from '../../common/BehaviorContext';
 import { TalentBehaviorContext } from '../behavior/TalentBehaviorContext';
 
 export class Talent extends Schema {
@@ -11,11 +12,11 @@ export class Talent extends Schema {
 	@type('string') image: string;
 	@type(['string']) tags: ArraySchema<string>;
 
-	executeBehavior(context: TalentBehaviorContext) {
+	executeBehavior(context: BehaviorContext) {
 		const behaviorKey = this.talentId as keyof typeof TalentBehaviors;
 		const behavior = TalentBehaviors[behaviorKey];
 		if (behavior) {
-			const talentContext = { ...context, talent: this };
+			const talentContext: TalentBehaviorContext = { ...context, talent: this };
 			behavior(talentContext);
 		} else {
 			throw new Error(`No behavior defined for talentId ${this.talentId}`);
