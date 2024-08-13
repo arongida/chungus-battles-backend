@@ -1,9 +1,9 @@
 import { Command } from '@colyseus/command';
-import { Talent } from '../talents/schema/TalentSchema';
-import { TalentBehaviorContext } from '../talents/behavior/TalentBehaviorContext';
-import { TriggerType } from '../common/types';
-import { FightRoom } from '../rooms/FightRoom';
-import { Player } from '../players/schema/PlayerSchema';
+import { Talent } from '../../talents/schema/TalentSchema';
+import { TalentBehaviorContext } from '../../talents/behavior/TalentBehaviorContext';
+import { TriggerType } from '../../common/types';
+import { FightRoom } from '../../rooms/FightRoom';
+import { Player } from '../../players/schema/PlayerSchema';
 
 export class ActiveTriggerCommand extends Command<FightRoom> {
 	execute() {

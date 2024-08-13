@@ -8,15 +8,14 @@ import {
 	updatePlayer,
 	createNewPlayer,
 } from '../players/db/Player';
-import { getNumberOfItems, getItemsById } from '../items/db/Item';
+import { getNumberOfItems } from '../items/db/Item';
 import { Player } from '../players/schema/PlayerSchema';
-import { delay, increaseStats } from '../common/utils';
+import { delay } from '../common/utils';
 import { getRandomTalents, getTalentsById } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
-import { ShopStartTriggerCommand } from '../commands/ShopStartTriggerCommand';
-import { LevelUpTriggerCommand } from '../commands/LevelUpTriggerCommand';
-import { getItemCollectionsById } from '../item-collections/db/ItemCollection';
-import { ItemCollection } from '../item-collections/schema/ItemCollectionSchema';
+import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCommand';
+import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
+import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
 
 export class DraftRoom extends Room<DraftState> {
 	maxClients = 1;
@@ -132,37 +131,9 @@ export class DraftRoom extends Room<DraftState> {
 			newItem.assign(newItemObject);
 			this.state.shop.push(newItem);
 		});
-		await this.updateAvailableItemCollections();
+		await this.state.player.updateAvailableItemCollections(this.state.shop);
 	}
 
-
-
-	private async updateAvailableItemCollections() {
-		const neededCollectionIds = Array.from(
-			new Set(
-				this.state.shop
-					.map((item) =>
-						item.itemCollections.map((collectionId) => collectionId)
-					)
-					.flat()
-			)
-		);
-
-		console.log('neededCollectionIds', neededCollectionIds);
-		const availableItemCollections = (await getItemCollectionsById(
-			neededCollectionIds
-		)) as ItemCollection[];
-
-    this.state.player.availableItemCollections.clear();
-
-		availableItemCollections.forEach((itemCollection) => {
-			const newItemCollection = new ItemCollection();
-			newItemCollection.assign(itemCollection);
-			this.state.player.availableItemCollections.push(newItemCollection);
-		});
-
-
-	}
 
 	private async handleRefreshTalentSelection(client: Client) {
 		const price = this.state.player.level * 2;
@@ -204,9 +175,6 @@ export class DraftRoom extends Room<DraftState> {
 		const talents = (await getTalentsById(
 			player.talents as unknown as number[]
 		)) as Talent[];
-		const itemDataFromDb = (await getItemsById(
-			player.inventory as unknown as number[]
-		)) as Item[];
 
 		const newPlayer = new Player(player);
 		this.state.player.assign(newPlayer);
@@ -221,16 +189,10 @@ export class DraftRoom extends Room<DraftState> {
 			this.state.player.talents.push(newTalent);
 		});
 
-		player.inventory.forEach((itemId) => {
-			let newItem = new Item(
-				itemDataFromDb.find(
-					(item) => item.itemId === (itemId as unknown as number)
-				)
-			);
-			newItem.affectedStats = new AffectedStats(newItem.affectedStats);
-			this.state.player.inventory.push(newItem);
+		await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
+      playerObjectFromDb: player,
+			isEnemy: false,
 		});
-
 		await this.updateTalentSelection();
 	}
 

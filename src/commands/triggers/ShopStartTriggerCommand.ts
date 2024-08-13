@@ -1,8 +1,8 @@
 import { Command } from '@colyseus/command';
-import { DraftRoom } from '../rooms/DraftRoom';
+import { DraftRoom } from '../../rooms/DraftRoom';
 import { Client } from 'colyseus';
-import { Talent } from '../talents/schema/TalentSchema';
-import { TriggerType } from '../common/types';
+import { Talent } from '../../talents/schema/TalentSchema';
+import { TriggerType } from '../../common/types';
 
 export class ShopStartTriggerCommand extends Command<
 	DraftRoom,

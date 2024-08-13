@@ -7,6 +7,7 @@ import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
 import { increaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
+import { getItemCollectionsById } from '../../item-collections/db/ItemCollection';
 
 export class Player extends Schema {
 	@type('number') playerId: number;
@@ -167,20 +168,47 @@ export class Player extends Schema {
 		}
 	}
 
-	updateActiveItemCollections() {
-		const neededCollectionIds = Array.from(
-			new Set(
-				this.inventory
-					.map((item) =>
-						item.itemCollections.map((collectionId) => collectionId)
-					)
-					.flat()
-			)
+	async updateAvailableItemCollections(shop?: ArraySchema<Item>) {
+		const shopCollectionIds = this.getNeededIds(shop);
+
+		const inventoryCollectionIds = this.getNeededIds(this.inventory);
+
+		const itemsToCheck = shopCollectionIds.concat(inventoryCollectionIds);
+
+		const availableItemCollections = (await getItemCollectionsById(
+			itemsToCheck
+		)) as ItemCollection[];
+
+		this.availableItemCollections.clear();
+
+		availableItemCollections.forEach((itemCollection) => {
+			const newItemCollection = new ItemCollection();
+			newItemCollection.assign(itemCollection);
+			this.availableItemCollections.push(newItemCollection);
+		});
+	}
+
+	getNeededIds(itemSchema: ArraySchema<Item>): number[] {
+		return (
+			[
+				...new Set(
+					itemSchema
+						?.map((item) =>
+							item.itemCollections.filter((collectionId) => collectionId)
+						)
+						.flat()
+				),
+			] || []
 		);
+	}
 
-		console.log('neededCollectionIds', neededCollectionIds);
+	updateActiveItemCollections() {
+		const inventoryCollectionIds = this.getNeededIds(this.inventory);
+    console.log('inventoryCollectionIds', inventoryCollectionIds);
 
-		neededCollectionIds.forEach((collectionId) => {
+		this.activeItemCollections.clear();
+
+		inventoryCollectionIds.forEach((collectionId) => {
 			switch (collectionId) {
 				case 1 || 2 || 3 || 4 || 5:
 					const numberOfUniqueShields = this.inventory.reduce((count, item) => {
