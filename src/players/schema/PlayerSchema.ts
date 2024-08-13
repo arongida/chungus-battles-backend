@@ -8,6 +8,7 @@ import ClockTimer from '@gamestdio/timer';
 import { increaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
 import { getItemCollectionsById } from '../../item-collections/db/ItemCollection';
+import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
 
 export class Player extends Schema {
 	@type('number') playerId: number;
@@ -126,6 +127,18 @@ export class Player extends Schema {
 		}, 0);
 	}
 
+	getItemsForTags(tags: string[]): Item[] {
+		return this.inventory.filter((item) =>
+			tags.some((tag) => item.tags.includes(tag))
+		);
+	}
+
+	getItemsForCollection(collectionId: number): Item[] {
+		return this.inventory.filter((item) =>
+			item.itemCollections.includes(collectionId)
+		);
+	}
+
 	resetInventory() {
 		this.inventory.splice(0, this.inventory.length, ...this.initialInventory);
 	}
@@ -170,11 +183,8 @@ export class Player extends Schema {
 
 	async updateAvailableItemCollections(shop?: ArraySchema<Item>) {
 		const shopCollectionIds = this.getNeededIds(shop);
-
 		const inventoryCollectionIds = this.getNeededIds(this.inventory);
-
 		const itemsToCheck = shopCollectionIds.concat(inventoryCollectionIds);
-
 		const availableItemCollections = (await getItemCollectionsById(
 			itemsToCheck
 		)) as ItemCollection[];
@@ -204,34 +214,41 @@ export class Player extends Schema {
 
 	updateActiveItemCollections() {
 		const inventoryCollectionIds = this.getNeededIds(this.inventory);
-    console.log('inventoryCollectionIds', inventoryCollectionIds);
-
 		this.activeItemCollections.clear();
+		let collectionIdsToActivate: number[] = [];
 
 		inventoryCollectionIds.forEach((collectionId) => {
-			switch (collectionId) {
-				case 1 || 2 || 3 || 4 || 5:
-					const numberOfUniqueShields = this.inventory.reduce((count, item) => {
-						if (item.itemCollections.includes(collectionId)) {
-							return count + 1;
-						}
-						return count;
-					}, 0);
-					for (let i = 1; i <= numberOfUniqueShields; i++) {
-						this.activeItemCollections.push(
-							this.availableItemCollections.find(
-								(itemCollection) =>
-									itemCollection.itemCollectionId === collectionId
-							)
-						);
-					}
-					break;
-				case 6:
-					break;
-				default:
-					break;
+			if (
+				collectionId >= ItemCollectionType.SHIELDS_1 &&
+				collectionId <= ItemCollectionType.SHIELDS_5
+			) {
+				const shields = this.getItemsForTags(['shield']);
+				const uniqueShieldsNumber = [
+					...new Set(shields.map((shield) => shield.itemId)),
+				].length;
+				collectionIdsToActivate.push(
+					...new Set(
+						Array.from({ length: uniqueShieldsNumber }, (_, i) => i + 1)
+					)
+				);
+			}
+
+			if (collectionId >= ItemCollectionType.WARRIOR_1) {
+				const sameCollectionItems = this.getItemsForCollection(collectionId);
+				const uniqueCollectionItems = [
+					...new Set(sameCollectionItems.map((item) => item.itemId)),
+				];
+				console.log('uniqueCollectionItems', uniqueCollectionItems);
+				if (uniqueCollectionItems.length === 3) {
+					collectionIdsToActivate.push(collectionId);
+				}
 			}
 		});
+		collectionIdsToActivate = [...new Set(collectionIdsToActivate)];
+		this.activeItemCollections = this.availableItemCollections.filter(
+			(itemCollection) =>
+				collectionIdsToActivate.includes(itemCollection.itemCollectionId)
+		);
 	}
 
 	getItem(item: Item) {

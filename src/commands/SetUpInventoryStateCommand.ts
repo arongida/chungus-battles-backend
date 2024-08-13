@@ -30,8 +30,6 @@ export class SetUpInventoryStateCommand extends Command<
 
 	//create new item for the player in the roomstate from the player inventory in the db
 	async setUpInventory(playerToSetUp: Player, playerObjectFromDb: Player) {
-		console.log('playerObjectFromDb', playerObjectFromDb);
-		console.log('playerObjectToSetUp', playerToSetUp);
 		if (playerObjectFromDb.inventory.length > 0) {
 			const itemsDataFromDb = (await getItemsById(
 				playerObjectFromDb.inventory as unknown as number[]
