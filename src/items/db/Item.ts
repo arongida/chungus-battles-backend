@@ -14,6 +14,7 @@ const ItemSchema = new Schema({
   },
   image: String,
   tags: [String],
+  itemCollections: [Number],
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);

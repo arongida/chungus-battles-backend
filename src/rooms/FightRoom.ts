@@ -1,25 +1,28 @@
 import { Room, Client } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import { getPlayer, getSameRoundPlayer, updatePlayer } from '../db/Player';
+import {
+	getPlayer,
+	getSameRoundPlayer,
+	updatePlayer,
+} from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay, setStats } from '../common/utils';
 import { FightResultType } from '../common/types';
-import { getTalentsById } from '../db/Talent';
-import { getItemsById } from '../db/Item';
-import { AffectedStats, Item } from '../items/schema/ItemSchema';
+import { getTalentsById } from '../talents/db/Talent';
 import { Talent } from '../talents/schema/TalentSchema';
 import { Dispatcher } from '@colyseus/command';
-import { ActiveTriggerCommand } from '../commands/ActiveTriggerCommand';
-import { FightStartTriggerCommand } from '../commands/FightStartTriggerCommand';
-import { FightEndTriggerCommand } from '../commands/FightEndTriggerCommand';
-import { OnDamageTriggerCommand } from '../commands/OnDamageTriggerCommand';
-import { OnAttackedTriggerCommand } from '../commands/OnAttackedTriggerCommand';
-import { OnAttackTriggerCommand } from '../commands/OnAttackTriggerCommand';
+import { ActiveTriggerCommand } from '../commands/triggers/ActiveTriggerCommand';
+import { FightStartTriggerCommand } from '../commands/triggers/FightStartTriggerCommand';
+import { FightEndTriggerCommand } from '../commands/triggers/FightEndTriggerCommand';
+import { OnDamageTriggerCommand } from '../commands/triggers/OnDamageTriggerCommand';
+import { OnAttackedTriggerCommand } from '../commands/triggers/OnAttackedTriggerCommand';
+import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerCommand';
+import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
 
-  dispatcher = new Dispatcher(this);
+	dispatcher = new Dispatcher(this);
 
 	onCreate(options: any) {
 		this.setState(new FightState());
@@ -167,31 +170,39 @@ export class FightRoom extends Room<FightState> {
 		//start player attack loop
 		player.attackTimer = this.clock.setInterval(() => {
 			this.tryAttack(player, enemy);
-      player.attackTimer.clear();
-      this.startAttackTimer(player, enemy);
+			player.attackTimer.clear();
+			this.startAttackTimer(player, enemy);
 		}, (1 / player.attackSpeed) * 1000);
 	}
 
-  tryAttack(attacker: Player, defender: Player) {
+	tryAttack(attacker: Player, defender: Player) {
 		const damage = this.calculateOnDamageEffects(attacker.attack, defender);
 
 		if (defender.dodgeRate > 0 && Math.random() < defender.dodgeRate) {
 			const dodgeRateCache = defender.dodgeRate;
 			defender.dodgeRate = 0;
-      
+
 			this.clock.setTimeout(() => {
 				defender.dodgeRate = dodgeRateCache;
 			}, 1500);
 
-      this.state.playerClient.send(
-        'combat_log',
-        `${defender.name} dodged the attack!`
-      );
+			this.state.playerClient.send(
+				'combat_log',
+				`${defender.name} dodged the attack!`
+			);
 			return;
 		}
 
-    this.dispatcher.dispatch(new OnAttackedTriggerCommand(), {attacker: attacker, defender: defender, damage: damage});
-    this.dispatcher.dispatch(new OnAttackTriggerCommand(), {attacker: attacker, defender: defender, damage: damage});	
+		this.dispatcher.dispatch(new OnAttackedTriggerCommand(), {
+			attacker: attacker,
+			defender: defender,
+			damage: damage,
+		});
+		this.dispatcher.dispatch(new OnAttackTriggerCommand(), {
+			attacker: attacker,
+			defender: defender,
+			damage: damage,
+		});
 
 		defender.takeDamage(defender.damageToTake, this.state.playerClient);
 
@@ -203,13 +214,13 @@ export class FightRoom extends Room<FightState> {
 		this.state.playerClient.send('attack', attacker.playerId);
 	}
 
-  calculateOnDamageEffects(
-		initialDamage: number,
-    defender: Player,
-	): number {
+	calculateOnDamageEffects(initialDamage: number, defender: Player): number {
 		let reducedDamage = defender.getDamageAfterDefense(initialDamage);
 		defender.damageToTake = reducedDamage;
-		this.dispatcher.dispatch(new OnDamageTriggerCommand(), {defender: defender, damage: reducedDamage});
+		this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
+			defender: defender,
+			damage: reducedDamage,
+		});
 		reducedDamage = Math.max(defender.damageToTake, 1);
 		return reducedDamage;
 	}
@@ -220,12 +231,11 @@ export class FightRoom extends Room<FightState> {
 		this.startAttackTimer(this.state.player, this.state.enemy);
 		this.startAttackTimer(this.state.enemy, this.state.player);
 
-    //start fight start effects
+		//start fight start effects
 		this.dispatcher.dispatch(new FightStartTriggerCommand());
 
-    //start active skill loops
-    this.dispatcher.dispatch(new ActiveTriggerCommand());
-
+		//start active skill loops
+		this.dispatcher.dispatch(new ActiveTriggerCommand());
 	}
 
 	//get player, enemy and talents from db and map them to the room state
@@ -255,25 +265,10 @@ export class FightRoom extends Room<FightState> {
 			});
 		}
 
-		if (player.inventory.length > 0) {
-			const itemsDataFromDb = (await getItemsById(
-				player.inventory as unknown as number[]
-			)) as Item[];
-			player.inventory.forEach((itemId) => {
-				let newItem = new Item(
-					itemsDataFromDb.find(
-						(item) => item.itemId === (itemId as unknown as number)
-					)
-				);
-				newItem.affectedStats = new AffectedStats(newItem.affectedStats);
-				if (!isEnemy) this.state.player.inventory.push(newItem);
-				else this.state.enemy.inventory.push(newItem);
-
-				//save initial inventory
-				if (!isEnemy) this.state.player.initialInventory.push(newItem);
-				else this.state.enemy.initialInventory.push(newItem);
-			});
-		}
+		await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
+      playerObjectFromDb: player,
+			isEnemy: isEnemy,
+		});
 	}
 
 	private handleFightEnd() {
@@ -301,15 +296,20 @@ export class FightRoom extends Room<FightState> {
 
 		this.state.player.rewardRound = this.state.player.round;
 
-    //trigger fight-end effects
-    this.dispatcher.dispatch(new FightEndTriggerCommand());
-
+		//trigger fight-end effects
+		this.dispatcher.dispatch(new FightEndTriggerCommand());
 
 		this.state.player.gold += this.state.player.rewardRound * 4;
 		this.state.player.xp += this.state.player.rewardRound * 2;
 
-		this.broadcast('combat_log', `You gained ${this.state.player.rewardRound * 4} gold!`);
-		this.broadcast('combat_log', `You gained ${this.state.player.rewardRound * 2} xp!`);
+		this.broadcast(
+			'combat_log',
+			`You gained ${this.state.player.rewardRound * 4} gold!`
+		);
+		this.broadcast(
+			'combat_log',
+			`You gained ${this.state.player.rewardRound * 2} xp!`
+		);
 	}
 
 	private handleWin() {
@@ -323,7 +323,7 @@ export class FightRoom extends Room<FightState> {
 
 	private handleLoose() {
 		this.broadcast('combat_log', 'You loose!');
-    this.state.player.lives--;
+		this.state.player.lives--;
 		if (this.state.player.lives <= 0) {
 			this.broadcast('game_over', 'You have lost the game!');
 		} else {

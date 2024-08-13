@@ -2,15 +2,20 @@ import { Room, Client } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
 import { AffectedStats, Item } from '../items/schema/ItemSchema';
 import { Talent } from '../talents/schema/TalentSchema';
-import { copyPlayer, createNewPlayer } from '../db/Player';
-import { getNumberOfItems, getItemsById } from '../db/Item';
-import { getPlayer, updatePlayer } from '../db/Player';
+import {
+	copyPlayer,
+	getPlayer,
+	updatePlayer,
+	createNewPlayer,
+} from '../players/db/Player';
+import { getNumberOfItems } from '../items/db/Item';
 import { Player } from '../players/schema/PlayerSchema';
-import { delay, increaseStats } from '../common/utils';
-import { getRandomTalents, getTalentsById } from '../db/Talent';
+import { delay } from '../common/utils';
+import { getRandomTalents, getTalentsById } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
-import { ShopStartTriggerCommand } from '../commands/ShopStartTriggerCommand';
-import { LevelUpTriggerCommand } from '../commands/LevelUpTriggerCommand';
+import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCommand';
+import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
+import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
 
 export class DraftRoom extends Room<DraftState> {
 	maxClients = 1;
@@ -77,10 +82,12 @@ export class DraftRoom extends Room<DraftState> {
 			this.state.remainingTalentPoints = 1;
 		}
 
-		//set room shop and talents
+		//set room state
 		if (this.state.player.round === 1) await this.updateTalentSelection();
 		if (this.state.shop.length === 0)
 			await this.updateShop(this.state.shopSize);
+
+		//this.state.availableItemCollections.push(...allItemCollections);
 
 		//robbery command
 		this.dispatcher.dispatch(new ShopStartTriggerCommand(), {
@@ -110,10 +117,6 @@ export class DraftRoom extends Room<DraftState> {
 		console.log('room', this.roomId, 'disposing...');
 	}
 
-	// update(deltaTime) {
-
-	// }
-
 	private async updateShop(newShopSize: number) {
 		const itemQueryResults = await getNumberOfItems(
 			newShopSize,
@@ -128,7 +131,9 @@ export class DraftRoom extends Room<DraftState> {
 			newItem.assign(newItemObject);
 			this.state.shop.push(newItem);
 		});
+		await this.state.player.updateAvailableItemCollections(this.state.shop);
 	}
+
 
 	private async handleRefreshTalentSelection(client: Client) {
 		const price = this.state.player.level * 2;
@@ -170,9 +175,6 @@ export class DraftRoom extends Room<DraftState> {
 		const talents = (await getTalentsById(
 			player.talents as unknown as number[]
 		)) as Talent[];
-		const itemDataFromDb = (await getItemsById(
-			player.inventory as unknown as number[]
-		)) as Item[];
 
 		const newPlayer = new Player(player);
 		this.state.player.assign(newPlayer);
@@ -187,16 +189,10 @@ export class DraftRoom extends Room<DraftState> {
 			this.state.player.talents.push(newTalent);
 		});
 
-		player.inventory.forEach((itemId) => {
-			let newItem = new Item(
-				itemDataFromDb.find(
-					(item) => item.itemId === (itemId as unknown as number)
-				)
-			);
-			newItem.affectedStats = new AffectedStats(newItem.affectedStats);
-			this.state.player.inventory.push(newItem);
+		await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
+      playerObjectFromDb: player,
+			isEnemy: false,
 		});
-
 		await this.updateTalentSelection();
 	}
 
@@ -207,10 +203,7 @@ export class DraftRoom extends Room<DraftState> {
 			return;
 		}
 		if (item) {
-			this.state.player.gold -= item.price;
-			increaseStats(this.state.player, item.affectedStats);
-			item.sold = true;
-			this.state.player.inventory.push(item);
+			this.state.player.getItem(item);
 		}
 	}
 
@@ -259,6 +252,8 @@ export class DraftRoom extends Room<DraftState> {
 		this.state.player.maxXp += this.state.player.level * 4;
 		this.state.player.xp = leftoverXp;
 
-		this.dispatcher.dispatch(new LevelUpTriggerCommand(), {playerClient: this.clients[0]});
+		this.dispatcher.dispatch(new LevelUpTriggerCommand(), {
+			playerClient: this.clients[0],
+		});
 	}
 }

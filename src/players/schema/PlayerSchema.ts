@@ -1,14 +1,14 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { Talent } from '../../talents/schema/TalentSchema';
 import { Item } from '../../items/schema/ItemSchema';
-import { IStats, TriggerType } from '../../common/types';
+import { IStats } from '../../common/types';
 import { TalentType } from '../../talents/types/TalentTypes';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
-import { TalentBehaviorContext } from '../../talents/behavior/TalentBehaviorContext';
-import { Dispatcher } from '@colyseus/command';
-import { FightRoom } from '../../rooms/FightRoom';
-import { OnDamageTriggerCommand } from '../../commands/OnDamageTriggerCommand';
+import { increaseStats } from '../../common/utils';
+import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
+import { getItemCollectionsById } from '../../item-collections/db/ItemCollection';
+import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
 
 export class Player extends Schema {
 	@type('number') playerId: number;
@@ -28,6 +28,11 @@ export class Player extends Schema {
 	@type('string') avatarUrl: string;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
+	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> =
+		new ArraySchema<ItemCollection>();
+	@type([ItemCollection])
+	availableItemCollections: ArraySchema<ItemCollection> =
+		new ArraySchema<ItemCollection>();
 	@type('number') dodgeRate: number = 0;
 	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
 	initialInventory: Item[] = [];
@@ -113,31 +118,25 @@ export class Player extends Schema {
 		return initialDamage * (100 / (100 + this.defense));
 	}
 
-	getNumberOfArmorItems(): number {
+	getNumberOfItemsForTags(tags: string[]): number {
 		return this.inventory.reduce((count, item) => {
-			if (item.tags.includes('armor')) {
+			if (tags.some((tag) => item.tags.includes(tag))) {
 				return count + 1;
 			}
 			return count;
 		}, 0);
 	}
 
-	getNumberOfMeleeWeapons(): number {
-		return this.inventory.reduce((count, item) => {
-			if (item.tags.includes('weapon') && item.tags.includes('melee')) {
-				return count + 1;
-			}
-			return count;
-		}, 0);
+	getItemsForTags(tags: string[]): Item[] {
+		return this.inventory.filter((item) =>
+			tags.some((tag) => item.tags.includes(tag))
+		);
 	}
 
-	getNumberOfWeapons(): number {
-		return this.inventory.reduce((count, item) => {
-			if (item.tags.includes('weapon')) {
-				return count + 1;
-			}
-			return count;
-		}, 0);
+	getItemsForCollection(collectionId: number): Item[] {
+		return this.inventory.filter((item) =>
+			item.itemCollections.includes(collectionId)
+		);
 	}
 
 	resetInventory() {
@@ -180,5 +179,83 @@ export class Player extends Schema {
 				});
 			}, 1000);
 		}
+	}
+
+	async updateAvailableItemCollections(shop?: ArraySchema<Item>) {
+		const shopCollectionIds = this.getNeededIds(shop);
+		const inventoryCollectionIds = this.getNeededIds(this.inventory);
+		const itemsToCheck = shopCollectionIds.concat(inventoryCollectionIds);
+		const availableItemCollections = (await getItemCollectionsById(
+			itemsToCheck
+		)) as ItemCollection[];
+
+		this.availableItemCollections.clear();
+
+		availableItemCollections.forEach((itemCollection) => {
+			const newItemCollection = new ItemCollection();
+			newItemCollection.assign(itemCollection);
+			this.availableItemCollections.push(newItemCollection);
+		});
+	}
+
+	getNeededIds(itemSchema: ArraySchema<Item>): number[] {
+		return (
+			[
+				...new Set(
+					itemSchema
+						?.map((item) =>
+							item.itemCollections.filter((collectionId) => collectionId)
+						)
+						.flat()
+				),
+			] || []
+		);
+	}
+
+	updateActiveItemCollections() {
+		const inventoryCollectionIds = this.getNeededIds(this.inventory);
+		this.activeItemCollections.clear();
+		let collectionIdsToActivate: number[] = [];
+
+		inventoryCollectionIds.forEach((collectionId) => {
+			if (
+				collectionId >= ItemCollectionType.SHIELDS_1 &&
+				collectionId <= ItemCollectionType.SHIELDS_5
+			) {
+				const shields = this.getItemsForTags(['shield']);
+				const uniqueShieldsNumber = [
+					...new Set(shields.map((shield) => shield.itemId)),
+				].length;
+				collectionIdsToActivate.push(
+					...new Set(
+						Array.from({ length: uniqueShieldsNumber }, (_, i) => i + 1)
+					)
+				);
+			}
+
+			if (collectionId >= ItemCollectionType.WARRIOR_1) {
+				const sameCollectionItems = this.getItemsForCollection(collectionId);
+				const uniqueCollectionItems = [
+					...new Set(sameCollectionItems.map((item) => item.itemId)),
+				];
+				console.log('uniqueCollectionItems', uniqueCollectionItems);
+				if (uniqueCollectionItems.length === 3) {
+					collectionIdsToActivate.push(collectionId);
+				}
+			}
+		});
+		collectionIdsToActivate = [...new Set(collectionIdsToActivate)];
+		this.activeItemCollections = this.availableItemCollections.filter(
+			(itemCollection) =>
+				collectionIdsToActivate.includes(itemCollection.itemCollectionId)
+		);
+	}
+
+	getItem(item: Item) {
+		this.gold -= item.price;
+		increaseStats(this, item.affectedStats);
+		item.sold = true;
+		this.inventory.push(item);
+		this.updateActiveItemCollections();
 	}
 }

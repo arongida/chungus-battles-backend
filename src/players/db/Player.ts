@@ -1,5 +1,5 @@
-import mongoose, { Document, Schema } from 'mongoose';
-import { Player } from '../players/schema/PlayerSchema';
+import mongoose, { Schema } from 'mongoose';
+import { Player } from '../../players/schema/PlayerSchema';
 
 const PlayerSchema = new Schema({
 	playerId: Number,
