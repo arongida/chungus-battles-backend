@@ -15,6 +15,7 @@ import { getRandomTalents, getTalentsById } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
 import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCommand';
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
+import { ShopRefreshTriggerCommand } from '../commands/triggers/ShopRefreshTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
 
 export class DraftRoom extends Room<DraftState> {
@@ -60,6 +61,8 @@ export class DraftRoom extends Room<DraftState> {
 		await delay(1000, this.clock);
 		const foundPlayer = await getPlayer(options.playerId);
 
+    this.state.playerClient = client;
+
 		//if player already exists, check if player is already playing
 		if (foundPlayer) {
 			if (foundPlayer.sessionId !== '')
@@ -90,9 +93,7 @@ export class DraftRoom extends Room<DraftState> {
 		//this.state.availableItemCollections.push(...allItemCollections);
 
 		//robbery command
-		this.dispatcher.dispatch(new ShopStartTriggerCommand(), {
-			playerClient: client,
-		});
+		this.dispatcher.dispatch(new ShopStartTriggerCommand());
 	}
 
 	async onLeave(client: Client, consented: boolean) {
@@ -132,8 +133,8 @@ export class DraftRoom extends Room<DraftState> {
 			this.state.shop.push(newItem);
 		});
 		await this.state.player.updateAvailableItemCollections(this.state.shop);
+		this.dispatcher.dispatch(new ShopRefreshTriggerCommand());
 	}
-
 
 	private async handleRefreshTalentSelection(client: Client) {
 		const price = this.state.player.level * 2;
@@ -190,7 +191,7 @@ export class DraftRoom extends Room<DraftState> {
 		});
 
 		await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
-      playerObjectFromDb: player,
+			playerObjectFromDb: player,
 			isEnemy: false,
 		});
 		await this.updateTalentSelection();
@@ -252,8 +253,6 @@ export class DraftRoom extends Room<DraftState> {
 		this.state.player.maxXp += this.state.player.level * 4;
 		this.state.player.xp = leftoverXp;
 
-		this.dispatcher.dispatch(new LevelUpTriggerCommand(), {
-			playerClient: this.clients[0],
-		});
+		this.dispatcher.dispatch(new LevelUpTriggerCommand());
 	}
 }

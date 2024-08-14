@@ -1,3 +1,4 @@
+import { Item } from '../../items/schema/ItemSchema';
 import { ItemCollectionType } from '../types/ItemCollectionTypes';
 import { ItemCollectionBehaviorContext } from './ItemCollectionBehaviorContext';
 
@@ -69,6 +70,18 @@ export const ItemCollectionBehaviors = {
 		client.send('trigger_collection', {
 			playerId: defender.playerId,
 			collectionId: ItemCollectionType.WARRIOR_1,
+		});
+	},
+
+  [ItemCollectionType.MERCHANT_1]: (context: ItemCollectionBehaviorContext) => {
+		const { attacker, client, itemCollection, shop } = context;
+		const discount = itemCollection.base;
+		shop.forEach((item) => {
+      item.price -= discount;
+    });
+		client.send('trigger_collection', {
+			playerId: attacker.playerId,
+			collectionId: ItemCollectionType.MERCHANT_1,
 		});
 	},
 };
