@@ -1,4 +1,4 @@
-import { Item } from '../../items/schema/ItemSchema';
+import { Talent } from '../../talents/schema/TalentSchema';
 import { ItemCollectionType } from '../types/ItemCollectionTypes';
 import { ItemCollectionBehaviorContext } from './ItemCollectionBehaviorContext';
 
@@ -73,15 +73,33 @@ export const ItemCollectionBehaviors = {
 		});
 	},
 
-  [ItemCollectionType.MERCHANT_1]: (context: ItemCollectionBehaviorContext) => {
+	[ItemCollectionType.MERCHANT_1]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection, shop } = context;
 		const discount = itemCollection.base;
 		shop.forEach((item) => {
-      item.price -= discount;
-    });
+			item.price -= discount;
+		});
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.MERCHANT_1,
+		});
+	},
+
+	[ItemCollectionType.ROGUE_1]: (context: ItemCollectionBehaviorContext) => {
+		const { attacker, client, availableTalents } = context;
+		attacker.talents = attacker.talents.filter((talent) => talent.tier !== 1);
+		const tier1Talents = availableTalents.filter(
+      (talent) => talent.tier === 1 && !talent.tags.includes('used')
+    );
+    const randomTier1Talents = tier1Talents.sort(() => 0.5 - Math.random()).slice(0, 2);
+		randomTier1Talents.forEach((talent) => {
+			const newTalent = new Talent();
+			newTalent.assign(talent);
+			attacker.talents.push(newTalent);
+		});
+		client.send('trigger_collection', {
+			playerId: attacker.playerId,
+			collectionId: ItemCollectionType.ROGUE_1,
 		});
 	},
 };

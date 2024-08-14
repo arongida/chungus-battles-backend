@@ -6,4 +6,5 @@ export enum ItemCollectionType {
 	SHIELDS_5 = 5,
 	WARRIOR_1 = 6,
   MERCHANT_1 = 7,
+  ROGUE_1 = 8,
 }

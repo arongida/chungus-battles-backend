@@ -238,7 +238,6 @@ export class Player extends Schema {
 				const uniqueCollectionItems = [
 					...new Set(sameCollectionItems.map((item) => item.itemId)),
 				];
-				console.log('uniqueCollectionItems', uniqueCollectionItems);
 				if (uniqueCollectionItems.length === 3) {
 					collectionIdsToActivate.push(collectionId);
 				}

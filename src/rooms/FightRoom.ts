@@ -8,7 +8,7 @@ import {
 import { Player } from '../players/schema/PlayerSchema';
 import { delay, setStats } from '../common/utils';
 import { FightResultType } from '../common/types';
-import { getTalentsById } from '../talents/db/Talent';
+import { getAllTalents, getTalentsById } from '../talents/db/Talent';
 import { Talent } from '../talents/schema/TalentSchema';
 import { Dispatcher } from '@colyseus/command';
 import { ActiveTriggerCommand } from '../commands/triggers/ActiveTriggerCommand';
@@ -67,6 +67,9 @@ export class FightRoom extends Room<FightState> {
 			setStats(this.state.enemy.initialStats, this.state.enemy);
 			this.state.enemy.maxHp = this.state.enemy.hp;
 		}
+
+    //load talents from db
+    this.state.availableTalents = await getAllTalents() as Talent[];
 
 		// check if player is already playing
 		if (this.state.player.sessionId !== '')
@@ -233,7 +236,7 @@ export class FightRoom extends Room<FightState> {
 
 		//start fight start effects
 		this.dispatcher.dispatch(new FightStartTriggerCommand());
-
+  
 		//start active skill loops
 		this.dispatcher.dispatch(new ActiveTriggerCommand());
 	}

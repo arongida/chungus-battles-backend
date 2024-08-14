@@ -3,13 +3,13 @@ import { DraftRoom } from '../../rooms/DraftRoom';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
 import { TriggerType } from '../../common/types';
 
-export class ShopRefreshTriggerCommand extends Command<
+export class AfterShopRefreshTriggerCommand extends Command<
 	DraftRoom
 > {
 	execute() {
 		const onShopRefreshItemCollections: ItemCollection[] =
 			this.state.player.activeItemCollections.filter((itemCollection) =>
-				itemCollection.tags.includes(TriggerType.SHOP_REFRESH)
+				itemCollection.tags.includes(TriggerType.AFTER_REFRESH)
 			);
 		const onShopRefreshItemCollectionsContext = {
 			client: this.state.playerClient,

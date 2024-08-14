@@ -15,7 +15,7 @@ import { getRandomTalents, getTalentsById } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
 import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCommand';
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
-import { ShopRefreshTriggerCommand } from '../commands/triggers/ShopRefreshTriggerCommand';
+import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
 
 export class DraftRoom extends Room<DraftState> {
@@ -133,7 +133,7 @@ export class DraftRoom extends Room<DraftState> {
 			this.state.shop.push(newItem);
 		});
 		await this.state.player.updateAvailableItemCollections(this.state.shop);
-		this.dispatcher.dispatch(new ShopRefreshTriggerCommand());
+		this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
 	}
 
 	private async handleRefreshTalentSelection(client: Client) {
