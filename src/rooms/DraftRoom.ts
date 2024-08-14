@@ -61,7 +61,7 @@ export class DraftRoom extends Room<DraftState> {
 		await delay(1000, this.clock);
 		const foundPlayer = await getPlayer(options.playerId);
 
-    this.state.playerClient = client;
+		this.state.playerClient = client;
 
 		//if player already exists, check if player is already playing
 		if (foundPlayer) {
@@ -180,7 +180,6 @@ export class DraftRoom extends Room<DraftState> {
 		const newPlayer = new Player(player);
 		this.state.player.assign(newPlayer);
 
-		this.state.remainingTalentPoints = player.level - player.talents.length;
 		player.talents.forEach((talentId) => {
 			const newTalent = new Talent(
 				talents.find(
@@ -189,6 +188,13 @@ export class DraftRoom extends Room<DraftState> {
 			);
 			this.state.player.talents.push(newTalent);
 		});
+
+		const distinctLevelTalents = [
+			...new Set(this.state.player.talents.map((talent) => talent.tier)),
+		];
+
+		this.state.remainingTalentPoints =
+			player.level - distinctLevelTalents.length;
 
 		await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
 			playerObjectFromDb: player,
