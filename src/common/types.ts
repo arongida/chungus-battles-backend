@@ -20,4 +20,6 @@ export enum TriggerType {
 	ON_ATTACKED = 'on-attacked',
 	ON_ATTACK = 'on-attack',
 	ON_DAMAGE = 'on-damage',
+  BEFORE_REFRESH = 'before-refresh',
+  AFTER_REFRESH = 'after-refresh',
 }
