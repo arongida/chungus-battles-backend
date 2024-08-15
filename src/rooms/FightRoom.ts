@@ -302,7 +302,7 @@ export class FightRoom extends Room<FightState> {
 		//trigger fight-end effects
 		this.dispatcher.dispatch(new FightEndTriggerCommand());
 
-		this.state.player.gold += this.state.player.rewardRound * 4;
+		this.state.player.gold += this.state.player.rewardRound * 4 + this.state.player.income;
 		this.state.player.xp += this.state.player.rewardRound * 2;
 
 		this.broadcast(
