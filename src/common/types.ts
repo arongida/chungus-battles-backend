@@ -9,6 +9,7 @@ export interface IStats {
 	attack: number;
 	defense: number;
 	attackSpeed: number;
+  income: number;
 }
 
 export enum TriggerType {
@@ -22,4 +23,5 @@ export enum TriggerType {
 	ON_DAMAGE = 'on-damage',
   BEFORE_REFRESH = 'before-refresh',
   AFTER_REFRESH = 'after-refresh',
+  SHOP_PASSIVE = 'shop-passive',
 }

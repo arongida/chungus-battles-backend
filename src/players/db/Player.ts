@@ -19,6 +19,7 @@ const PlayerSchema = new Schema({
 	avatarUrl: String,
 	talents: [Number],
 	inventory: [Number],
+  income: Number,
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
@@ -57,6 +58,7 @@ export async function createNewPlayer(
 		avatarUrl: avatarUrl,
 		talents: [],
 		inventory: [],
+    income: 0,
 	});
 	await newPlayer.save().catch((err) => console.error(err));
 	return newPlayer.toObject() as unknown as Player;

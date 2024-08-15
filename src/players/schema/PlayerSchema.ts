@@ -26,6 +26,7 @@ export class Player extends Schema {
 	@type('number') lives: number;
 	@type('number') wins: number;
 	@type('string') avatarUrl: string;
+  @type('number') income: number;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> =
@@ -34,7 +35,8 @@ export class Player extends Schema {
 	availableItemCollections: ArraySchema<ItemCollection> =
 		new ArraySchema<ItemCollection>();
 	@type('number') dodgeRate: number = 0;
-	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
+  @type('number') refreshShopCost: number = 2;
+	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 , income: 0};
 	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
 	maxHp: number;
@@ -185,6 +187,7 @@ export class Player extends Schema {
 		const shopCollectionIds = this.getNeededIds(shop);
 		const inventoryCollectionIds = this.getNeededIds(this.inventory);
 		const itemsToCheck = shopCollectionIds.concat(inventoryCollectionIds);
+
 		const availableItemCollections = (await getItemCollectionsById(
 			itemsToCheck
 		)) as ItemCollection[];
@@ -226,11 +229,7 @@ export class Player extends Schema {
 				const uniqueShieldsNumber = [
 					...new Set(shields.map((shield) => shield.itemId)),
 				].length;
-				collectionIdsToActivate.push(
-					...new Set(
-						Array.from({ length: uniqueShieldsNumber }, (_, i) => i + 1)
-					)
-				);
+				collectionIdsToActivate.push(uniqueShieldsNumber);
 			}
 
 			if (collectionId >= ItemCollectionType.WARRIOR_1) {

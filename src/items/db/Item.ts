@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
 const ItemSchema = new Schema({
   itemId: Number,
@@ -11,6 +11,7 @@ const ItemSchema = new Schema({
     attack: Number,
     defense: Number,
     attackSpeed: Number,
+    income: Number,
   },
   image: String,
   tags: [String],
