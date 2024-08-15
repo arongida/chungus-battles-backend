@@ -17,6 +17,7 @@ import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCo
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
 import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
+import { ShopPassiveTriggerCommand } from '../commands/triggers/ShopPassiveTriggerCommand';
 
 export class DraftRoom extends Room<DraftState> {
 	maxClients = 1;
@@ -46,7 +47,11 @@ export class DraftRoom extends Room<DraftState> {
 			this.handleRefreshTalentSelection(client);
 		});
 
-		//this.setSimulationInterval((deltaTime) => this.update(deltaTime));
+		this.setSimulationInterval((deltaTime) => this.update(deltaTime), 1000);
+	}
+
+	update(deltaTime: number) {
+		this.dispatcher.dispatch(new ShopPassiveTriggerCommand());
 	}
 
 	async onJoin(client: Client, options: any) {
@@ -215,11 +220,11 @@ export class DraftRoom extends Room<DraftState> {
 	}
 
 	private async refreshShop(client: Client) {
-		if (this.state.player.gold < 2) {
+		if (this.state.player.gold < this.state.player.refreshShopCost) {
 			client.send('error', 'Not enough gold!');
 			return;
 		}
-		this.state.player.gold -= 2;
+		this.state.player.gold -= this.state.player.refreshShopCost;
 		this.state.shop.clear();
 		await this.updateShop(this.state.shopSize);
 	}

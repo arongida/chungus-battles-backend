@@ -12,6 +12,7 @@ export class ItemCollection extends Schema {
 	@type(['string']) tags: ArraySchema<string>;
 	base: number;
 	scaling: number;
+  activationRate: number;
 
 	executeBehavior(context: BehaviorContext) {
 		const behaviorKey = this

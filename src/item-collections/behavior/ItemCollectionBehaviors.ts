@@ -89,9 +89,11 @@ export const ItemCollectionBehaviors = {
 		const { attacker, client, availableTalents } = context;
 		attacker.talents = attacker.talents.filter((talent) => talent.tier !== 1);
 		const tier1Talents = availableTalents.filter(
-      (talent) => talent.tier === 1 && !talent.tags.includes('used')
-    );
-    const randomTier1Talents = tier1Talents.sort(() => 0.5 - Math.random()).slice(0, 2);
+			(talent) => talent.tier === 1 && !talent.tags.includes('used')
+		);
+		const randomTier1Talents = tier1Talents
+			.sort(() => 0.5 - Math.random())
+			.slice(0, 2);
 		randomTier1Talents.forEach((talent) => {
 			const newTalent = new Talent();
 			newTalent.assign(talent);
@@ -101,5 +103,45 @@ export const ItemCollectionBehaviors = {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_1,
 		});
+	},
+
+	[ItemCollectionType.WARRIOR_2]: (context: ItemCollectionBehaviorContext) => {
+		const { attacker, defender, client } = context;
+		attacker.talents = attacker.talents.filter((talent) => talent.tier !== 1);
+		const initialDamage = attacker.attack;
+		const damageAfterReduction = defender.getDamageAfterDefense(initialDamage);
+		defender.hp -= damageAfterReduction;
+		client.send('damage', {
+			playerId: defender.playerId,
+			damage: damageAfterReduction,
+		});
+		client.send(
+			'combat_log',
+			`${attacker.name} throws weapons for ${damageAfterReduction} damage!`
+		);
+		client.send('trigger_collection', {
+			playerId: attacker.playerId,
+			collectionId: ItemCollectionType.WARRIOR_2,
+		});
+	},
+
+  [ItemCollectionType.ROGUE_2]: (context: ItemCollectionBehaviorContext) => {
+		const { attacker, client } = context;
+    attacker.attackSpeed += 0.02;
+		client.send('trigger_collection', {
+			playerId: attacker.playerId,
+			collectionId: ItemCollectionType.ROGUE_2,
+		});
+	},
+
+	[ItemCollectionType.MERCHANT_2]: (context: ItemCollectionBehaviorContext) => {
+		const { attacker, client } = context;
+		if (attacker.refreshShopCost !== 1) {
+			attacker.refreshShopCost = 1;
+			client.send('trigger_collection', {
+				playerId: attacker.playerId,
+				collectionId: ItemCollectionType.MERCHANT_2,
+			});
+		}
 	},
 };

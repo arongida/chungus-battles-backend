@@ -35,7 +35,7 @@ export class FightRoom extends Room<FightState> {
 		this.clock.start();
 
 		//set simulation interval for room
-		this.setSimulationInterval((deltaTime) => this.update(deltaTime));
+		this.setSimulationInterval((deltaTime) => this.update(deltaTime), 100);
 	}
 
 	async onJoin(client: Client, options: any) {
@@ -140,6 +140,8 @@ export class FightRoom extends Room<FightState> {
 				this.state.battleStarted = false;
 				this.state.player.attackTimer.clear();
 				this.state.enemy.attackTimer.clear();
+        this.state.player.poisonTimer?.clear();
+        this.state.enemy.poisonTimer?.clear();
 				if (this.state.endBurnTimer) this.state.endBurnTimer.clear();
 				this.state.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast('combat_log', 'The battle has ended!');

@@ -35,7 +35,8 @@ export class Player extends Schema {
 	availableItemCollections: ArraySchema<ItemCollection> =
 		new ArraySchema<ItemCollection>();
 	@type('number') dodgeRate: number = 0;
-	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 };
+  @type('number') refreshShopCost: number = 2;
+	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 , income: 0};
 	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
 	maxHp: number;

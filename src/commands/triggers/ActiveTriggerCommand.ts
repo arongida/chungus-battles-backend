@@ -4,27 +4,41 @@ import { TalentBehaviorContext } from '../../talents/behavior/TalentBehaviorCont
 import { TriggerType } from '../../common/types';
 import { FightRoom } from '../../rooms/FightRoom';
 import { Player } from '../../players/schema/PlayerSchema';
+import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
 
 export class ActiveTriggerCommand extends Command<FightRoom> {
 	execute() {
-		this.startActiveTalentLoop(this.state.player, this.state.enemy);
-		this.startActiveTalentLoop(this.state.enemy, this.state.player);
+		this.startActiveEffectsLoop(this.state.player, this.state.enemy);
+		this.startActiveEffectsLoop(this.state.enemy, this.state.player);
 	}
 
-	startActiveTalentLoop(player: Player, enemy: Player) {
+	startActiveEffectsLoop(player: Player, enemy: Player) {
 		const activeTalents: Talent[] = player.talents.filter((talent) =>
 			talent.tags.includes(TriggerType.ACTIVE)
 		);
-		const activeTalentBehaviorContext: TalentBehaviorContext = {
+		const activeItemCollections: ItemCollection[] =
+			player.activeItemCollections.filter((itemCollection) =>
+				itemCollection.tags.includes(TriggerType.ACTIVE)
+			);
+		const activeEffectBehaviorContext: TalentBehaviorContext = {
 			client: this.state.playerClient,
 			attacker: player,
 			defender: enemy,
 		};
+
 		activeTalents.forEach((talent) => {
 			this.state.skillsTimers.push(
 				this.clock.setInterval(() => {
-					talent.executeBehavior(activeTalentBehaviorContext);
+					talent.executeBehavior(activeEffectBehaviorContext);
 				}, (1 / talent.activationRate) * 1000)
+			);
+		});
+
+		activeItemCollections.forEach((itemCollection) => {
+			this.state.skillsTimers.push(
+				this.clock.setInterval(() => {
+					itemCollection.executeBehavior(activeEffectBehaviorContext);
+				}, (1 / itemCollection.activationRate) * 1000)
 			);
 		});
 	}
