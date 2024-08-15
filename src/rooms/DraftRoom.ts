@@ -196,9 +196,9 @@ export class DraftRoom extends Room<DraftState> {
 
 		let highestTalentTier;
 		if (this.state.player.talents.length > 0) {
-			highestTalentTier = this.state.player.talents.sort((a, b) => b.tier - a.tier)[0]
-				.tier;
-        console.log('highestTalentTier: ', highestTalentTier);
+			highestTalentTier = this.state.player.talents.sort(
+				(a, b) => b.tier - a.tier
+			)[0].tier;
 		} else {
 			highestTalentTier = 0;
 		}

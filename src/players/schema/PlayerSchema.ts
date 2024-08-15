@@ -26,7 +26,7 @@ export class Player extends Schema {
 	@type('number') lives: number;
 	@type('number') wins: number;
 	@type('string') avatarUrl: string;
-  @type('number') income: number;
+  @type('number') income: number = 0;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> =
