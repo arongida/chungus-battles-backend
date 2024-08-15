@@ -194,12 +194,16 @@ export class DraftRoom extends Room<DraftState> {
 			this.state.player.talents.push(newTalent);
 		});
 
-		const distinctLevelTalents = [
-			...new Set(this.state.player.talents.map((talent) => talent.tier)),
-		];
+		let highestTalentTier;
+		if (this.state.player.talents.length > 0) {
+			highestTalentTier = this.state.player.talents.sort((a, b) => b.tier - a.tier)[0]
+				.tier;
+        console.log('highestTalentTier: ', highestTalentTier);
+		} else {
+			highestTalentTier = 0;
+		}
 
-		this.state.remainingTalentPoints =
-			player.level - distinctLevelTalents.length;
+		this.state.remainingTalentPoints = player.level - highestTalentTier;
 
 		await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
 			playerObjectFromDb: player,
