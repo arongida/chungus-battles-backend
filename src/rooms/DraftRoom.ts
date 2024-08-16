@@ -128,11 +128,11 @@ export class DraftRoom extends Room<DraftState> {
 			newShopSize,
 			this.state.player.level
 		);
-		const items = itemQueryResults;
-		items.forEach((item) => {
+		itemQueryResults.forEach((item) => {
 			let newItemObject = item as Item;
-			let affectedStats = newItemObject.affectedStats;
-			newItemObject.affectedStats = new AffectedStats(affectedStats);
+      const newAffectedStats = new AffectedStats();
+      newAffectedStats.assign(newItemObject.affectedStats);
+			newItemObject.affectedStats = newAffectedStats;
 			const newItem = new Item();
 			newItem.assign(newItemObject);
 			this.state.shop.push(newItem);

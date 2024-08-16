@@ -10,7 +10,7 @@ import { ItemCollection } from '../../item-collections/schema/ItemCollectionSche
 import { getItemCollectionsById } from '../../item-collections/db/ItemCollection';
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
 
-export class Player extends Schema {
+export class Player extends Schema implements IStats {
 	@type('number') playerId: number;
 	@type('string') name: string;
 	@type('number') private _hp: number;

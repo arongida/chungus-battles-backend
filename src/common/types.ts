@@ -10,6 +10,7 @@ export interface IStats {
 	defense: number;
 	attackSpeed: number;
   income: number;
+  maxHp?: number;
 }
 
 export enum TriggerType {
