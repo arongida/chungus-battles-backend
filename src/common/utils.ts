@@ -23,11 +23,11 @@ export function increaseStats(entity: IStats, stats: IStats, multiplier = 1) {
 }
 
 export function setStats(entity: IStats, stats: IStats) {
-	if (entity.hp && stats.hp) entity.hp = stats.hp;
-	if (entity.attack && stats.attack) entity.attack = stats.attack;
-	if (entity.defense && stats.defense) entity.defense = stats.defense;
-	if (entity.attackSpeed && stats.attackSpeed)
+	if (entity.hp) entity.hp = stats.hp;
+	if (entity.attack ) entity.attack = stats.attack;
+	if (entity.defense) entity.defense = stats.defense;
+	if (entity.attackSpeed)
 		entity.attackSpeed = stats.attackSpeed;
-	if (entity.income && stats.income) entity.income = stats.income;
-	if (entity.maxHp && stats.hp) entity.maxHp = stats.hp;
+	if (entity.income) entity.income = stats.income;
+	if (entity.maxHp) entity.maxHp = stats.hp;
 }
