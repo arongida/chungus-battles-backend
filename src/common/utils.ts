@@ -7,6 +7,7 @@ export function delay(ms: number, clock: Clock): Promise<void> {
 
 export function increaseStats(entity: IStats, stats: IStats, multiplier = 1) {
 	if (entity.hp && stats.hp) entity.hp += multiplier * stats.hp;
+
 	if (entity.attack && stats.attack) entity.attack += multiplier * stats.attack;
 	if (entity.defense && stats.defense)
 		entity.defense += multiplier * stats.defense;
@@ -15,7 +16,9 @@ export function increaseStats(entity: IStats, stats: IStats, multiplier = 1) {
 			multiplier *
 			(stats.attackSpeed * (entity.baseAttackSpeed || 0.8) -
 				entity.baseAttackSpeed || 0.8);
-	if (entity.income && stats.income) entity.income += multiplier * stats.income;
+	if (stats.income) {
+		entity.income += multiplier * stats.income;
+	}
 	if (entity.maxHp && stats.hp) entity.maxHp += multiplier * stats.hp;
 }
 
