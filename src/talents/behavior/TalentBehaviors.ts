@@ -70,8 +70,8 @@ export const TalentBehaviors = {
 	},
 
 	[TalentType.POISON]: (context: TalentBehaviorContext) => {
-		const { talent, attacker, defender, client, clock } = context;
-		defender.addPoisonStacks(clock, client, talent.activationRate);
+		const { attacker, defender, client, clock } = context;
+		defender.addPoisonStacks(clock, client);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.POISON,
@@ -299,13 +299,12 @@ export const TalentBehaviors = {
 	},
 
 	[TalentType.CORRODING_COLLECTION]: (context: TalentBehaviorContext) => {
-		const { attacker, defender, client, clock, talent } = context;
-		const numberOfItems = defender.inventory.length;
+		const { attacker, defender, client, clock } = context;
+		const poisonStackToApply = defender.inventory.length * 2;
 		defender.addPoisonStacks(
 			clock,
 			client,
-			talent.activationRate,
-			numberOfItems
+			poisonStackToApply
 		);
 
 		client.send(
