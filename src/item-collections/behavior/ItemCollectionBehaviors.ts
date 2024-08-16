@@ -126,8 +126,8 @@ export const ItemCollectionBehaviors = {
 	},
 
   [ItemCollectionType.ROGUE_2]: (context: ItemCollectionBehaviorContext) => {
-		const { attacker, client } = context;
-    attacker.attackSpeed += 0.02;
+		const { attacker, client, itemCollection } = context;
+    attacker.attackSpeed += (attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed);
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_2,
@@ -143,5 +143,14 @@ export const ItemCollectionBehaviors = {
 				collectionId: ItemCollectionType.MERCHANT_2,
 			});
 		}
+	},
+
+  [ItemCollectionType.ROGUE_3]: (context: ItemCollectionBehaviorContext) => {
+		const { attacker, defender, client, clock } = context;
+    defender.addPoisonStacks(clock, client);
+		client.send('trigger_collection', {
+			playerId: attacker.playerId,
+			collectionId: ItemCollectionType.ROGUE_3,
+		});
 	},
 };

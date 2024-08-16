@@ -1,17 +1,18 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
+import { IStats } from '../../common/types';
 
-export class AffectedStats extends Schema {
-  @type('number') hp: number;
-  @type('number') attack: number;
-  @type('number') defense: number;
-  @type('number') attackSpeed: number;
-  @type('number') income: number;
+export class AffectedStats extends Schema implements IStats {
+  @type('number') hp: number = 0;
+  @type('number') attack: number = 0;
+  @type('number') defense: number = 0;
+  @type('number') attackSpeed: number = 0;
+  @type('number') income: number = 0;
 }
 export class Item extends Schema {
   @type('number') itemId: number;
   @type('string') name: string;
   @type('string') description: string;
-  @type('number') price: number;
+  @type('number') price: number = 100;
   @type(AffectedStats) affectedStats: AffectedStats;
   @type('number') levelRequirement: number;
   @type('string') image: string;

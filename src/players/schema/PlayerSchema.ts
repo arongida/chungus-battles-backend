@@ -10,7 +10,7 @@ import { ItemCollection } from '../../item-collections/schema/ItemCollectionSche
 import { getItemCollectionsById } from '../../item-collections/db/ItemCollection';
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
 
-export class Player extends Schema {
+export class Player extends Schema implements IStats {
 	@type('number') playerId: number;
 	@type('string') name: string;
 	@type('number') private _hp: number;
@@ -21,6 +21,7 @@ export class Player extends Schema {
 	@type('string') sessionId: string;
 	@type('number') private _defense: number;
 	@type('number') private _attackSpeed: number;
+  @type('number') baseAttackSpeed: number = 0.8;
 	@type('number') maxXp: number;
 	@type('number') round: number;
 	@type('number') lives: number;
@@ -93,8 +94,8 @@ export class Player extends Schema {
 	set poisonStack(value: number) {
 		if (value < 0) {
 			this._poisonStack = 0;
-		} else if (value > 50) {
-			this._poisonStack = 50;
+		} else if (value > 100) {
+			this._poisonStack = 100;
 		} else {
 			this._poisonStack = value;
 		}
@@ -148,8 +149,8 @@ export class Player extends Schema {
 	addPoisonStacks(
 		clock: ClockTimer,
 		playerClient: Client,
-		activationRate: number,
-		stack: number = 1
+		stack: number = 1,
+		activationRate: number = 0.015
 	) {
 		this.poisonStack += stack;
 		playerClient.send(
