@@ -52,7 +52,11 @@ export class FightRoom extends Room<FightState> {
 
 		//set up player state
 		await this.setUpState(player);
+
+
 		setStats(this.state.player.initialStats, this.state.player);
+		//player init stats
+
 		this.state.player.maxHp = this.state.player.hp;
 		this.state.playerClient = client;
 
@@ -65,11 +69,12 @@ export class FightRoom extends Room<FightState> {
 			//set up enemy state
 			await this.setUpState(enemy, true);
 			setStats(this.state.enemy.initialStats, this.state.enemy);
+			//enemy init stats
 			this.state.enemy.maxHp = this.state.enemy.hp;
 		}
 
-    //load talents from db
-    this.state.availableTalents = await getAllTalents() as Talent[];
+		//load talents from db
+		this.state.availableTalents = (await getAllTalents()) as Talent[];
 
 		// check if player is already playing
 		if (this.state.player.sessionId !== '')
@@ -140,8 +145,8 @@ export class FightRoom extends Room<FightState> {
 				this.state.battleStarted = false;
 				this.state.player.attackTimer.clear();
 				this.state.enemy.attackTimer.clear();
-        this.state.player.poisonTimer?.clear();
-        this.state.enemy.poisonTimer?.clear();
+				this.state.player.poisonTimer?.clear();
+				this.state.enemy.poisonTimer?.clear();
 				if (this.state.endBurnTimer) this.state.endBurnTimer.clear();
 				this.state.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast('combat_log', 'The battle has ended!');
@@ -238,7 +243,7 @@ export class FightRoom extends Room<FightState> {
 
 		//start fight start effects
 		this.dispatcher.dispatch(new FightStartTriggerCommand());
-  
+
 		//start active skill loops
 		this.dispatcher.dispatch(new ActiveTriggerCommand());
 	}
@@ -246,11 +251,13 @@ export class FightRoom extends Room<FightState> {
 	//get player, enemy and talents from db and map them to the room state
 	async setUpState(player: Player, isEnemy = false) {
 		const newPlayer = new Player(player);
+    if (!newPlayer.income) newPlayer.income = 0;
 		if (!isEnemy) {
 			this.state.player.assign(newPlayer);
 		} else {
 			this.state.enemy.assign(newPlayer);
 		}
+
 
 		if (player.talents.length > 0) {
 			const talents = (await getTalentsById(
@@ -271,7 +278,7 @@ export class FightRoom extends Room<FightState> {
 		}
 
 		await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
-      playerObjectFromDb: player,
+			playerObjectFromDb: player,
 			isEnemy: isEnemy,
 		});
 	}
@@ -304,7 +311,8 @@ export class FightRoom extends Room<FightState> {
 		//trigger fight-end effects
 		this.dispatcher.dispatch(new FightEndTriggerCommand());
 
-		this.state.player.gold += this.state.player.rewardRound * 4 + this.state.player.income;
+		this.state.player.gold +=
+			this.state.player.rewardRound * 4 + this.state.player.income;
 		this.state.player.xp += this.state.player.rewardRound * 2;
 
 		this.broadcast(

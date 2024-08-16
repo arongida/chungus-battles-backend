@@ -16,9 +16,7 @@ export function increaseStats(entity: IStats, stats: IStats, multiplier = 1) {
 			multiplier *
 			(stats.attackSpeed * (entity.baseAttackSpeed || 0.8) -
 				entity.baseAttackSpeed || 0.8);
-	if (stats.income) {
-		entity.income += multiplier * stats.income;
-	}
+	entity.income += multiplier * stats.income;
 	if (entity.maxHp && stats.hp) entity.maxHp += multiplier * stats.hp;
 }
 
