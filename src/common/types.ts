@@ -11,6 +11,7 @@ export interface IStats {
 	attackSpeed: number;
   income: number;
   maxHp?: number;
+  baseAttackSpeed?: number;
 }
 
 export enum TriggerType {

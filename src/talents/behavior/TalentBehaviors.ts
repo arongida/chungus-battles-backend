@@ -56,10 +56,12 @@ export const TalentBehaviors = {
 
 	[TalentType.ASSASSIN_AMUSEMENT]: (context: TalentBehaviorContext) => {
 		const { attacker, client, talent } = context;
-		attacker.attackSpeed += talent.activationRate;
+		attacker.attackSpeed +=
+			talent.activationRate * attacker.baseAttackSpeed -
+			attacker.baseAttackSpeed;
 		client.send(
 			'combat_log',
-			`${attacker.name} gains ${talent.activationRate} attack speed!`
+			`${attacker.name} gains ${talent.activationRate * 100 - 100}% attack speed!`
 		);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
@@ -231,7 +233,10 @@ export const TalentBehaviors = {
 	[TalentType.WEAPON_WHISPERER]: (context: TalentBehaviorContext) => {
 		const { attacker, talent, client } = context;
 
-		const numberOfMeleeWeapons = attacker.getNumberOfItemsForTags(['weapon', 'melee']);
+		const numberOfMeleeWeapons = attacker.getNumberOfItemsForTags([
+			'weapon',
+			'melee',
+		]);
 		const attackBonus = numberOfMeleeWeapons * talent.activationRate;
 		attacker.attack += attackBonus;
 		client.send(
@@ -316,12 +321,12 @@ export const TalentBehaviors = {
 	[TalentType.ZEALOT]: (context: TalentBehaviorContext) => {
 		const { defender, client, talent } = context;
 		const attackSpeedBuff =
-			0.02 + defender.defense * talent.activationRate * 0.01;
-		const normalizedValue = Math.round(attackSpeedBuff * 100) / 100;
-		defender.attackSpeed += normalizedValue;
+			0.02 + defender.defense * talent.activationRate * 0.01 + 1;
+		defender.attackSpeed +=
+			defender.baseAttackSpeed * attackSpeedBuff - defender.baseAttackSpeed;
 		client.send(
 			'combat_log',
-			`${defender.name} gains ${normalizedValue} attack speed!`
+			`${defender.name} gains ${attackSpeedBuff * 100 - 100}% attack speed!`
 		);
 		client.send('trigger_talent', {
 			playerId: defender.playerId,

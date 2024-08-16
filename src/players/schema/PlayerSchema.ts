@@ -21,6 +21,7 @@ export class Player extends Schema implements IStats {
 	@type('string') sessionId: string;
 	@type('number') private _defense: number;
 	@type('number') private _attackSpeed: number;
+  @type('number') baseAttackSpeed: number = 0.8;
 	@type('number') maxXp: number;
 	@type('number') round: number;
 	@type('number') lives: number;
