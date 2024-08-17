@@ -58,7 +58,11 @@ export class FightRoom extends Room<FightState> {
 
 		//set up player state
 		await this.setUpState(player);
+
+
 		setStats(this.state.player.initialStats, this.state.player);
+		//player init stats
+
 		this.state.player.maxHp = this.state.player.hp;
 		this.state.playerClient = client;
 
@@ -71,6 +75,7 @@ export class FightRoom extends Room<FightState> {
 			//set up enemy state
 			await this.setUpState(enemy, true);
 			setStats(this.state.enemy.initialStats, this.state.enemy);
+			//enemy init stats
 			this.state.enemy.maxHp = this.state.enemy.hp;
 		}
 
@@ -252,11 +257,13 @@ export class FightRoom extends Room<FightState> {
 	//get player, enemy and talents from db and map them to the room state
 	async setUpState(player: Player, isEnemy = false) {
 		const newPlayer = new Player(player);
+    if (!newPlayer.income) newPlayer.income = 0;
 		if (!isEnemy) {
 			this.state.player.assign(newPlayer);
 		} else {
 			this.state.enemy.assign(newPlayer);
 		}
+
 
 		if (player.talents.length > 0) {
 			const talents = (await getTalentsById(

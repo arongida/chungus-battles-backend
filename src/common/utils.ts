@@ -16,18 +16,15 @@ export function increaseStats(entity: IStats, stats: IStats, multiplier = 1) {
 			multiplier *
 			(stats.attackSpeed * (entity.baseAttackSpeed || 0.8) -
 				entity.baseAttackSpeed || 0.8);
-	if (stats.income) {
-		entity.income += multiplier * stats.income;
-	}
+	entity.income += multiplier * stats.income;
 	if (entity.maxHp && stats.hp) entity.maxHp += multiplier * stats.hp;
 }
 
 export function setStats(entity: IStats, stats: IStats) {
-	if (entity.hp) entity.hp = stats.hp;
-	if (entity.attack ) entity.attack = stats.attack;
-	if (entity.defense) entity.defense = stats.defense;
-	if (entity.attackSpeed)
-		entity.attackSpeed = stats.attackSpeed;
-	if (entity.income) entity.income = stats.income;
+	entity.hp = stats.hp;
+	entity.attack = stats.attack;
+	entity.defense = stats.defense;
+	entity.attackSpeed = stats.attackSpeed;
+	entity.income = stats.income;
 	if (entity.maxHp) entity.maxHp = stats.hp;
 }
