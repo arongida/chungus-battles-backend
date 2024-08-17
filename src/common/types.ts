@@ -17,6 +17,7 @@ export interface IStats {
 export enum TriggerType {
 	LEVEL_UP = 'level-up',
 	SHOP_START = 'shop-start',
+  SHOP_END = 'shop-end',
 	ACTIVE = 'active',
 	FIGHT_START = 'fight-start',
 	FIGHT_END = 'fight-end',

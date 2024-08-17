@@ -111,6 +111,7 @@ export class DraftRoom extends Room<DraftState> {
 			await this.allowReconnection(client, 20);
 			console.log('client reconnected!');
 		} catch (e) {
+
 			//save player state to db
 			this.state.player.sessionId = '';
 			const copiedPlayer = await copyPlayer(this.state.player);
