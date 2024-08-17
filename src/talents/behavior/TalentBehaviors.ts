@@ -268,9 +268,10 @@ export const TalentBehaviors = {
 		const hpBonus = attacker.hp * talent.activationRate;
 		const attackBonus = attacker.attack * talent.activationRate;
 		attacker.hp += hpBonus;
+    attacker.baseStats.hp += hpBonus;
 		attacker.maxHp = attacker.hp;
 		attacker.attack += attackBonus;
-    attacker.initialStats.attack += attackBonus;
+    attacker.baseStats.attack += attackBonus;
 		client.send(
 			'combat_log',
 			`${attacker.name} is strong hence gets an increase to stats!`

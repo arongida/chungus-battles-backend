@@ -156,15 +156,10 @@ export const ItemCollectionBehaviors = {
 
   [ItemCollectionType.WARRIOR_3]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
-    console.log('attacker attack', attacker.attack);
-    console.log('attacker maxHP', attacker.maxHp);
     const missingHPPercentage = (attacker.maxHp - attacker.hp) / attacker.maxHp;
-    console.log('missing HP percentage', missingHPPercentage);
-    console.log('initial attack', attacker.initialStats.attack);
-    const bonusAttack = attacker.initialStats.attack * missingHPPercentage;
+    const bonusAttack = attacker.baseStats.attack * missingHPPercentage;
     const previousSavedValue = itemCollection.savedValue;
     itemCollection.savedValue = bonusAttack;
-    console.log('bonus attack', bonusAttack);
     attacker.attack += (bonusAttack - previousSavedValue);
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
