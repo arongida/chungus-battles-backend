@@ -125,9 +125,10 @@ export const ItemCollectionBehaviors = {
 		});
 	},
 
-  [ItemCollectionType.ROGUE_2]: (context: ItemCollectionBehaviorContext) => {
+	[ItemCollectionType.ROGUE_2]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
-    attacker.attackSpeed += (attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed);
+		attacker.attackSpeed +=
+			attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed;
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_2,
@@ -145,25 +146,34 @@ export const ItemCollectionBehaviors = {
 		}
 	},
 
-  [ItemCollectionType.ROGUE_3]: (context: ItemCollectionBehaviorContext) => {
+	[ItemCollectionType.ROGUE_3]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, defender, client, clock } = context;
-    defender.addPoisonStacks(clock, client);
+		defender.addPoisonStacks(clock, client);
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_3,
 		});
 	},
 
-  [ItemCollectionType.WARRIOR_3]: (context: ItemCollectionBehaviorContext) => {
+	[ItemCollectionType.WARRIOR_3]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
-    const missingHPPercentage = (attacker.maxHp - attacker.hp) / attacker.maxHp;
-    const bonusAttack = attacker.baseStats.attack * missingHPPercentage;
-    const previousSavedValue = itemCollection.savedValue;
-    itemCollection.savedValue = bonusAttack;
-    attacker.attack += (bonusAttack - previousSavedValue);
+		const missingHPPercentage = (attacker.maxHp - attacker.hp) / attacker.maxHp;
+		const bonusAttack = attacker.baseStats.attack * missingHPPercentage;
+		const previousSavedValue = itemCollection.savedValue;
+		itemCollection.savedValue = bonusAttack;
+		attacker.attack += bonusAttack - previousSavedValue;
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.WARRIOR_3,
+		});
+	},
+
+	[ItemCollectionType.MERCHANT_3]: (context: ItemCollectionBehaviorContext) => {
+		const { attacker, client } = context;
+		attacker.income += 1;
+		client.send('trigger_collection', {
+			playerId: attacker.playerId,
+			collectionId: ItemCollectionType.MERCHANT_3,
 		});
 	},
 };

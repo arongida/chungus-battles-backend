@@ -149,7 +149,7 @@ export class FightRoom extends Room<FightState> {
 				this.state.enemy.attackTimer.clear();
 				this.state.player.poisonTimer?.clear();
 				this.state.enemy.poisonTimer?.clear();
-        this.state.auraTimer?.clear();
+				this.state.auraTimer?.clear();
 				this.state.endBurnTimer?.clear();
 				this.state.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast('combat_log', 'The battle has ended!');
@@ -320,14 +320,13 @@ export class FightRoom extends Room<FightState> {
 		//trigger fight-end effects
 		this.dispatcher.dispatch(new FightEndTriggerCommand());
 
-		this.state.player.gold +=
+		const goldToGet =
 			this.state.player.rewardRound * 4 + this.state.player.income;
+
+		this.state.player.gold += goldToGet;
 		this.state.player.xp += this.state.player.rewardRound * 2;
 
-		this.broadcast(
-			'combat_log',
-			`You gained ${this.state.player.rewardRound * 4} gold!`
-		);
+		this.broadcast('combat_log', `You gained ${goldToGet} gold!`);
 		this.broadcast(
 			'combat_log',
 			`You gained ${this.state.player.rewardRound * 2} xp!`

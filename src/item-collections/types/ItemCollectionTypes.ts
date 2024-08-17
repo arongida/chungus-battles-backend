@@ -12,4 +12,5 @@ export enum ItemCollectionType {
   MERCHANT_2 = 11,
   ROGUE_3 = 12,
   WARRIOR_3 = 13,
+  MERCHANT_3 = 14,
 }

@@ -420,9 +420,6 @@ export const TalentBehaviors = {
 		const armorAddictReduction =
 			talent.activationRate * defender.getNumberOfItemsForTags(['armor']);
 		defender.damageToTake = damage - armorAddictReduction;
-		console.log(
-			`Reduced damage by ${armorAddictReduction}, new damage: ${defender.damageToTake}`
-		);
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
 			talentId: TalentType.ARMOR_ADDICT,
