@@ -270,6 +270,7 @@ export const TalentBehaviors = {
 		attacker.hp += hpBonus;
 		attacker.maxHp = attacker.hp;
 		attacker.attack += attackBonus;
+    attacker.initialStats.attack += attackBonus;
 		client.send(
 			'combat_log',
 			`${attacker.name} is strong hence gets an increase to stats!`
@@ -284,14 +285,14 @@ export const TalentBehaviors = {
 
 	[TalentType.INTIMIDATING_WEALTH]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
-		const attackBonus =
-			Math.min(0.2 + attacker.gold * 0.0025, 0.4) * defender.attack;
-		defender.attack -= attackBonus;
+		const attackSpeedBonus =
+			Math.min(0.2 + attacker.gold * 0.0025, 0.4) * defender.attackSpeed;
+		defender.attackSpeed -= attackSpeedBonus;
 		client.send(
 			'combat_log',
 			`${attacker.name} intimidates ${defender.name} with their wealth!`
 		);
-		client.send('combat_log', `${defender.name} looses ${attackBonus} attack!`);
+		client.send('combat_log', `${defender.name} looses ${attackSpeedBonus} attack!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.INTIMIDATING_WEALTH,

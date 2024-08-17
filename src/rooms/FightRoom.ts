@@ -18,6 +18,7 @@ import { OnDamageTriggerCommand } from '../commands/triggers/OnDamageTriggerComm
 import { OnAttackedTriggerCommand } from '../commands/triggers/OnAttackedTriggerCommand';
 import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
+import { AuraTriggerCommand } from '../commands/triggers/AuraTriggerCommand';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
@@ -36,6 +37,11 @@ export class FightRoom extends Room<FightState> {
 
 		//set simulation interval for room
 		this.setSimulationInterval((deltaTime) => this.update(deltaTime), 100);
+		this.setSimulationInterval(() => {
+			if (this.state.battleStarted) {
+				this.dispatcher.dispatch(new AuraTriggerCommand());
+			}
+		}, 1000);
 	}
 
 	async onJoin(client: Client, options: any) {
@@ -68,8 +74,8 @@ export class FightRoom extends Room<FightState> {
 			this.state.enemy.maxHp = this.state.enemy.hp;
 		}
 
-    //load talents from db
-    this.state.availableTalents = await getAllTalents() as Talent[];
+		//load talents from db
+		this.state.availableTalents = (await getAllTalents()) as Talent[];
 
 		// check if player is already playing
 		if (this.state.player.sessionId !== '')
@@ -140,8 +146,8 @@ export class FightRoom extends Room<FightState> {
 				this.state.battleStarted = false;
 				this.state.player.attackTimer.clear();
 				this.state.enemy.attackTimer.clear();
-        this.state.player.poisonTimer?.clear();
-        this.state.enemy.poisonTimer?.clear();
+				this.state.player.poisonTimer?.clear();
+				this.state.enemy.poisonTimer?.clear();
 				if (this.state.endBurnTimer) this.state.endBurnTimer.clear();
 				this.state.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast('combat_log', 'The battle has ended!');
@@ -238,7 +244,7 @@ export class FightRoom extends Room<FightState> {
 
 		//start fight start effects
 		this.dispatcher.dispatch(new FightStartTriggerCommand());
-  
+
 		//start active skill loops
 		this.dispatcher.dispatch(new ActiveTriggerCommand());
 	}
@@ -271,7 +277,7 @@ export class FightRoom extends Room<FightState> {
 		}
 
 		await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
-      playerObjectFromDb: player,
+			playerObjectFromDb: player,
 			isEnemy: isEnemy,
 		});
 	}
@@ -304,7 +310,8 @@ export class FightRoom extends Room<FightState> {
 		//trigger fight-end effects
 		this.dispatcher.dispatch(new FightEndTriggerCommand());
 
-		this.state.player.gold += this.state.player.rewardRound * 4 + this.state.player.income;
+		this.state.player.gold +=
+			this.state.player.rewardRound * 4 + this.state.player.income;
 		this.state.player.xp += this.state.player.rewardRound * 2;
 
 		this.broadcast(

@@ -13,6 +13,8 @@ export class ItemCollection extends Schema {
 	base: number;
 	scaling: number;
   activationRate: number;
+  savedValue: number = 0;
+
 
 	executeBehavior(context: BehaviorContext) {
 		const behaviorKey = this

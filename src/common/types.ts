@@ -26,4 +26,5 @@ export enum TriggerType {
   BEFORE_REFRESH = 'before-refresh',
   AFTER_REFRESH = 'after-refresh',
   SHOP_PASSIVE = 'shop-passive',
+  AURA = 'aura',
 }
