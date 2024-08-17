@@ -18,6 +18,7 @@ import { OnDamageTriggerCommand } from '../commands/triggers/OnDamageTriggerComm
 import { OnAttackedTriggerCommand } from '../commands/triggers/OnAttackedTriggerCommand';
 import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
+import { AuraTriggerCommand } from '../commands/triggers/AuraTriggerCommand';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
@@ -53,8 +54,8 @@ export class FightRoom extends Room<FightState> {
 		//set up player state
 		await this.setUpState(player);
 
-
 		setStats(this.state.player.initialStats, this.state.player);
+		setStats(this.state.player.baseStats, this.state.player);
 		//player init stats
 
 		this.state.player.maxHp = this.state.player.hp;
@@ -69,6 +70,7 @@ export class FightRoom extends Room<FightState> {
 			//set up enemy state
 			await this.setUpState(enemy, true);
 			setStats(this.state.enemy.initialStats, this.state.enemy);
+			setStats(this.state.enemy.baseStats, this.state.enemy);
 			//enemy init stats
 			this.state.enemy.maxHp = this.state.enemy.hp;
 		}
@@ -147,7 +149,8 @@ export class FightRoom extends Room<FightState> {
 				this.state.enemy.attackTimer.clear();
 				this.state.player.poisonTimer?.clear();
 				this.state.enemy.poisonTimer?.clear();
-				if (this.state.endBurnTimer) this.state.endBurnTimer.clear();
+				this.state.auraTimer?.clear();
+				this.state.endBurnTimer?.clear();
 				this.state.skillsTimers.forEach((timer) => timer.clear());
 				this.broadcast('combat_log', 'The battle has ended!');
 				this.handleFightEnd();
@@ -246,18 +249,24 @@ export class FightRoom extends Room<FightState> {
 
 		//start active skill loops
 		this.dispatcher.dispatch(new ActiveTriggerCommand());
+
+		//start aura trigger interval
+		this.state.auraTimer = this.clock.setInterval(() => {
+			if (this.state.battleStarted) {
+				this.dispatcher.dispatch(new AuraTriggerCommand());
+			}
+		}, 1000);
 	}
 
 	//get player, enemy and talents from db and map them to the room state
 	async setUpState(player: Player, isEnemy = false) {
 		const newPlayer = new Player(player);
-    if (!newPlayer.income) newPlayer.income = 0;
+		if (!newPlayer.income) newPlayer.income = 0;
 		if (!isEnemy) {
 			this.state.player.assign(newPlayer);
 		} else {
 			this.state.enemy.assign(newPlayer);
 		}
-
 
 		if (player.talents.length > 0) {
 			const talents = (await getTalentsById(
@@ -311,14 +320,13 @@ export class FightRoom extends Room<FightState> {
 		//trigger fight-end effects
 		this.dispatcher.dispatch(new FightEndTriggerCommand());
 
-		this.state.player.gold +=
+		const goldToGet =
 			this.state.player.rewardRound * 4 + this.state.player.income;
+
+		this.state.player.gold += goldToGet;
 		this.state.player.xp += this.state.player.rewardRound * 2;
 
-		this.broadcast(
-			'combat_log',
-			`You gained ${this.state.player.rewardRound * 4} gold!`
-		);
+		this.broadcast('combat_log', `You gained ${goldToGet} gold!`);
 		this.broadcast(
 			'combat_log',
 			`You gained ${this.state.player.rewardRound * 2} xp!`
