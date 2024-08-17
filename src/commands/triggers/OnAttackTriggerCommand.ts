@@ -22,7 +22,7 @@ export class OnAttackTriggerCommand extends Command<
 			damage: damage,
 			clock: this.clock,
 		};
-		//handle on attack talents
+
     const itemCollectionsToTrigger: ItemCollection[] = attacker.activeItemCollections.filter((talent) =>
       talent.tags.includes(TriggerType.ON_ATTACK)
     );
