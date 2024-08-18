@@ -202,32 +202,27 @@ export const ItemCollectionBehaviors = {
 	},
 
 	[ItemCollectionType.MERCHANT_4]: (context: ItemCollectionBehaviorContext) => {
-		const { attacker, client } = context;
-		const bonusCoefficent = attacker.income * 0.01;
-		if (bonusCoefficent > 0) {
-			const attackBonus = Math.max(
-				Math.round(attacker.attack * bonusCoefficent),
-				1
-			);
-			attacker.attack += attackBonus;
-			attacker.initialStats.attack += attackBonus;
-			const defenseBonus = Math.max(
-				Math.round(attacker.defense * bonusCoefficent),
-				1
-			);
-			attacker.defense += defenseBonus;
-			attacker.initialStats.defense += defenseBonus;
-			const hpBonus = Math.max(Math.round(attacker.hp * bonusCoefficent), 1);
-			attacker.maxHp += hpBonus;
-			attacker.hp += hpBonus;
-			attacker.initialStats.hp += hpBonus;
-			const attackSpeedBonus = Math.max(
-				attacker.attackSpeed * bonusCoefficent,
-				0.1
-			);
-			attacker.attackSpeed += attackSpeedBonus;
-			attacker.initialStats.attackSpeed += attackSpeedBonus;
-		}
+		const { attacker, client, itemCollection } = context;
+		const bonusCoefficent =
+			(attacker.income * itemCollection.scaling + itemCollection.base) / 100;
+
+		const attackBonus = Math.round(attacker.attack * bonusCoefficent);
+		attacker.attack += attackBonus;
+		attacker.initialStats.attack += attackBonus;
+
+		const defenseBonus = Math.round(attacker.defense * bonusCoefficent);
+		attacker.defense += defenseBonus;
+		attacker.initialStats.defense += defenseBonus;
+
+		const hpBonus = Math.round(attacker.hp * bonusCoefficent);
+		attacker.maxHp += hpBonus;
+		attacker.hp += hpBonus;
+		attacker.initialStats.hp += hpBonus;
+
+		const attackSpeedBonus = attacker.baseAttackSpeed * bonusCoefficent;
+		attacker.attackSpeed += attackSpeedBonus;
+		attacker.initialStats.attackSpeed += attackSpeedBonus;
+
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.MERCHANT_4,
@@ -263,7 +258,10 @@ export const ItemCollectionBehaviors = {
 			playerId: defender.playerId,
 			damage: damageAfterReduction,
 		});
-    client.send('combat_log', `${attacker.name} engraved gold on their weapon to deal ${damageAfterReduction} damage to ${defender.name}!`);
+		client.send(
+			'combat_log',
+			`${attacker.name} engraved gold on their weapon to deal ${damageAfterReduction} damage to ${defender.name}!`
+		);
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_5,
@@ -273,9 +271,12 @@ export const ItemCollectionBehaviors = {
 	[ItemCollectionType.MERCHANT_5]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
 		const healingAmount =
-			attacker.gold * itemCollection.scaling + itemCollection.base;
+			attacker.income * itemCollection.scaling + itemCollection.base;
 		attacker.hp += healingAmount;
-		client.send('combat_log', `${attacker.name}: private doctor was paid to heal ${healingAmount}!`);
+		client.send(
+			'combat_log',
+			`${attacker.name}:  private doctor was paid to heal ${healingAmount}!`
+		);
 		client.send('healing', {
 			playerId: attacker.playerId,
 			healing: healingAmount,
