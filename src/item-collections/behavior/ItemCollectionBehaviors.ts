@@ -165,12 +165,12 @@ export const ItemCollectionBehaviors = {
 		});
 	},
 
-	[ItemCollectionType.MERCHANT_3]: (context: ItemCollectionBehaviorContext) => {
+	[ItemCollectionType.MERCHANT_4]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client } = context;
 		attacker.income += 1;
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
-			collectionId: ItemCollectionType.MERCHANT_3,
+			collectionId: ItemCollectionType.MERCHANT_4,
 		});
 	},
 
@@ -201,7 +201,7 @@ export const ItemCollectionBehaviors = {
 		});
 	},
 
-	[ItemCollectionType.MERCHANT_4]: (context: ItemCollectionBehaviorContext) => {
+	[ItemCollectionType.MERCHANT_3]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
 		const bonusCoefficent =
 			(attacker.income * itemCollection.scaling + itemCollection.base) / 100;
@@ -225,7 +225,7 @@ export const ItemCollectionBehaviors = {
 
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
-			collectionId: ItemCollectionType.MERCHANT_4,
+			collectionId: ItemCollectionType.MERCHANT_3,
 		});
 	},
 
