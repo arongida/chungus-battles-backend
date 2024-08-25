@@ -61,7 +61,7 @@ export class DraftRoom extends Room<DraftState> {
 
 		if (!options.name) throw new Error('Name is required!');
 		if (!options.playerId) throw new Error('Player ID is required!');
-		if (!options.playerId) throw new Error('Avatar is required!');
+		if (!options.avatarUrl) throw new Error('Avatar is required!');
 
 		await delay(1000, this.clock);
 		const foundPlayer = await getPlayer(options.playerId);
