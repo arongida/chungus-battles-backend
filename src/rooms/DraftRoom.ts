@@ -135,7 +135,7 @@ export class DraftRoom extends Room<DraftState> {
 			newItemObject.affectedStats = newAffectedStats;
 			const newItem = new Item();
 			newItem.assign(newItemObject);
-			this.state.shop.push(newItem);
+			if (this.state.shop.length < 6) this.state.shop.push(newItem);
 		});
 		await this.state.player.updateAvailableItemCollections(this.state.shop);
 		this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
@@ -171,7 +171,7 @@ export class DraftRoom extends Room<DraftState> {
 		talents.forEach((talent) => {
 			const newTalent = new Talent();
 			newTalent.assign(talent);
-			this.state.availableTalents.push(newTalent);
+			if (this.state.availableTalents.length < 2) this.state.availableTalents.push(newTalent);
 		});
 	}
 
