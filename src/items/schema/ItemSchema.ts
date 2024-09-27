@@ -14,7 +14,7 @@ export class Item extends Schema {
   @type('string') description: string;
   @type('number') price: number = 100;
   @type(AffectedStats) affectedStats: AffectedStats;
-  @type('number') levelRequirement: number;
+  @type('number') tier: number;
   @type('string') image: string;
   @type(['string']) tags: ArraySchema<string>;
   @type('boolean') sold: boolean = false;
