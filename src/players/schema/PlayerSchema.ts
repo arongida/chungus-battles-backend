@@ -190,13 +190,13 @@ export class Player extends Schema implements IStats {
 		const inventoryCollectionIds = this.getNeededIds(this.inventory);
 		const itemsToCheck = shopCollectionIds.concat(inventoryCollectionIds);
 
-		const availableItemCollections = (await getItemCollectionsById(
+		const availableItemCollectionsFromDb = (await getItemCollectionsById(
 			itemsToCheck
 		)) as ItemCollection[];
 
-		this.availableItemCollections.clear();
+		this.availableItemCollections = new ArraySchema<ItemCollection>();
 
-		availableItemCollections.forEach((itemCollection) => {
+		availableItemCollectionsFromDb.forEach((itemCollection) => {
 			const newItemCollection = new ItemCollection();
 			newItemCollection.assign(itemCollection);
 			this.availableItemCollections.push(newItemCollection);

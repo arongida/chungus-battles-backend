@@ -233,12 +233,6 @@ export const ItemCollectionBehaviors = {
 		const { attacker, defender, damage, client, itemCollection } = context;
 		const shouldExecute =
 			itemCollection.base > (defender.hp - damage) / defender.maxHp;
-		console.log(
-			itemCollection.base,
-			'>',
-			(defender.maxHp - (defender.hp - damage)) / defender.maxHp
-		);
-		console.log('shouldExecute', shouldExecute);
 		if (shouldExecute) {
 			defender.hp = -9999;
 			client.send('combat_log', `${attacker.name} executed ${defender.name}!`);
