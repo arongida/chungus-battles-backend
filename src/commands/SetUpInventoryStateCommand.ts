@@ -35,12 +35,12 @@ export class SetUpInventoryStateCommand extends Command<
 				playerObjectFromDb.inventory as unknown as number[]
 			)) as Item[];
 			playerObjectFromDb.inventory.forEach((itemId) => {
-				let newItem = new Item(
-					itemsDataFromDb.find(
-						(item) => item.itemId === (itemId as unknown as number)
-					)
+				let itemFromDb = itemsDataFromDb.find(
+					(item) => item.itemId === (itemId as unknown as number)
 				);
-				newItem.affectedStats = new AffectedStats(newItem.affectedStats);
+        const affectedStatsData = itemFromDb.affectedStats;
+        itemFromDb.affectedStats = new AffectedStats().assign(affectedStatsData);
+				const newItem = new Item().assign(itemFromDb);
 
 				playerToSetUp.inventory.push(newItem);
 				playerToSetUp.initialInventory.push(newItem);
