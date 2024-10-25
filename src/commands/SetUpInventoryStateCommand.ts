@@ -47,7 +47,7 @@ export class SetUpInventoryStateCommand extends Command<
 			});
 		}
 		if (this.state instanceof DraftState) {
-			await playerToSetUp.updateAvailableItemCollections(this.state.shop);
+			await playerToSetUp.updateAvailableItemCollections();
 		} else {
 			await playerToSetUp.updateAvailableItemCollections();
 		}

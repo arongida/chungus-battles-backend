@@ -12,7 +12,7 @@ export class FightStartTriggerCommand extends Command<FightRoom> {
 		this.applyFightStartEffects(this.state.enemy, this.state.player);
 	}
 
-	async applyFightStartEffects(player: Player, enemy: Player) {
+	applyFightStartEffects(player: Player, enemy: Player) {
     const fightStartContext: BehaviorContext = {
 			client: this.state.playerClient,
 			attacker: player,
