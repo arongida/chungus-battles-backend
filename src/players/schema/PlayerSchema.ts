@@ -7,7 +7,7 @@ import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
 import { increaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
-import { getItemCollectionsById } from '../../item-collections/db/ItemCollection';
+import { getAllItemCollections } from '../../item-collections/db/ItemCollection';
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
 
 export class Player extends Schema implements IStats {
@@ -185,14 +185,12 @@ export class Player extends Schema implements IStats {
 		}
 	}
 
-	async updateAvailableItemCollections(shop?: ArraySchema<Item>) {
-		const shopCollectionIds = this.getNeededIds(shop);
-		const inventoryCollectionIds = this.getNeededIds(this.inventory);
-		const itemsToCheck = shopCollectionIds.concat(inventoryCollectionIds);
+	async updateAvailableItemCollections() {
+		// const shopCollectionIds = this.getNeededIds(shop);
+		// const inventoryCollectionIds = this.getNeededIds(this.inventory);
+		// const itemsToCheck = shopCollectionIds.concat(inventoryCollectionIds);
 
-		const availableItemCollectionsFromDb = (await getItemCollectionsById(
-			itemsToCheck
-		)) as ItemCollection[];
+		const availableItemCollectionsFromDb = (await getAllItemCollections()) as ItemCollection[];
 
 		this.availableItemCollections = new ArraySchema<ItemCollection>();
 
@@ -213,7 +211,7 @@ export class Player extends Schema implements IStats {
 						)
 						.flat()
 				),
-			] || []
+			]
 		);
 	}
 

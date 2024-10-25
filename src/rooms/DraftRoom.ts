@@ -94,7 +94,7 @@ export class DraftRoom extends Room<DraftState> {
 		if (this.state.shop.length === 0)
 			await this.updateShop(this.state.shopSize);
 
-		//this.state.availableItemCollections.push(...allItemCollections);
+    await this.state.player.updateAvailableItemCollections();
 
 		//robbery command
 		this.dispatcher.dispatch(new ShopStartTriggerCommand());
@@ -137,7 +137,7 @@ export class DraftRoom extends Room<DraftState> {
 			newItem.assign(newItemObject);
 			if (this.state.shop.length < 6) this.state.shop.push(newItem);
 		});
-		await this.state.player.updateAvailableItemCollections(this.state.shop);
+		// await this.state.player.updateAvailableItemCollections(this.state.shop);
 		this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
 	}
 
