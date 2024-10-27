@@ -199,6 +199,17 @@ export class Player extends Schema implements IStats {
 			newItemCollection.assign(itemCollection);
 			this.availableItemCollections.push(newItemCollection);
 		});
+
+    //filter out already acquired item collections
+    this.availableItemCollections = this.availableItemCollections.filter((itemCollection) => {
+      const activeItemCollectionsIds = this.activeItemCollections.map((itemCollection) => itemCollection.itemCollectionId);
+      return !activeItemCollectionsIds.includes(itemCollection.itemCollectionId);
+    });
+
+    //filter out item collections that are not yet available
+    this.availableItemCollections = this.availableItemCollections.filter((itemCollection) => {
+      return itemCollection.tier <= this.level;
+    });
 	}
 
 	getNeededIds(itemSchema: ArraySchema<Item>): number[] {
