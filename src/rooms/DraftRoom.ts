@@ -27,8 +27,8 @@ export class DraftRoom extends Room<DraftState> {
 	async onCreate(options: any) {
 		this.setState(new DraftState());
 
-		this.onMessage('buy', (client, message) => {
-			this.buyItem(message.itemId, client);
+		this.onMessage('buy', async (client, message) => {
+			await this.buyItem(message.itemId, client);
 		});
 
 		this.onMessage('refresh_shop', (client, message) => {
@@ -212,14 +212,14 @@ export class DraftRoom extends Room<DraftState> {
 		await this.updateTalentSelection();
 	}
 
-	private buyItem(itemId: number, client: Client) {
+	private async buyItem(itemId: number, client: Client) {
 		const item = this.state.shop.find((item) => item.itemId === itemId);
 		if (this.state.player.gold < item.price || item.sold) {
 			client.send('error', 'Not possible to buy item!');
 			return;
 		}
 		if (item) {
-			this.state.player.getItem(item);
+			await this.state.player.getItem(item);
 		}
 	}
 
