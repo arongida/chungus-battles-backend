@@ -9,7 +9,7 @@ const ItemCollectionSchema = new Schema({
 	tags: [String],
 	base: Number,
 	scaling: Number,
-  tier: Number,
+	tier: Number,
 });
 
 export const itemcollectionModel = mongoose.model(
