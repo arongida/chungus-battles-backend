@@ -7,7 +7,7 @@ import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
 import { increaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
-import { getAllItemCollections } from '../../item-collections/db/ItemCollection';
+import { getAllItemCollections, getItemCollectionsById } from '../../item-collections/db/ItemCollection';
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
 
 export class Player extends Schema implements IStats {
@@ -30,11 +30,9 @@ export class Player extends Schema implements IStats {
 	@type('number') income: number;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
-	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> =
-		new ArraySchema<ItemCollection>();
+	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
 	@type([ItemCollection])
-	availableItemCollections: ArraySchema<ItemCollection> =
-		new ArraySchema<ItemCollection>();
+	availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
 	@type('number') dodgeRate: number = 0;
 	@type('number') refreshShopCost: number = 2;
 	initialStats: IStats = {
@@ -144,32 +142,20 @@ export class Player extends Schema implements IStats {
 	}
 
 	getItemsForTags(tags: string[]): Item[] {
-		return this.inventory.filter((item) =>
-			tags.some((tag) => item.tags.includes(tag))
-		);
+		return this.inventory.filter((item) => tags.some((tag) => item.tags.includes(tag)));
 	}
 
 	getItemsForCollection(collectionId: number): Item[] {
-		return this.inventory.filter((item) =>
-			item.itemCollections.includes(collectionId)
-		);
+		return this.inventory.filter((item) => item.itemCollections.includes(collectionId));
 	}
 
 	resetInventory() {
 		this.inventory.splice(0, this.inventory.length, ...this.initialInventory);
 	}
 
-	addPoisonStacks(
-		clock: ClockTimer,
-		playerClient: Client,
-		stack: number = 1,
-		activationRate: number = 0.015
-	) {
+	addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1, activationRate: number = 0.015) {
 		this.poisonStack += stack;
-		playerClient.send(
-			'combat_log',
-			`${this.name} is poisoned! ${this.poisonStack} stacks!`
-		);
+		playerClient.send('combat_log', `${this.name} is poisoned! ${this.poisonStack} stacks!`);
 
 		clock.setTimeout(() => {
 			this.poisonStack -= stack;
@@ -180,15 +166,9 @@ export class Player extends Schema implements IStats {
 		}, 10000);
 		if (!this.poisonTimer) {
 			this.poisonTimer = clock.setInterval(() => {
-				const poisonDamage =
-					this.poisonStack *
-					(activationRate * this.maxHp + activationRate * 100) *
-					0.1;
+				const poisonDamage = this.poisonStack * (activationRate * this.maxHp + activationRate * 100) * 0.1;
 				this.hp -= poisonDamage;
-				playerClient.send(
-					'combat_log',
-					`${this.name} takes ${poisonDamage} poison damage!`
-				);
+				playerClient.send('combat_log', `${this.name} takes ${poisonDamage} poison damage!`);
 				playerClient.send('damage', {
 					playerId: this.playerId,
 					damage: poisonDamage,
@@ -198,8 +178,7 @@ export class Player extends Schema implements IStats {
 	}
 
 	async updateAvailableItemCollections() {
-		const availableItemCollectionsFromDb =
-			(await getAllItemCollections()) as ItemCollection[];
+		const availableItemCollectionsFromDb = (await getAllItemCollections()) as ItemCollection[];
 
 		this.availableItemCollections = new ArraySchema<ItemCollection>();
 
@@ -210,45 +189,29 @@ export class Player extends Schema implements IStats {
 		});
 
 		//filter out irrelevant shield collections
-		const highestShield = this.activeItemCollections
-			.map((itemCollection) => itemCollection.itemCollectionId)
+		const highestShield = [...this.activeItemCollections.map((itemCollection) => itemCollection.itemCollectionId)]
 			.filter(
-				(collectionId) =>
-					collectionId >= ItemCollectionType.SHIELDS_1 &&
-					collectionId <= ItemCollectionType.SHIELDS_5
+				(collectionId) => collectionId >= ItemCollectionType.SHIELDS_1 && collectionId <= ItemCollectionType.SHIELDS_5
 			)
 			.sort()
 			.pop();
-		const shieldsToRemove = Array.from(
-			{ length: highestShield - 1 },
-			(_, i) => i + 1
-		);
+		const shieldsToRemove = Array.from({ length: highestShield - 1 }, (_, i) => i + 1);
 
 		//filter out already acquired item collections
-		this.availableItemCollections = this.availableItemCollections.filter(
-			(itemCollection) => {
-				const activeItemCollectionsIds = this.activeItemCollections.map(
-					(itemCollection) => itemCollection.itemCollectionId
-				);
-				return (
-					!activeItemCollectionsIds.includes(itemCollection.itemCollectionId) &&
-          !shieldsToRemove.includes(itemCollection.itemCollectionId) &&
-					itemCollection.tier <= this.level
-				);
-			}
-		);
+		this.availableItemCollections = this.availableItemCollections.filter((itemCollection) => {
+			const activeItemCollectionsIds = [
+				...this.activeItemCollections.map((itemCollection) => itemCollection.itemCollectionId),
+			];
+			return (
+				!activeItemCollectionsIds.includes(itemCollection.itemCollectionId) &&
+				!shieldsToRemove.includes(itemCollection.itemCollectionId) &&
+				itemCollection.tier <= this.level
+			);
+		});
 	}
 
 	getNeededIds(itemSchema: ArraySchema<Item>): number[] {
-		return [
-			...new Set(
-				itemSchema
-					?.map((item) =>
-						item.itemCollections.filter((collectionId) => collectionId)
-					)
-					.flat()
-			),
-		];
+		return [...new Set(itemSchema?.map((item) => item.itemCollections.filter((collectionId) => collectionId)).flat())];
 	}
 
 	async updateActiveItemCollections() {
@@ -257,32 +220,31 @@ export class Player extends Schema implements IStats {
 		let collectionIdsToActivate: number[] = [];
 
 		inventoryCollectionIds.forEach((collectionId) => {
-			if (
-				collectionId >= ItemCollectionType.SHIELDS_1 &&
-				collectionId <= ItemCollectionType.SHIELDS_5
-			) {
+			if (collectionId >= ItemCollectionType.SHIELDS_1 && collectionId <= ItemCollectionType.SHIELDS_5) {
 				const shields = this.getItemsForTags(['shield']);
-				const uniqueShieldsNumber = [
-					...new Set(shields.map((shield) => shield.itemId)),
-				].length;
+				const uniqueShieldsNumber = [...new Set(shields.map((shield) => shield.itemId))].length;
 				collectionIdsToActivate.push(uniqueShieldsNumber);
 			}
 
 			if (collectionId >= ItemCollectionType.WARRIOR_1) {
 				const sameCollectionItems = this.getItemsForCollection(collectionId);
-				const uniqueCollectionItems = [
-					...new Set(sameCollectionItems.map((item) => item.itemId)),
-				];
+				const uniqueCollectionItems = [...new Set(sameCollectionItems.map((item) => item.itemId))];
 				if (uniqueCollectionItems.length === 3) {
 					collectionIdsToActivate.push(collectionId);
 				}
 			}
 		});
 		collectionIdsToActivate = [...new Set(collectionIdsToActivate)];
-		this.activeItemCollections = this.availableItemCollections.filter(
-			(itemCollection) =>
-				collectionIdsToActivate.includes(itemCollection.itemCollectionId)
-		);
+
+		const activeItemCollectionsFromDb = (await getItemCollectionsById(collectionIdsToActivate)) as ItemCollection[];
+
+		this.activeItemCollections = new ArraySchema<ItemCollection>();
+
+		activeItemCollectionsFromDb.forEach((itemCollection) => {
+			const newItemCollection = new ItemCollection();
+			newItemCollection.assign(itemCollection);
+			this.activeItemCollections.push(newItemCollection);
+		});
 
 		await this.updateAvailableItemCollections();
 	}
