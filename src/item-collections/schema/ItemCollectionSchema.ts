@@ -10,11 +10,11 @@ export class ItemCollection extends Schema {
 	@type('string') effect: string;
 	@type('string') image: string;
 	@type(['string']) tags: ArraySchema<string>;
+	@type('number') tier: number;
 	base: number;
 	scaling: number;
-  activationRate: number;
-  savedValue: number = 0;
-
+	activationRate: number;
+	savedValue: number = 0;
 
 	executeBehavior(context: BehaviorContext) {
 		const behaviorKey = this

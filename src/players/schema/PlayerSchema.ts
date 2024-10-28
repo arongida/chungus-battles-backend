@@ -21,13 +21,13 @@ export class Player extends Schema implements IStats {
 	@type('string') sessionId: string;
 	@type('number') private _defense: number;
 	@type('number') private _attackSpeed: number;
-  @type('number') baseAttackSpeed: number = 0.8;
+	@type('number') baseAttackSpeed: number = 0.8;
 	@type('number') maxXp: number;
 	@type('number') round: number;
 	@type('number') lives: number;
 	@type('number') wins: number;
 	@type('string') avatarUrl: string;
-  @type('number') income: number;
+	@type('number') income: number;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> =
@@ -36,10 +36,22 @@ export class Player extends Schema implements IStats {
 	availableItemCollections: ArraySchema<ItemCollection> =
 		new ArraySchema<ItemCollection>();
 	@type('number') dodgeRate: number = 0;
-  @type('number') refreshShopCost: number = 2;
-	initialStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 , income: 0};
-	baseStats: IStats = { hp: 0, attack: 0, defense: 0, attackSpeed: 0 , income: 0};
-  initialInventory: Item[] = [];
+	@type('number') refreshShopCost: number = 2;
+	initialStats: IStats = {
+		hp: 0,
+		attack: 0,
+		defense: 0,
+		attackSpeed: 0,
+		income: 0,
+	};
+	baseStats: IStats = {
+		hp: 0,
+		attack: 0,
+		defense: 0,
+		attackSpeed: 0,
+		income: 0,
+	};
+	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
 	maxHp: number;
 	attackTimer: Delayed;
@@ -186,11 +198,8 @@ export class Player extends Schema implements IStats {
 	}
 
 	async updateAvailableItemCollections() {
-		// const shopCollectionIds = this.getNeededIds(shop);
-		// const inventoryCollectionIds = this.getNeededIds(this.inventory);
-		// const itemsToCheck = shopCollectionIds.concat(inventoryCollectionIds);
-
-		const availableItemCollectionsFromDb = (await getAllItemCollections()) as ItemCollection[];
+		const availableItemCollectionsFromDb =
+			(await getAllItemCollections()) as ItemCollection[];
 
 		this.availableItemCollections = new ArraySchema<ItemCollection>();
 
@@ -199,23 +208,50 @@ export class Player extends Schema implements IStats {
 			newItemCollection.assign(itemCollection);
 			this.availableItemCollections.push(newItemCollection);
 		});
-	}
 
-	getNeededIds(itemSchema: ArraySchema<Item>): number[] {
-		return (
-			[
-				...new Set(
-					itemSchema
-						?.map((item) =>
-							item.itemCollections.filter((collectionId) => collectionId)
-						)
-						.flat()
-				),
-			]
+		//filter out irrelevant shield collections
+		const highestShield = this.activeItemCollections
+			.map((itemCollection) => itemCollection.itemCollectionId)
+			.filter(
+				(collectionId) =>
+					collectionId >= ItemCollectionType.SHIELDS_1 &&
+					collectionId <= ItemCollectionType.SHIELDS_5
+			)
+			.sort()
+			.pop();
+		const shieldsToRemove = Array.from(
+			{ length: highestShield - 1 },
+			(_, i) => i + 1
+		);
+
+		//filter out already acquired item collections
+		this.availableItemCollections = this.availableItemCollections.filter(
+			(itemCollection) => {
+				const activeItemCollectionsIds = this.activeItemCollections.map(
+					(itemCollection) => itemCollection.itemCollectionId
+				);
+				return (
+					!activeItemCollectionsIds.includes(itemCollection.itemCollectionId) &&
+          !shieldsToRemove.includes(itemCollection.itemCollectionId) &&
+					itemCollection.tier <= this.level
+				);
+			}
 		);
 	}
 
-	updateActiveItemCollections() {
+	getNeededIds(itemSchema: ArraySchema<Item>): number[] {
+		return [
+			...new Set(
+				itemSchema
+					?.map((item) =>
+						item.itemCollections.filter((collectionId) => collectionId)
+					)
+					.flat()
+			),
+		];
+	}
+
+	async updateActiveItemCollections() {
 		const inventoryCollectionIds = this.getNeededIds(this.inventory);
 		this.activeItemCollections.clear();
 		let collectionIdsToActivate: number[] = [];
@@ -247,13 +283,15 @@ export class Player extends Schema implements IStats {
 			(itemCollection) =>
 				collectionIdsToActivate.includes(itemCollection.itemCollectionId)
 		);
+
+		await this.updateAvailableItemCollections();
 	}
 
-	getItem(item: Item) {
+	async getItem(item: Item) {
 		this.gold -= item.price;
 		increaseStats(this, item.affectedStats);
 		item.sold = true;
 		this.inventory.push(item);
-		this.updateActiveItemCollections();
+		await this.updateActiveItemCollections();
 	}
 }

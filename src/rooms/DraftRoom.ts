@@ -27,8 +27,8 @@ export class DraftRoom extends Room<DraftState> {
 	async onCreate(options: any) {
 		this.setState(new DraftState());
 
-		this.onMessage('buy', (client, message) => {
-			this.buyItem(message.itemId, client);
+		this.onMessage('buy', async (client, message) => {
+			await this.buyItem(message.itemId, client);
 		});
 
 		this.onMessage('refresh_shop', (client, message) => {
@@ -137,7 +137,7 @@ export class DraftRoom extends Room<DraftState> {
 			newItem.assign(newItemObject);
 			if (this.state.shop.length < 6) this.state.shop.push(newItem);
 		});
-		// await this.state.player.updateAvailableItemCollections(this.state.shop);
+		await this.state.player.updateAvailableItemCollections();
 		this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
 	}
 
@@ -212,14 +212,14 @@ export class DraftRoom extends Room<DraftState> {
 		await this.updateTalentSelection();
 	}
 
-	private buyItem(itemId: number, client: Client) {
+	private async buyItem(itemId: number, client: Client) {
 		const item = this.state.shop.find((item) => item.itemId === itemId);
 		if (this.state.player.gold < item.price || item.sold) {
 			client.send('error', 'Not possible to buy item!');
 			return;
 		}
 		if (item) {
-			this.state.player.getItem(item);
+			await this.state.player.getItem(item);
 		}
 	}
 
@@ -257,16 +257,17 @@ export class DraftRoom extends Room<DraftState> {
 	private async checkLevelUp() {
 		if (this.state.player.level >= 5) return;
 		if (this.state.player.xp >= this.state.player.maxXp) {
-			this.levelUp(this.state.player.xp - this.state.player.maxXp);
+			await this.levelUp(this.state.player.xp - this.state.player.maxXp);
 			this.state.remainingTalentPoints++;
 			await this.updateTalentSelection();
 		}
 	}
 
-	private levelUp(leftoverXp: number = 0) {
+	private async levelUp(leftoverXp: number = 0) {
 		this.state.player.level++;
 		this.state.player.maxXp += this.state.player.level * 4;
 		this.state.player.xp = leftoverXp;
+    await this.state.player.updateAvailableItemCollections();
 
 		this.dispatcher.dispatch(new LevelUpTriggerCommand());
 	}
