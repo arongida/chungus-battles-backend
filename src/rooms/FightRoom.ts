@@ -1,10 +1,6 @@
 import { Room, Client } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import {
-	getPlayer,
-	getSameRoundPlayer,
-	updatePlayer,
-} from '../players/db/Player';
+import { getPlayer, getSameRoundPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay, setStats } from '../common/utils';
 import { FightResultType } from '../common/types';
@@ -63,10 +59,7 @@ export class FightRoom extends Room<FightState> {
 
 		//set up enemy state
 		if (!this.state.enemy.playerId) {
-			let enemy = await getSameRoundPlayer(
-				this.state.player.round,
-				this.state.player.playerId
-			);
+			let enemy = await getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
 			//set up enemy state
 			await this.setUpState(enemy, true);
 			setStats(this.state.enemy.initialStats, this.state.enemy);
@@ -79,19 +72,14 @@ export class FightRoom extends Room<FightState> {
 		this.state.availableTalents = (await getAllTalents()) as Talent[];
 
 		// check if player is already playing
-		if (this.state.player.sessionId !== '')
-			throw new Error('Player already playing!');
-		if (this.state.player.lives <= 0)
-			throw new Error('Player has no lives left!');
+		if (this.state.player.sessionId !== '') throw new Error('Player already playing!');
+		if (this.state.player.lives <= 0) throw new Error('Player has no lives left!');
 		this.state.player.sessionId = client.sessionId;
 
 		//start battle after 5 seconds
 		let countdown = 5;
 		const countdownTimer = this.clock.setInterval(() => {
-			this.broadcast(
-				'combat_log',
-				`The battle will begin in ${countdown--} second(s)...`
-			);
+			this.broadcast('combat_log', `The battle will begin in ${countdown--} second(s)...`);
 		}, 1000);
 
 		this.clock.setTimeout(async () => {
@@ -116,8 +104,7 @@ export class FightRoom extends Room<FightState> {
 					this.broadcast('end_battle', 'The battle has ended!');
 				else if (this.state.player.lives <= 0 && this.state.player.wins < 10)
 					this.broadcast('game_over', 'You have lost the game!');
-				else if (this.state.player.wins >= 10)
-					this.broadcast('game_over', 'You have won the game!');
+				else if (this.state.player.wins >= 10) this.broadcast('game_over', 'You have won the game!');
 			}
 		} catch (e) {
 			//save player state to db
@@ -152,6 +139,8 @@ export class FightRoom extends Room<FightState> {
 				this.state.auraTimer?.clear();
 				this.state.endBurnTimer?.clear();
 				this.state.skillsTimers.forEach((timer) => timer.clear());
+				this.state.player.regenTimer?.clear();
+				this.state.enemy.regenTimer?.clear();
 				this.broadcast('combat_log', 'The battle has ended!');
 				this.handleFightEnd();
 			}
@@ -164,10 +153,7 @@ export class FightRoom extends Room<FightState> {
 			const burnDamage = this.state.endBurnDamage++;
 			this.state.player.hp -= burnDamage;
 			this.state.enemy.hp -= burnDamage;
-			this.broadcast(
-				'combat_log',
-				`The battle is dragging on! Both players burned for ${burnDamage} damage!`
-			);
+			this.broadcast('combat_log', `The battle is dragging on! Both players burned for ${burnDamage} damage!`);
 			this.broadcast('damage', {
 				playerId: this.state.player.playerId,
 				damage: burnDamage,
@@ -188,6 +174,18 @@ export class FightRoom extends Room<FightState> {
 		}, (1 / player.attackSpeed) * 1000);
 	}
 
+	startRegenTimer(player: Player) {
+		if (player.hpRegen) {
+			player.regenTimer = this.clock.setInterval(() => {
+				player.hp += player.hpRegen;
+				this.state.playerClient.send('healing', {
+					playerId: player.playerId,
+					healing: player.hpRegen,
+				});
+			}, 1000);
+		}
+	}
+
 	tryAttack(attacker: Player, defender: Player) {
 		const damage = this.calculateOnDamageEffects(attacker.attack, defender);
 
@@ -199,10 +197,7 @@ export class FightRoom extends Room<FightState> {
 				defender.dodgeRate = dodgeRateCache;
 			}, 1500);
 
-			this.state.playerClient.send(
-				'combat_log',
-				`${defender.name} dodged the attack!`
-			);
+			this.state.playerClient.send('combat_log', `${defender.name} dodged the attack!`);
 			return;
 		}
 
@@ -220,10 +215,7 @@ export class FightRoom extends Room<FightState> {
 		defender.takeDamage(defender.damageToTake, this.state.playerClient);
 
 		//broadcast attack and damage
-		this.state.playerClient.send(
-			'combat_log',
-			`${attacker.name} attacks ${defender.name} for ${damage} damage!`
-		);
+		this.state.playerClient.send('combat_log', `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
 		this.state.playerClient.send('attack', attacker.playerId);
 	}
 
@@ -243,6 +235,8 @@ export class FightRoom extends Room<FightState> {
 		//start attack timers
 		this.startAttackTimer(this.state.player, this.state.enemy);
 		this.startAttackTimer(this.state.enemy, this.state.player);
+		this.startRegenTimer(this.state.player);
+		this.startRegenTimer(this.state.enemy);
 
 		//start fight start effects
 		this.dispatcher.dispatch(new FightStartTriggerCommand());
@@ -256,12 +250,15 @@ export class FightRoom extends Room<FightState> {
 				this.dispatcher.dispatch(new AuraTriggerCommand());
 			}
 		}, 1000);
+
+		//start regeneration
 	}
 
 	//get player, enemy and talents from db and map them to the room state
 	async setUpState(player: Player, isEnemy = false) {
 		const newPlayer = new Player(player);
 		if (!newPlayer.income) newPlayer.income = 0;
+		if (!newPlayer.hpRegen) newPlayer.hpRegen = 0;
 		if (!isEnemy) {
 			this.state.player.assign(newPlayer);
 		} else {
@@ -269,15 +266,9 @@ export class FightRoom extends Room<FightState> {
 		}
 
 		if (player.talents.length > 0) {
-			const talents = (await getTalentsById(
-				player.talents as unknown as number[]
-			)) as Talent[];
+			const talents = (await getTalentsById(player.talents as unknown as number[])) as Talent[];
 			player.talents.forEach((talentId) => {
-				const newTalent = new Talent(
-					talents.find(
-						(talent) => talent.talentId === (talentId as unknown as number)
-					)
-				);
+				const newTalent = new Talent(talents.find((talent) => talent.talentId === (talentId as unknown as number)));
 				if (!isEnemy) {
 					this.state.player.talents.push(newTalent);
 				} else {
@@ -320,17 +311,13 @@ export class FightRoom extends Room<FightState> {
 		//trigger fight-end effects
 		this.dispatcher.dispatch(new FightEndTriggerCommand());
 
-		const goldToGet =
-			this.state.player.rewardRound * 4 + this.state.player.income;
+		const goldToGet = this.state.player.rewardRound * 4 + this.state.player.income;
 
 		this.state.player.gold += goldToGet;
 		this.state.player.xp += this.state.player.rewardRound * 2;
 
 		this.broadcast('combat_log', `You gained ${goldToGet} gold!`);
-		this.broadcast(
-			'combat_log',
-			`You gained ${this.state.player.rewardRound * 2} xp!`
-		);
+		this.broadcast('combat_log', `You gained ${this.state.player.rewardRound * 2} xp!`);
 	}
 
 	private handleWin() {

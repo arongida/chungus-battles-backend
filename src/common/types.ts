@@ -10,6 +10,7 @@ export interface IStats {
 	defense: number;
 	attackSpeed: number;
   income: number;
+  hpRegen: number;
   maxHp?: number;
   baseAttackSpeed?: number;
 }
