@@ -250,8 +250,6 @@ export class FightRoom extends Room<FightState> {
 				this.dispatcher.dispatch(new AuraTriggerCommand());
 			}
 		}, 1000);
-
-		//start regeneration
 	}
 
 	//get player, enemy and talents from db and map them to the room state
