@@ -12,6 +12,7 @@ const ItemSchema = new Schema({
     defense: Number,
     attackSpeed: Number,
     income: Number,
+    hpRegen: Number,
   },
   image: String,
   tags: [String],

@@ -19,16 +19,14 @@ const PlayerSchema = new Schema({
 	avatarUrl: String,
 	talents: [Number],
 	inventory: [Number],
-  income: Number,
+	income: Number,
+	hpRegen: Number,
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
 
 export async function getPlayer(playerId: number): Promise<Player> {
-	const playerSchema = await playerModel
-		.findOne({ playerId: playerId })
-		.lean()
-		.select({ _id: 0, __v: 0 });
+	const playerSchema = await playerModel.findOne({ playerId: playerId }).lean().select({ _id: 0, __v: 0 });
 
 	return playerSchema as unknown as Player;
 }
@@ -58,7 +56,8 @@ export async function createNewPlayer(
 		avatarUrl: avatarUrl,
 		talents: [],
 		inventory: [],
-    income: 0,
+		income: 0,
+		hpRegen: 0,
 	});
 	await newPlayer.save().catch((err) => console.error(err));
 	return newPlayer.toObject() as unknown as Player;
@@ -116,18 +115,11 @@ export async function updatePlayer(player: Player): Promise<Player> {
 }
 
 export async function getNextPlayerId(): Promise<number> {
-	const lastPlayer = await playerModel
-		.findOne()
-		.sort({ playerId: -1 })
-		.limit(1)
-		.lean();
+	const lastPlayer = await playerModel.findOne().sort({ playerId: -1 }).limit(1).lean();
 	return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
 
-export async function getSameRoundPlayer(
-	round: number,
-	playerId: number
-): Promise<Player> {
+export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
 	if (round <= 0) {
 		return null;
 	}

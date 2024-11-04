@@ -28,6 +28,7 @@ export class Player extends Schema implements IStats {
 	@type('number') wins: number;
 	@type('string') avatarUrl: string;
 	@type('number') income: number;
+	@type('number') hpRegen: number;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
@@ -35,12 +36,14 @@ export class Player extends Schema implements IStats {
 	availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
 	@type('number') dodgeRate: number = 0;
 	@type('number') refreshShopCost: number = 2;
+	@type('number') maxHp: number;
 	initialStats: IStats = {
 		hp: 0,
 		attack: 0,
 		defense: 0,
 		attackSpeed: 0,
 		income: 0,
+		hpRegen: 0,
 	};
 	baseStats: IStats = {
 		hp: 0,
@@ -48,12 +51,13 @@ export class Player extends Schema implements IStats {
 		defense: 0,
 		attackSpeed: 0,
 		income: 0,
+		hpRegen: 0,
 	};
 	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
-	maxHp: number;
 	attackTimer: Delayed;
 	poisonTimer: Delayed;
+	regenTimer: Delayed;
 	talentsOnCooldown: TalentType[] = [];
 	damageToTake: number;
 	rewardRound: number;

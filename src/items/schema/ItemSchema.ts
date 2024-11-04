@@ -7,6 +7,7 @@ export class AffectedStats extends Schema implements IStats {
   @type('number') defense: number = 0;
   @type('number') attackSpeed: number = 0;
   @type('number') income: number = 0;
+  @type('number') hpRegen: number = 0;
 }
 export class Item extends Schema {
   @type('number') itemId: number;
