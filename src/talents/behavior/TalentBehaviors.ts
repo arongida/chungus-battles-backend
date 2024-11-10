@@ -267,9 +267,9 @@ export const TalentBehaviors = {
 		const { attacker, talent, client } = context;
 		const hpBonus = attacker.hp * talent.activationRate;
 		const attackBonus = attacker.attack * talent.activationRate;
-		attacker.hp += hpBonus;
+		attacker.maxHp += hpBonus;
     attacker.baseStats.hp += hpBonus;
-		attacker.maxHp = attacker.hp;
+		attacker.hp += hpBonus;
 		attacker.attack += attackBonus;
     attacker.baseStats.attack += attackBonus;
 		client.send(
