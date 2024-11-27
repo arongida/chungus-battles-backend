@@ -86,7 +86,7 @@ export const ItemCollectionBehaviors = {
 
 		attacker.gold += 2;
 
-		client.send('combat_log', `${attacker.name} ""borrowed"" 2 gold from ${defender}!`);
+		client.send('combat_log', `${attacker.name} ""borrowed"" 2 gold from ${defender.name}!`);
 
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
