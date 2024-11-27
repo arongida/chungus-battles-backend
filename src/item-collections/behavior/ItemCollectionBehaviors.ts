@@ -55,18 +55,14 @@ export const ItemCollectionBehaviors = {
 
 	[ItemCollectionType.WARRIOR_1]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, defender, client, itemCollection } = context;
-		const reflectDamage =
-			itemCollection.base + itemCollection.scaling * defender.level;
+		const reflectDamage = itemCollection.base + itemCollection.scaling * defender.level;
 		const damageAfterReduction = attacker.getDamageAfterDefense(reflectDamage);
 		attacker.hp -= damageAfterReduction;
 		client.send('damage', {
 			playerId: attacker.playerId,
 			damage: damageAfterReduction,
 		});
-		client.send(
-			'combat_log',
-			`${defender.name} reflects ${damageAfterReduction} damage to ${attacker.name}!`
-		);
+		client.send('combat_log', `${defender.name} reflects ${damageAfterReduction} damage to ${attacker.name}!`);
 		client.send('trigger_collection', {
 			playerId: defender.playerId,
 			collectionId: ItemCollectionType.WARRIOR_1,
@@ -86,19 +82,12 @@ export const ItemCollectionBehaviors = {
 	},
 
 	[ItemCollectionType.ROGUE_1]: (context: ItemCollectionBehaviorContext) => {
-		const { attacker, client, availableTalents } = context;
-		attacker.talents = attacker.talents.filter((talent) => talent.tier !== 1);
-		const tier1Talents = availableTalents.filter(
-			(talent) => talent.tier === 1 && !talent.tags.includes('used')
-		);
-		const randomTier1Talents = tier1Talents
-			.sort(() => 0.5 - Math.random())
-			.slice(0, 2);
-		randomTier1Talents.forEach((talent) => {
-			const newTalent = new Talent();
-			newTalent.assign(talent);
-			attacker.talents.push(newTalent);
-		});
+		const { attacker, defender, client } = context;
+
+		attacker.gold += 2;
+
+		client.send('combat_log', `${attacker.name} ""borrowed"" 2 gold from ${defender}!`);
+
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_1,
@@ -115,10 +104,7 @@ export const ItemCollectionBehaviors = {
 			playerId: defender.playerId,
 			damage: damageAfterReduction,
 		});
-		client.send(
-			'combat_log',
-			`${attacker.name} throws weapons for ${damageAfterReduction} damage!`
-		);
+		client.send('combat_log', `${attacker.name} throws weapons for ${damageAfterReduction} damage!`);
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.WARRIOR_2,
@@ -127,8 +113,7 @@ export const ItemCollectionBehaviors = {
 
 	[ItemCollectionType.ROGUE_2]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
-		attacker.attackSpeed +=
-			attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed;
+		attacker.attackSpeed += attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed;
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_2,
@@ -191,10 +176,7 @@ export const ItemCollectionBehaviors = {
 		const { attacker, defender, client } = context;
 		attacker.gold += 1;
 		if (defender.gold > 0) defender.gold -= 1;
-		client.send(
-			'combat_log',
-			`${attacker.name} stole 1 gold from ${defender.name}!`
-		);
+		client.send('combat_log', `${attacker.name} stole 1 gold from ${defender.name}!`);
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_4,
@@ -203,8 +185,7 @@ export const ItemCollectionBehaviors = {
 
 	[ItemCollectionType.MERCHANT_3]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
-		const bonusCoefficent =
-			(attacker.income * itemCollection.scaling + itemCollection.base) / 100;
+		const bonusCoefficent = (attacker.income * itemCollection.scaling + itemCollection.base) / 100;
 
 		const attackBonus = Math.round(attacker.attack * bonusCoefficent);
 		attacker.attack += attackBonus;
@@ -231,8 +212,7 @@ export const ItemCollectionBehaviors = {
 
 	[ItemCollectionType.WARRIOR_5]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, defender, damage, client, itemCollection } = context;
-		const shouldExecute =
-			itemCollection.base > (defender.hp - damage) / defender.maxHp;
+		const shouldExecute = itemCollection.base > (defender.hp - damage) / defender.maxHp;
 		if (shouldExecute) {
 			defender.hp = -9999;
 			client.send('combat_log', `${attacker.name} executed ${defender.name}!`);
@@ -264,13 +244,9 @@ export const ItemCollectionBehaviors = {
 
 	[ItemCollectionType.MERCHANT_5]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
-		const healingAmount =
-			attacker.income * itemCollection.scaling + itemCollection.base;
+		const healingAmount = attacker.income * itemCollection.scaling + itemCollection.base;
 		attacker.hp += healingAmount;
-		client.send(
-			'combat_log',
-			`${attacker.name}:  private doctor was paid to heal ${healingAmount}!`
-		);
+		client.send('combat_log', `${attacker.name}:  private doctor was paid to heal ${healingAmount}!`);
 		client.send('healing', {
 			playerId: attacker.playerId,
 			healing: healingAmount,
