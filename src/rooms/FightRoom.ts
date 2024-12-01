@@ -15,6 +15,8 @@ import { OnAttackedTriggerCommand } from '../commands/triggers/OnAttackedTrigger
 import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
 import { AuraTriggerCommand } from '../commands/triggers/AuraTriggerCommand';
+import { TalentType } from '../talents/types/TalentTypes';
+import { ItemCollectionType } from '../item-collections/types/ItemCollectionTypes';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
@@ -126,9 +128,14 @@ export class FightRoom extends Room<FightState> {
 	update(deltaTime: number) {
 		//check for battle end
 		if (this.state.battleStarted) {
+      this.checkPoison(this.state.player, this.state.enemy);
+      this.checkPoison(this.state.enemy, this.state.player);
+
 			if (this.clock.elapsedTime > 65000 && !this.state.endBurnTimer) {
 				this.startEndBurnTimer();
 			}
+
+      if (this.state.player.invincible || this.state.enemy.invincible) return;
 			if (this.state.player.hp <= 0 || this.state.enemy.hp <= 0) {
 				//set state and clear intervals
 				this.state.battleStarted = false;
@@ -145,6 +152,8 @@ export class FightRoom extends Room<FightState> {
 				this.handleFightEnd();
 			}
 		}
+
+
 	}
 
 	startEndBurnTimer() {
@@ -186,6 +195,21 @@ export class FightRoom extends Room<FightState> {
 		}
 	}
 
+  checkPoison(attacker: Player, defender: Player) {
+    if (defender.poisonStack <= 0) return;
+    const poisonTalent = attacker.talents.find((talent) => talent.talentId === TalentType.POISON);
+    const poisonItemCollection = attacker.activeItemCollections.find((itemCollection) => itemCollection.itemCollectionId === ItemCollectionType.ROGUE_3);
+    const activationRate = poisonTalent ? poisonTalent.activationRate : poisonItemCollection ? poisonItemCollection.base : 0.015;
+    if (!defender.poisonTimer) {
+			defender.poisonTimer = this.clock.setInterval(() => {
+				const poisonDamage = defender.poisonStack * (activationRate * defender.maxHp + poisonTalent.activationRate * 100) * 0.1;
+        this.calculateOnDamageEffects(poisonDamage, defender);
+				defender.takeDamage(poisonDamage, this.state.playerClient);
+				this.state.playerClient.send('combat_log', `${defender.name} takes ${poisonDamage} poison damage!`);
+			}, 1000);
+		}
+  }
+
 	tryAttack(attacker: Player, defender: Player) {
 		const damage = this.calculateOnDamageEffects(attacker.attack, defender);
 
@@ -225,6 +249,7 @@ export class FightRoom extends Room<FightState> {
 		this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: reducedDamage,
+      attacker: this.state.player,
 		});
 		reducedDamage = Math.max(defender.damageToTake, 1);
 		return reducedDamage;

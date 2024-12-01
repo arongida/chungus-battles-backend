@@ -8,13 +8,10 @@ export const TalentBehaviors = {
 	[TalentType.RAGE]: (context: TalentBehaviorContext) => {
 		const { talent, attacker, client } = context;
 		const selfDamage = talent.activationRate * attacker.hp * 0.01 + 1;
-		attacker.hp -= selfDamage;
+		attacker.takeDamage(selfDamage, client);
 		attacker.attack += talent.activationRate;
 		client.send('combat_log', `${attacker.name} rages, increased attack by 1!`);
-		client.send('damage', {
-			playerId: attacker.playerId,
-			damage: selfDamage,
-		});
+
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.RAGE,
@@ -470,23 +467,19 @@ export const TalentBehaviors = {
 	},
 
 	[TalentType.GUARDIAN_ANGEL]: (context: TalentBehaviorContext) => {
-		const { attacker, client } = context;
-		client.send('combat_log', 'You have been gifted by the guardian angel!');
-		client.send('trigger_talent', {
-			playerId: attacker.playerId,
-			talentId: TalentType.GUARDIAN_ANGEL,
-		});
-		attacker.lives += 1;
-		attacker.talents = attacker.talents.filter(
-			(talent) => talent.talentId !== TalentType.GUARDIAN_ANGEL
-		);
-		attacker.talents.push(
-			new Talent({
-				talentId: 6,
-				name: 'Guardianless Angel',
-				description: 'Why are they not helping anymore?',
-			})
-		);
+		const { attacker, client, defender, clock, talent } = context;
+
+    if (defender.hp - defender.damageToTake <= 0 && !defender.talentsOnCooldown.includes(TalentType.GUARDIAN_ANGEL)) {
+      defender.hp = 1;
+      defender.setInvincible(clock, talent.activationRate)
+      defender.talentsOnCooldown.push(TalentType.GUARDIAN_ANGEL);
+
+      client.send('combat_log', `You are invincible for ${talent.activationRate / 1000} seconds!`);
+      client.send('trigger_talent', {
+        playerId: attacker.playerId,
+        talentId: TalentType.GUARDIAN_ANGEL,
+      });
+    }
 	},
 
 	[TalentType.PENNY_STOCKS]: (context: TalentBehaviorContext) => {
