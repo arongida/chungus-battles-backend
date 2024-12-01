@@ -3,7 +3,7 @@ import { Talent } from '../../talents/schema/TalentSchema';
 import { Item } from '../../items/schema/ItemSchema';
 import { IStats } from '../../common/types';
 import { TalentType } from '../../talents/types/TalentTypes';
-import { Client, Delayed } from 'colyseus';
+import { Client, Clock, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
 import { increaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
@@ -58,7 +58,9 @@ export class Player extends Schema implements IStats {
 	attackTimer: Delayed;
 	poisonTimer: Delayed;
 	regenTimer: Delayed;
+  invincibleTimer: Delayed;
 	talentsOnCooldown: TalentType[] = [];
+  invincible: boolean = false;
 	damageToTake: number;
 	rewardRound: number;
 
@@ -124,7 +126,23 @@ export class Player extends Schema implements IStats {
 		this._defense = value < 0 ? 0 : value;
 	}
 
+  setInvincible(clock: ClockTimer, invincibleLenghtMS: number) {
+    console.log('set invincible');
+    this.invincible = true;
+    if (this.invincibleTimer) {
+      const timeLeft = this.invincibleTimer.time - this.invincibleTimer.elapsedTime;
+      this.invincibleTimer.clear();
+      this.invincibleTimer = clock.setTimeout(() => {
+        this.invincible = false;
+      }, timeLeft + invincibleLenghtMS);
+    }
+    this.invincibleTimer = clock.setTimeout(() => {
+      this.invincible = false;
+    }, invincibleLenghtMS);
+  }
+
 	takeDamage(damage: number, playerClient: Client) {
+    if (this.invincible) return;
 		this.hp -= damage;
 		playerClient.send('damage', {
 			playerId: this.playerId,
@@ -168,17 +186,7 @@ export class Player extends Schema implements IStats {
 				this.poisonTimer = null;
 			}
 		}, 10000);
-		if (!this.poisonTimer) {
-			this.poisonTimer = clock.setInterval(() => {
-				const poisonDamage = this.poisonStack * (activationRate * this.maxHp + activationRate * 100) * 0.1;
-				this.hp -= poisonDamage;
-				playerClient.send('combat_log', `${this.name} takes ${poisonDamage} poison damage!`);
-				playerClient.send('damage', {
-					playerId: this.playerId,
-					damage: poisonDamage,
-				});
-			}, 1000);
-		}
+
 	}
 
 	async updateAvailableItemCollections() {

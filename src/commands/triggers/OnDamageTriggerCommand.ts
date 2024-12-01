@@ -8,13 +8,17 @@ import { ItemCollection } from '../../item-collections/schema/ItemCollectionSche
 
 export class OnDamageTriggerCommand extends Command<
 	FightRoom,
-	{ defender: Player; damage: number }
+	{ defender: Player; attacker: Player; damage: number }
 > {
-	execute({ defender, damage } = this.payload) {
+	execute({ defender, damage, attacker } = this.payload) {
 		const onDamageTalentBehaviorContext: BehaviorContext = {
 			client: this.state.playerClient,
+      attacker: attacker,
 			defender: defender,
 			damage: damage,
+      clock: this.clock,
+
+      
 		};
 
 		const onDamageTalents: Talent[] = defender.talents.filter((talent) =>

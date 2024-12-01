@@ -1,4 +1,3 @@
-import { Talent } from '../../talents/schema/TalentSchema';
 import { ItemCollectionType } from '../types/ItemCollectionTypes';
 import { ItemCollectionBehaviorContext } from './ItemCollectionBehaviorContext';
 
@@ -83,11 +82,8 @@ export const ItemCollectionBehaviors = {
 
 	[ItemCollectionType.ROGUE_1]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, defender, client } = context;
-
 		attacker.gold += 2;
-
-		client.send('combat_log', `${attacker.name} ""borrowed"" 2 gold from ${defender.name}!`);
-
+		client.send('combat_log', `${attacker.name} "borrowed" 2 gold from ${defender.name}!`);
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_1,
