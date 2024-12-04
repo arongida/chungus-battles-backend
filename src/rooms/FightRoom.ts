@@ -135,8 +135,7 @@ export class FightRoom extends Room<FightState> {
 				this.startEndBurnTimer();
 			}
 
-      if (this.state.player.invincible || this.state.enemy.invincible) return;
-			if (this.state.player.hp <= 0 || this.state.enemy.hp <= 0) {
+			if ((this.state.player.hp <= 0 && !this.state.player.invincible) || (this.state.enemy.hp <= 0 && !this.state.enemy.invincible)) {
 				//set state and clear intervals
 				this.state.battleStarted = false;
 				this.state.player.attackTimer.clear();
