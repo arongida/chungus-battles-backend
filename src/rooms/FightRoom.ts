@@ -201,7 +201,7 @@ export class FightRoom extends Room<FightState> {
     const activationRate = poisonTalent ? poisonTalent.activationRate : poisonItemCollection ? poisonItemCollection.base : 0.015;
     if (!defender.poisonTimer) {
 			defender.poisonTimer = this.clock.setInterval(() => {
-				const poisonDamage = defender.poisonStack * (activationRate * defender.maxHp + poisonTalent.activationRate * 100) * 0.1;
+				const poisonDamage = defender.poisonStack * (activationRate * defender.maxHp + activationRate * 100) * 0.1;
         this.calculateOnDamageEffects(poisonDamage, defender);
 				defender.takeDamage(poisonDamage, this.state.playerClient);
 				this.state.playerClient.send('combat_log', `${defender.name} takes ${poisonDamage} poison damage!`);
