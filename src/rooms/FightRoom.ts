@@ -135,8 +135,7 @@ export class FightRoom extends Room<FightState> {
 				this.startEndBurnTimer();
 			}
 
-      if (this.state.player.invincible || this.state.enemy.invincible) return;
-			if (this.state.player.hp <= 0 || this.state.enemy.hp <= 0) {
+			if ((this.state.player.hp <= 0 && !this.state.player.invincible) || (this.state.enemy.hp <= 0 && !this.state.enemy.invincible)) {
 				//set state and clear intervals
 				this.state.battleStarted = false;
 				this.state.player.attackTimer.clear();
@@ -347,9 +346,6 @@ export class FightRoom extends Room<FightState> {
 		this.broadcast('combat_log', 'You win!');
 		this.state.player.wins++;
 		this.broadcast('end_battle', 'The battle has ended!');
-		if (this.state.player.wins >= 10) {
-			this.broadcast('game_over', 'You have won the game!');
-		}
 	}
 
 	private handleLoose() {

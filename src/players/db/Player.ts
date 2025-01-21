@@ -119,6 +119,11 @@ export async function getNextPlayerId(): Promise<number> {
 	return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
 
+export async function getTopPlayers(number: number): Promise<Player[]> {
+  const topPlayers = await playerModel.find().sort({ wins: -1 }).limit(number).lean();
+  return topPlayers as unknown as Player[];
+}
+
 export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
 	if (round <= 0) {
 		return null;
