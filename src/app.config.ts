@@ -8,7 +8,7 @@ import cors from 'cors';
  */
 import { FightRoom } from './rooms/FightRoom';
 import { DraftRoom } from './rooms/DraftRoom';
-import { getNextPlayerId } from './players/db/Player';
+import { getNextPlayerId, getTopPlayers } from './players/db/Player';
 
 export default config({
   initializeGameServer: (gameServer) => {
@@ -34,6 +34,12 @@ export default config({
       res.status(200).send({ playerId: playerId });
     });
 
+    //create get endpoint to get top players where number is how many of the top players we want to get
+    app.get('/topPlayers', async (req, res) => {
+      const players = await getTopPlayers(Number(req.query.numberOfPlayers));
+      res.status(200).send(players);
+    });
+    
     /**
      * Use @colyseus/playground
      * (It is not recommended to expose this route in a production environment)

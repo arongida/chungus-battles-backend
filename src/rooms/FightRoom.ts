@@ -346,9 +346,6 @@ export class FightRoom extends Room<FightState> {
 		this.broadcast('combat_log', 'You win!');
 		this.state.player.wins++;
 		this.broadcast('end_battle', 'The battle has ended!');
-		if (this.state.player.wins >= 10) {
-			this.broadcast('game_over', 'You have won the game!');
-		}
 	}
 
 	private handleLoose() {
