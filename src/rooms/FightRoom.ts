@@ -1,6 +1,6 @@
 import { Room, Client } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import { getPlayer, getSameRoundPlayer, updatePlayer } from '../players/db/Player';
+import { getHighestWin, getPlayer, getSameRoundPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay, setStats } from '../common/utils';
 import { FightResultType } from '../common/types';
@@ -305,7 +305,7 @@ export class FightRoom extends Room<FightState> {
 		});
 	}
 
-	private handleFightEnd() {
+	private async handleFightEnd() {
 		if (!this.state.fightResult) {
 			if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
 				this.state.fightResult = FightResultType.DRAW;
@@ -318,7 +318,7 @@ export class FightRoom extends Room<FightState> {
 
 		switch (this.state.fightResult) {
 			case FightResultType.WIN:
-				this.handleWin();
+				await this.handleWin();
 				break;
 			case FightResultType.LOSE:
 				this.handleLoose();
@@ -342,9 +342,13 @@ export class FightRoom extends Room<FightState> {
 		this.broadcast('combat_log', `You gained ${this.state.player.rewardRound * 2} xp!`);
 	}
 
-	private handleWin() {
+	private async handleWin() {
 		this.broadcast('combat_log', 'You win!');
 		this.state.player.wins++;
+    const highestWin = await getHighestWin();
+    if (this.state.player.wins > highestWin) {
+      this.broadcast('game_over', 'YOU ARE THE #1 TOP CHUNGERION! CONGRATULATIONS!');
+    }
 		this.broadcast('end_battle', 'The battle has ended!');
 	}
 

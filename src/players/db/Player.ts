@@ -124,6 +124,11 @@ export async function getTopPlayers(number: number): Promise<Player[]> {
   return topPlayers as unknown as Player[];
 }
 
+export async function getHighestWin():Promise<number> {
+  const highestWinPlayer = await playerModel.findOne().sort({ wins: -1 }).limit(1).lean();
+  return highestWinPlayer.wins;
+}
+
 export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
 	if (round <= 0) {
 		return null;
