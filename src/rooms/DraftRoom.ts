@@ -30,6 +30,9 @@ export class DraftRoom extends Room<DraftState> {
 		this.onMessage('buy', async (client, message) => {
 			await this.buyItem(message.itemId, client);
 		});
+		this.onMessage('sell', async (client, message) => {
+			await this.sellItem(message.itemId, client);
+		});
 
 		this.onMessage('refresh_shop', (client, message) => {
 			this.refreshShop(client);
@@ -221,6 +224,12 @@ export class DraftRoom extends Room<DraftState> {
 		if (item) {
 			await this.state.player.getItem(item);
 		}
+	}
+
+	private async sellItem(itemId: number, client: Client){
+		const item = this.state.player.inventory.find((item) => item.itemId === itemId);
+		if(!item) return;
+		await this.state.player.removeItem(item);
 	}
 
 	private async refreshShop(client: Client) {
