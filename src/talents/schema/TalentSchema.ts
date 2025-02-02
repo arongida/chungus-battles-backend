@@ -17,6 +17,8 @@ export class Talent extends Schema {
 		const behavior = TalentBehaviors[behaviorKey];
 		if (behavior) {
 			const talentContext: TalentBehaviorContext = { ...context, talent: this };
+      console.log(`Executing behavior for talentId ${this.talentId}`);
+      console.log(`Talent context: ${JSON.stringify(talentContext)}`);
 			behavior(talentContext);
 		} else {
 			throw new Error(`No behavior defined for talentId ${this.talentId}`);
