@@ -128,14 +128,17 @@ export class FightRoom extends Room<FightState> {
 	update(deltaTime: number) {
 		//check for battle end
 		if (this.state.battleStarted) {
-      this.checkPoison(this.state.player, this.state.enemy);
-      this.checkPoison(this.state.enemy, this.state.player);
+			this.checkPoison(this.state.player, this.state.enemy);
+			this.checkPoison(this.state.enemy, this.state.player);
 
 			if (this.clock.elapsedTime > 65000 && !this.state.endBurnTimer) {
 				this.startEndBurnTimer();
 			}
 
-			if ((this.state.player.hp <= 0 && !this.state.player.invincible) || (this.state.enemy.hp <= 0 && !this.state.enemy.invincible)) {
+			if (
+				(this.state.player.hp <= 0 && !this.state.player.invincible) ||
+				(this.state.enemy.hp <= 0 && !this.state.enemy.invincible)
+			) {
 				//set state and clear intervals
 				this.state.battleStarted = false;
 				this.state.player.attackTimer.clear();
@@ -151,8 +154,6 @@ export class FightRoom extends Room<FightState> {
 				this.handleFightEnd();
 			}
 		}
-
-
 	}
 
 	startEndBurnTimer() {
@@ -194,20 +195,26 @@ export class FightRoom extends Room<FightState> {
 		}
 	}
 
-  checkPoison(attacker: Player, defender: Player) {
-    if (defender.poisonStack <= 0) return;
-    const poisonTalent = attacker.talents.find((talent) => talent.talentId === TalentType.POISON);
-    const poisonItemCollection = attacker.activeItemCollections.find((itemCollection) => itemCollection.itemCollectionId === ItemCollectionType.ROGUE_3);
-    const activationRate = poisonTalent ? poisonTalent.activationRate : poisonItemCollection ? poisonItemCollection.base : 0.015;
-    if (!defender.poisonTimer) {
+	checkPoison(attacker: Player, defender: Player) {
+		if (defender.poisonStack <= 0) return;
+		const poisonTalent = attacker.talents.find((talent) => talent.talentId === TalentType.POISON);
+		const poisonItemCollection = attacker.activeItemCollections.find(
+			(itemCollection) => itemCollection.itemCollectionId === ItemCollectionType.ROGUE_3
+		);
+		const activationRate = poisonTalent
+			? poisonTalent.activationRate
+			: poisonItemCollection
+			? poisonItemCollection.base
+			: 0.015;
+		if (!defender.poisonTimer) {
 			defender.poisonTimer = this.clock.setInterval(() => {
 				const poisonDamage = defender.poisonStack * (activationRate * defender.maxHp + activationRate * 100) * 0.1;
-        this.calculateOnDamageEffects(poisonDamage, defender);
+				this.calculateOnDamageEffects(poisonDamage, defender);
 				defender.takeDamage(poisonDamage, this.state.playerClient);
 				this.state.playerClient.send('combat_log', `${defender.name} takes ${poisonDamage} poison damage!`);
 			}, 1000);
 		}
-  }
+	}
 
 	tryAttack(attacker: Player, defender: Player) {
 		const damage = this.calculateOnDamageEffects(attacker.attack, defender);
@@ -248,7 +255,7 @@ export class FightRoom extends Room<FightState> {
 		this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: reducedDamage,
-      attacker: this.state.player,
+			attacker: this.state.player,
 		});
 		reducedDamage = Math.max(defender.damageToTake, 1);
 		return reducedDamage;
@@ -345,11 +352,12 @@ export class FightRoom extends Room<FightState> {
 	private async handleWin() {
 		this.broadcast('combat_log', 'You win!');
 		this.state.player.wins++;
-    const highestWin = await getHighestWin();
-    if (this.state.player.wins > highestWin) {
-      this.broadcast('game_over', 'YOU ARE THE #1 TOP CHUNGERION! CONGRATULATIONS!');
-    }
-		this.broadcast('end_battle', 'The battle has ended!');
+		const highestWin = await getHighestWin();
+		if (this.state.player.wins > highestWin) {
+			this.broadcast('game_over', 'YOU ARE THE #1 TOP CHUNGERION! CONGRATULATIONS!');
+		} else {
+			this.broadcast('end_battle', 'The battle has ended!');
+		}
 	}
 
 	private handleLoose() {

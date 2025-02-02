@@ -120,13 +120,19 @@ export async function getNextPlayerId(): Promise<number> {
 }
 
 export async function getTopPlayers(number: number): Promise<Player[]> {
-  const topPlayers = await playerModel.find().sort({ wins: -1 }).limit(number).lean();
-  return topPlayers as unknown as Player[];
+	const topPlayers = await playerModel.find().sort({ wins: -1 }).limit(number).lean();
+	return topPlayers as unknown as Player[];
 }
 
-export async function getHighestWin():Promise<number> {
-  const highestWinPlayer = await playerModel.findOne().sort({ wins: -1 }).limit(1).lean();
-  return highestWinPlayer.wins;
+export async function getPlayerRank(playerId: number): Promise<number> {
+	const player = await playerModel.findOne({ playerId: playerId }).lean();
+	const rank = await playerModel.countDocuments({ wins: { $gt: player.wins } });
+	return rank + 1;
+}
+
+export async function getHighestWin(): Promise<number> {
+	const highestWinPlayer = await playerModel.findOne().sort({ wins: -1 }).limit(1).lean();
+	return highestWinPlayer.wins;
 }
 
 export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
