@@ -26,9 +26,8 @@ export class ItemCollection extends Schema {
 				itemCollection: this,
 			};
       console.log(
-        `Executing behavior for itemCollectionId ${this.itemCollectionId}`
+        `Executing behavior for item collection ${this.name}`
       );
-      console.log(`Item collection context: ${JSON.stringify(itemCollectionContext)}`);
 			behavior(itemCollectionContext);
 		} else {
 			throw new Error(
