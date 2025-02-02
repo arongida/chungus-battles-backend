@@ -5,7 +5,7 @@ import { IStats } from '../../common/types';
 import { TalentType } from '../../talents/types/TalentTypes';
 import { Client, Clock, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
-import { increaseStats } from '../../common/utils';
+import { increaseStats, decreaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
 import { getAllItemCollections, getItemCollectionsById } from '../../item-collections/db/ItemCollection';
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
@@ -266,6 +266,14 @@ export class Player extends Schema implements IStats {
 		increaseStats(this, item.affectedStats);
 		item.sold = true;
 		this.inventory.push(item);
+		await this.updateActiveItemCollections();
+	}
+
+	async removeItem(item: Item) {
+		this.gold += Math.floor(item.price * 0.7);
+		decreaseStats(this, item.affectedStats);
+		const indexOfDeletedItem = this.inventory.indexOf(item); 
+		this.inventory.splice(indexOfDeletedItem, 1);
 		await this.updateActiveItemCollections();
 	}
 }
