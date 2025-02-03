@@ -5,7 +5,6 @@ import { FightState } from '../rooms/schema/FightState';
 import { Player } from '../players/schema/PlayerSchema';
 import { AffectedStats, Item } from '../items/schema/ItemSchema';
 import { getItemsById } from '../items/db/Item';
-import { DraftState } from '../rooms/schema/DraftState';
 
 export class SetUpInventoryStateCommand extends Command<
 	FightRoom | DraftRoom,
@@ -30,27 +29,24 @@ export class SetUpInventoryStateCommand extends Command<
 
 	//create new item for the player in the roomstate from the player inventory in the db
 	async setUpInventory(playerToSetUp: Player, playerObjectFromDb: Player) {
+		const equippedItemIdsFromDb = playerObjectFromDb.equippedItems as unknown as number[];
 		if (playerObjectFromDb.inventory.length > 0) {
-			const itemsDataFromDb = (await getItemsById(
-				playerObjectFromDb.inventory as unknown as number[]
-			)) as Item[];
+			const itemsDataFromDb = (await getItemsById(playerObjectFromDb.inventory as unknown as number[])) as Item[];
 			playerObjectFromDb.inventory.forEach((itemId) => {
-				let itemFromDb = itemsDataFromDb.find(
-					(item) => item.itemId === (itemId as unknown as number)
-				);
-        const affectedStatsData = itemFromDb.affectedStats;
-        itemFromDb.affectedStats = new AffectedStats().assign(affectedStatsData);
+				let itemFromDb = itemsDataFromDb.find((item) => item.itemId === (itemId as unknown as number));
+				const affectedStatsData = itemFromDb.affectedStats;
+				itemFromDb.affectedStats = new AffectedStats().assign(affectedStatsData);
 				const newItem = new Item().assign(itemFromDb);
 
+				if (equippedItemIdsFromDb?.includes(newItem.itemId)) {
+					newItem.equipped = true;
+					playerToSetUp.equippedItems.push(newItem);
+				}
 				playerToSetUp.inventory.push(newItem);
 				playerToSetUp.initialInventory.push(newItem);
 			});
 		}
-		if (this.state instanceof DraftState) {
-			await playerToSetUp.updateAvailableItemCollections();
-		} else {
-			await playerToSetUp.updateAvailableItemCollections();
-		}
-		playerToSetUp.updateActiveItemCollections();
+		await playerToSetUp.updateAvailableItemCollections();
+		await playerToSetUp.updateActiveItemCollections();
 	}
 }
