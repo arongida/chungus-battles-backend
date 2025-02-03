@@ -29,11 +29,8 @@ export class Player extends Schema implements IStats {
 	@type('string') avatarUrl: string;
 	@type('number') income: number;
 	@type('number') hpRegen: number;
-	@type(Item) helmet: Item;
-	@type(Item) armor: Item;
-	@type(Item) weapon: Item;
-	@type(Item) shield: Item;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
+	@type([Item]) equippedItems: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
 	@type([ItemCollection])

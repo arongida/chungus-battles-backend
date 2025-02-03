@@ -18,6 +18,7 @@ const PlayerSchema = new Schema({
 	wins: Number,
 	avatarUrl: String,
 	talents: [Number],
+	equippedItems: [Number],
 	inventory: [Number],
 	income: Number,
 	hpRegen: Number,
@@ -105,7 +106,9 @@ export async function updatePlayer(player: Player): Promise<Player> {
 	playerObject.talents.forEach((talent) => {
 		foundPlayerModel.talents.push(talent.talentId);
 	});
-
+	playerObject.equippedItems.forEach((item) => {
+		foundPlayerModel.equippedItems.push(item.itemId);
+	});
 	playerObject.inventory.forEach((item) => {
 		foundPlayerModel.inventory.push(item.itemId);
 	});

@@ -38,8 +38,8 @@ export class SetUpInventoryStateCommand extends Command<
 				let itemFromDb = itemsDataFromDb.find(
 					(item) => item.itemId === (itemId as unknown as number)
 				);
-        const affectedStatsData = itemFromDb.affectedStats;
-        itemFromDb.affectedStats = new AffectedStats().assign(affectedStatsData);
+				const affectedStatsData = itemFromDb.affectedStats;
+				itemFromDb.affectedStats = new AffectedStats().assign(affectedStatsData);
 				const newItem = new Item().assign(itemFromDb);
 
 				playerToSetUp.inventory.push(newItem);
