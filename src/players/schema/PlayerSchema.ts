@@ -9,6 +9,7 @@ import { increaseStats, decreaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
 import { getAllItemCollections, getItemCollectionsById } from '../../item-collections/db/ItemCollection';
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
+import { ItemType } from '../../items/types/ItemTypes';
 
 export class Player extends Schema implements IStats {
 	@type('number') playerId: number;
@@ -233,9 +234,9 @@ export class Player extends Schema implements IStats {
 
 		inventoryCollectionIds.forEach((collectionId) => {
 			if (collectionId >= ItemCollectionType.SHIELDS_1 && collectionId <= ItemCollectionType.SHIELDS_5) {
-				const shields = this.getItemsForTags(['shield']);
-				const uniqueShieldsNumber = [...new Set(shields.map((shield) => shield.itemId))].length;
-				collectionIdsToActivate.push(uniqueShieldsNumber);
+				const shields: Item[] = this.equippedItems.filter((item) => item.type === ItemType.SHIELD);
+        const equippedShieldTier = shields[0]?.tier;
+				collectionIdsToActivate.push(equippedShieldTier);
 			}
 
 			if (collectionId >= ItemCollectionType.WARRIOR_1) {
@@ -283,15 +284,14 @@ export class Player extends Schema implements IStats {
 
 	async setItemEquiped(item: Item) {
 		const unequippedItem = this.equippedItems.find((equippedItem) => equippedItem.type === item.type);
-		if (unequippedItem) { 
-			unequippedItem.equipped = false 
+		if (unequippedItem) {
+			unequippedItem.equipped = false;
 			decreaseStats(this, unequippedItem.affectedStats);
-		};
+		}
 		this.equippedItems = this.equippedItems.filter((equippedItem) => equippedItem.type !== item.type);
 		this.equippedItems.push(item);
 		item.equipped = true;
 		increaseStats(this, item.affectedStats);
 		await this.updateActiveItemCollections();
 	}
-
 }
