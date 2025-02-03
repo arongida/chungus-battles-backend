@@ -59,9 +59,9 @@ export class Player extends Schema implements IStats {
 	attackTimer: Delayed;
 	poisonTimer: Delayed;
 	regenTimer: Delayed;
-  invincibleTimer: Delayed;
+	invincibleTimer: Delayed;
 	talentsOnCooldown: TalentType[] = [];
-  invincible: boolean = false;
+	invincible: boolean = false;
 	damageToTake: number;
 	rewardRound: number;
 
@@ -127,23 +127,23 @@ export class Player extends Schema implements IStats {
 		this._defense = value < 0 ? 0 : value;
 	}
 
-  setInvincible(clock: ClockTimer, invincibleLenghtMS: number) {
-    console.log('set invincible');
-    this.invincible = true;
-    if (this.invincibleTimer) {
-      const timeLeft = this.invincibleTimer.time - this.invincibleTimer.elapsedTime;
-      this.invincibleTimer.clear();
-      this.invincibleTimer = clock.setTimeout(() => {
-        this.invincible = false;
-      }, timeLeft + invincibleLenghtMS);
-    }
-    this.invincibleTimer = clock.setTimeout(() => {
-      this.invincible = false;
-    }, invincibleLenghtMS);
-  }
+	setInvincible(clock: ClockTimer, invincibleLenghtMS: number) {
+		console.log('set invincible');
+		this.invincible = true;
+		if (this.invincibleTimer) {
+			const timeLeft = this.invincibleTimer.time - this.invincibleTimer.elapsedTime;
+			this.invincibleTimer.clear();
+			this.invincibleTimer = clock.setTimeout(() => {
+				this.invincible = false;
+			}, timeLeft + invincibleLenghtMS);
+		}
+		this.invincibleTimer = clock.setTimeout(() => {
+			this.invincible = false;
+		}, invincibleLenghtMS);
+	}
 
 	takeDamage(damage: number, playerClient: Client) {
-    if (this.invincible) return;
+		if (this.invincible) return;
 		this.hp -= damage;
 		playerClient.send('damage', {
 			playerId: this.playerId,
@@ -187,7 +187,6 @@ export class Player extends Schema implements IStats {
 				this.poisonTimer = null;
 			}
 		}, 10000);
-
 	}
 
 	async updateAvailableItemCollections() {
@@ -273,33 +272,16 @@ export class Player extends Schema implements IStats {
 	async removeItem(item: Item) {
 		this.gold += Math.floor(item.price * 0.7);
 		decreaseStats(this, item.affectedStats);
-		const indexOfDeletedItem = this.inventory.indexOf(item); 
+		const indexOfDeletedItem = this.inventory.indexOf(item);
 		this.inventory.splice(indexOfDeletedItem, 1);
 		await this.updateActiveItemCollections();
 	}
 
-	async setItemEquiped(item: Item){
-		if(item.tags.includes("helmet")){
-			this.inventory.forEach(item => {
-				if(item.tags.includes("helmet")){
-					item.equipped = false;
-				}});
-		}else if(item.tags.includes("armor")){
-			this.inventory.forEach(item => {
-				if(item.tags.includes("armor")){
-					item.equipped = false;
-				}});
-		}else if(item.tags.includes("weapon")){
-			this.inventory.forEach(item => {
-				if(item.tags.includes("weapon")){
-					item.equipped = false;
-				}});
-		}else if(item.tags.includes("shield")){
-			this.inventory.forEach(item => {
-				if(item.tags.includes("shield")){
-					item.equipped = false;
-				}});
-		}
+	async setItemEquiped(item: Item) {
+    const unequippedItem = this.equippedItems.find((equippedItem) => equippedItem.type === item.type);
+    if (unequippedItem) unequippedItem.equipped = false;
+		this.equippedItems = this.equippedItems.filter((equippedItem) => equippedItem.type !== item.type);
+		this.equippedItems.push(item);
 		item.equipped = true;
 	}
 }

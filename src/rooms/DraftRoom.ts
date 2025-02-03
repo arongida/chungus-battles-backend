@@ -213,7 +213,7 @@ export class DraftRoom extends Room<DraftState> {
 
 	private async equipItem(itemId: number, client: Client){
 		const item = this.state.player.inventory.find((item)=> item.itemId === itemId);
-		if(!item)return;
+		if(!item) return;
 		await this.state.player.setItemEquiped(item);
 	}
 
