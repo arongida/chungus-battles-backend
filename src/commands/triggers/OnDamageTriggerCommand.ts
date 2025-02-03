@@ -31,7 +31,7 @@ export class OnDamageTriggerCommand extends Command<
 
 		const onDamageItemCollections: ItemCollection[] =
 			defender.activeItemCollections.filter((itemCollection) =>
-				itemCollection.tags.includes(TriggerType.ON_DAMAGE)
+				itemCollection.triggerType === TriggerType.ON_DAMAGE
 			);
 
 		onDamageItemCollections.forEach((itemCollection) => {
