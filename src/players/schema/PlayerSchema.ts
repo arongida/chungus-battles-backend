@@ -29,6 +29,10 @@ export class Player extends Schema implements IStats {
 	@type('string') avatarUrl: string;
 	@type('number') income: number;
 	@type('number') hpRegen: number;
+	@type(Item) helmet: Item;
+	@type(Item) armor: Item;
+	@type(Item) weapon: Item;
+	@type(Item) shield: Item;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
@@ -275,5 +279,30 @@ export class Player extends Schema implements IStats {
 		const indexOfDeletedItem = this.inventory.indexOf(item); 
 		this.inventory.splice(indexOfDeletedItem, 1);
 		await this.updateActiveItemCollections();
+	}
+
+	async setItemEquiped(item: Item){
+		if(item.tags.includes("helmet")){
+			this.inventory.forEach(item => {
+				if(item.tags.includes("helmet")){
+					item.equipped = false;
+				}});
+		}else if(item.tags.includes("armor")){
+			this.inventory.forEach(item => {
+				if(item.tags.includes("armor")){
+					item.equipped = false;
+				}});
+		}else if(item.tags.includes("weapon")){
+			this.inventory.forEach(item => {
+				if(item.tags.includes("weapon")){
+					item.equipped = false;
+				}});
+		}else if(item.tags.includes("shield")){
+			this.inventory.forEach(item => {
+				if(item.tags.includes("shield")){
+					item.equipped = false;
+				}});
+		}
+		item.equipped = true;
 	}
 }
