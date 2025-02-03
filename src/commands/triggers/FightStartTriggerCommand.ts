@@ -23,7 +23,7 @@ export class FightStartTriggerCommand extends Command<FightRoom> {
 
 		//handle on fight start talents
 		const onFightStartTalents: Talent[] = player.talents.filter((talent) =>
-			talent.tags.includes(TriggerType.FIGHT_START)
+			talent.triggerType === TriggerType.FIGHT_START
 		);
 		onFightStartTalents.forEach((talent) => {
 			talent.executeBehavior(fightStartContext);
@@ -31,7 +31,7 @@ export class FightStartTriggerCommand extends Command<FightRoom> {
 
     //handle on fight start item collections
     const onFightStartItemCollections: ItemCollection[] = player.activeItemCollections.filter((itemCollection) =>
-      itemCollection.tags.includes(TriggerType.FIGHT_START)
+      itemCollection.triggerType === TriggerType.FIGHT_START
     );
     onFightStartItemCollections.forEach((itemCollection) => {
       itemCollection.executeBehavior(fightStartContext);

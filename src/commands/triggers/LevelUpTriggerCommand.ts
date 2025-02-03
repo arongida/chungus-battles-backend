@@ -9,7 +9,7 @@ export class LevelUpTriggerCommand extends Command<
 > {
 	execute() {
 		const onLevelUpTalents: Talent[] = this.state.player.talents.filter(
-			(talent) => talent.tags.includes(TriggerType.LEVEL_UP)
+			(talent) => talent.triggerType === TriggerType.LEVEL_UP
 		);
 		const onLevelUpTalentsContext: TalentBehaviorContext = {
 			client: this.state.playerClient,

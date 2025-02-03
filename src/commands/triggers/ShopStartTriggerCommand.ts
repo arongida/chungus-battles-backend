@@ -7,10 +7,10 @@ import { ItemCollection } from '../../item-collections/schema/ItemCollectionSche
 export class ShopStartTriggerCommand extends Command<DraftRoom> {
 	execute() {
 		const onShopStartTalents: Talent[] = this.state.player.talents.filter(
-			(talent) => talent.tags.includes(TriggerType.SHOP_START)
+			(talent) => talent.triggerType === TriggerType.SHOP_START
 		);
     const onShopStartItemCollections: ItemCollection[] = this.state.player.activeItemCollections.filter(
-      (itemCollection) => itemCollection.tags.includes(TriggerType.SHOP_START)
+      (itemCollection) => itemCollection.triggerType === TriggerType.SHOP_START
     );
 		const onShopStartTalentsContext = {
 			client: this.state.playerClient,

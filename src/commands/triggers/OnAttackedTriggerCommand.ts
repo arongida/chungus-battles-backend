@@ -20,7 +20,7 @@ export class OnAttackedTriggerCommand extends Command<
 		};
 		//handle on attacked talents
 		const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
-			(talent) => talent.tags.includes(TriggerType.ON_ATTACKED)
+			(talent) => talent.triggerType === TriggerType.ON_ATTACKED
 		);
 		talentsToTriggerOnDefender.forEach((talent) => {
 			talent.executeBehavior(attackContext);
@@ -28,7 +28,7 @@ export class OnAttackedTriggerCommand extends Command<
 
 		const itemCollectionsToTriggerOnDefender: ItemCollection[] =
 			defender.activeItemCollections.filter((itemCollection) =>
-				itemCollection.tags.includes(TriggerType.ON_ATTACKED)
+				itemCollection.triggerType === TriggerType.ON_ATTACKED
 			);
 		itemCollectionsToTriggerOnDefender.forEach((itemCollection) => {
 			itemCollection.executeBehavior(attackContext);

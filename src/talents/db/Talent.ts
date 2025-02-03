@@ -8,6 +8,7 @@ export const talentMongooseSchema = new Schema({
   activationRate: Number,
   image: String,
   tags: [String],
+  triggerType: String,
 });
 
 export const talentModel = mongoose.model('Talent', talentMongooseSchema);

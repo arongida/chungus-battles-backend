@@ -35,6 +35,8 @@ export class FightRoom extends Room<FightState> {
 
 		//set simulation interval for room
 		this.setSimulationInterval((deltaTime) => this.update(deltaTime), 100);
+
+    this.autoDispose = false;
 	}
 
 	async onJoin(client: Client, options: any) {
@@ -117,6 +119,9 @@ export class FightRoom extends Room<FightState> {
 			this.state.player.round++;
 			await updatePlayer(this.state.player);
 			console.log(client.sessionId, 'left!');
+      this.clock.setTimeout(() => {
+        this.disconnect();
+      }, 5000);
 		}
 	}
 
