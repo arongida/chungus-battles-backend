@@ -15,7 +15,7 @@ export class FightEndTriggerCommand extends Command<FightRoom> {
 		};
 
 		const fightEndTalents: Talent[] = this.state.player.talents.filter((talent) =>
-			talent.tags.includes(TriggerType.FIGHT_END)
+			talent.triggerType === TriggerType.FIGHT_END
 		);
 
 		fightEndTalents.forEach((talent) => {
@@ -24,7 +24,7 @@ export class FightEndTriggerCommand extends Command<FightRoom> {
 
 		//handle on fight start item collections
 		const onFightEndItemCollections: ItemCollection[] = this.state.player.activeItemCollections.filter(
-			(itemCollection) => itemCollection.tags.includes(TriggerType.FIGHT_END)
+			(itemCollection) => itemCollection.triggerType === TriggerType.FIGHT_END
 		);
 		onFightEndItemCollections.forEach((itemCollection) => {
 			itemCollection.executeBehavior(fightEndBehaviorContext);

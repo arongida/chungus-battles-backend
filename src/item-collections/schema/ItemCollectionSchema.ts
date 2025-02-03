@@ -10,6 +10,7 @@ export class ItemCollection extends Schema {
 	@type('string') effect: string;
 	@type('string') image: string;
 	@type(['string']) tags: ArraySchema<string>;
+  @type('string') triggerType: string;
 	@type('number') tier: number;
 	base: number;
 	scaling: number;

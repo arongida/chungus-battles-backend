@@ -7,7 +7,7 @@ export class AuraTriggerCommand extends Command<FightRoom> {
 	execute() {
 		const auraItemCollections: ItemCollection[] =
 			this.state.player.activeItemCollections.filter((itemCollection) =>
-				itemCollection.tags.includes(TriggerType.AURA)
+				itemCollection.triggerType === TriggerType.AURA
 			);
 
 		const auraBehaviorContext = {

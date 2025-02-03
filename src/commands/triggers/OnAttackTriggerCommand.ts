@@ -24,10 +24,10 @@ export class OnAttackTriggerCommand extends Command<
 		};
 
     const itemCollectionsToTrigger: ItemCollection[] = attacker.activeItemCollections.filter((talent) =>
-      talent.tags.includes(TriggerType.ON_ATTACK)
+      talent.triggerType === TriggerType.ON_ATTACK
     );
 		const talentsToTrigger: Talent[] = attacker.talents.filter((talent) =>
-			talent.tags.includes(TriggerType.ON_ATTACK)
+			talent.triggerType === TriggerType.ON_ATTACK
 		);
 		talentsToTrigger.forEach((talent) => {
 			talent.executeBehavior(attackContext);

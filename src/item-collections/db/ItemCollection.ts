@@ -10,6 +10,7 @@ const ItemCollectionSchema = new Schema({
 	base: Number,
 	scaling: Number,
 	tier: Number,
+  triggerType: String,
 });
 
 export const itemcollectionModel = mongoose.model(

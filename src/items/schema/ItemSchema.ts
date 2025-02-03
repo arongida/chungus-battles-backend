@@ -21,4 +21,5 @@ export class Item extends Schema {
   @type('boolean') sold: boolean = false;
   @type('boolean') equipped: boolean = false;
   @type(['number']) itemCollections: number[];
+  @type('string') type: string;
 }

@@ -2,12 +2,7 @@ import { Room, Client } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
 import { AffectedStats, Item } from '../items/schema/ItemSchema';
 import { Talent } from '../talents/schema/TalentSchema';
-import {
-	copyPlayer,
-	getPlayer,
-	updatePlayer,
-	createNewPlayer,
-} from '../players/db/Player';
+import { copyPlayer, getPlayer, updatePlayer, createNewPlayer } from '../players/db/Player';
 import { getNumberOfItems } from '../items/db/Item';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
@@ -53,6 +48,7 @@ export class DraftRoom extends Room<DraftState> {
 		});
 
 		this.setSimulationInterval((deltaTime) => this.update(deltaTime), 1000);
+		this.autoDispose = false;
 	}
 
 	update(deltaTime: number) {
@@ -74,8 +70,7 @@ export class DraftRoom extends Room<DraftState> {
 
 		//if player already exists, check if player is already playing
 		if (foundPlayer) {
-			if (foundPlayer.sessionId !== '')
-				throw new Error('Player already playing!');
+			if (foundPlayer.sessionId !== '') throw new Error('Player already playing!');
 			if (foundPlayer.lives <= 0) throw new Error('Player has no lives left!');
 
 			await this.setUpState(foundPlayer);
@@ -84,22 +79,16 @@ export class DraftRoom extends Room<DraftState> {
 			//check levelup after battle
 			this.checkLevelUp();
 		} else {
-			const newPlayer = await createNewPlayer(
-				options.playerId,
-				options.name,
-				client.sessionId,
-				options.avatarUrl
-			);
+			const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId, options.avatarUrl);
 			this.state.player.assign(newPlayer);
 			this.state.remainingTalentPoints = 1;
 		}
 
 		//set room state
 		if (this.state.player.round === 1) await this.updateTalentSelection();
-		if (this.state.shop.length === 0)
-			await this.updateShop(this.state.shopSize);
+		if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
 
-    await this.state.player.updateAvailableItemCollections();
+		await this.state.player.updateAvailableItemCollections();
 
 		//robbery command
 		this.dispatcher.dispatch(new ShopStartTriggerCommand());
@@ -115,12 +104,14 @@ export class DraftRoom extends Room<DraftState> {
 			await this.allowReconnection(client, 20);
 			console.log('client reconnected!');
 		} catch (e) {
-
 			//save player state to db
 			this.state.player.sessionId = '';
 			const copiedPlayer = await copyPlayer(this.state.player);
 			const updatedPlayer = await updatePlayer(this.state.player);
 			console.log(client.sessionId, 'left!');
+			this.clock.setTimeout(() => {
+				this.disconnect();
+			}, 5000);
 		}
 	}
 
@@ -129,14 +120,11 @@ export class DraftRoom extends Room<DraftState> {
 	}
 
 	private async updateShop(newShopSize: number) {
-		const itemQueryResults = await getNumberOfItems(
-			newShopSize,
-			this.state.player.level
-		);
+		const itemQueryResults = await getNumberOfItems(newShopSize, this.state.player.level);
 		itemQueryResults.forEach((item) => {
 			let newItemObject = item as Item;
-      const newAffectedStats = new AffectedStats();
-      newAffectedStats.assign(newItemObject.affectedStats);
+			const newAffectedStats = new AffectedStats();
+			newAffectedStats.assign(newItemObject.affectedStats);
 			newItemObject.affectedStats = newAffectedStats;
 			const newItem = new Item();
 			newItem.assign(newItemObject);
@@ -159,9 +147,7 @@ export class DraftRoom extends Room<DraftState> {
 	}
 
 	private async updateTalentSelection() {
-		const exceptions = this.state.availableTalents.map(
-			(talent) => talent.talentId
-		);
+		const exceptions = this.state.availableTalents.map((talent) => talent.talentId);
 		this.state.availableTalents.clear();
 		//if player has no talent points, return
 		if (this.state.remainingTalentPoints <= 0) return;
@@ -169,8 +155,7 @@ export class DraftRoom extends Room<DraftState> {
 		//get next talent level to choose from
 		let nextTalentLevel = 1;
 		if (this.state.player.talents.length > 0)
-			nextTalentLevel =
-				this.state.player.talents.sort((a, b) => b.tier - a.tier)[0].tier + 1;
+			nextTalentLevel = this.state.player.talents.sort((a, b) => b.tier - a.tier)[0].tier + 1;
 		//assign talents from db to state
 		const talents = await getRandomTalents(2, nextTalentLevel, exceptions);
 		talents.forEach((talent) => {
@@ -183,27 +168,19 @@ export class DraftRoom extends Room<DraftState> {
 	//get player, enemy, items and talents from db and map them to the room state
 	private async setUpState(player: Player) {
 		//get player item, talent info
-		const talents = (await getTalentsById(
-			player.talents as unknown as number[]
-		)) as Talent[];
+		const talents = (await getTalentsById(player.talents as unknown as number[])) as Talent[];
 
 		const newPlayer = new Player(player);
 		this.state.player.assign(newPlayer);
 
 		player.talents.forEach((talentId) => {
-			const newTalent = new Talent(
-				talents.find(
-					(talent) => talent.talentId === (talentId as unknown as number)
-				)
-			);
+			const newTalent = new Talent(talents.find((talent) => talent.talentId === (talentId as unknown as number)));
 			this.state.player.talents.push(newTalent);
 		});
 
 		let highestTalentTier;
 		if (this.state.player.talents.length > 0) {
-			highestTalentTier = this.state.player.talents.sort(
-				(a, b) => b.tier - a.tier
-			)[0].tier;
+			highestTalentTier = this.state.player.talents.sort((a, b) => b.tier - a.tier)[0].tier;
 		} else {
 			highestTalentTier = 0;
 		}
@@ -228,9 +205,9 @@ export class DraftRoom extends Room<DraftState> {
 		}
 	}
 
-	private async sellItem(itemId: number, client: Client){
+	private async sellItem(itemId: number, client: Client) {
 		const item = this.state.player.inventory.find((item) => item.itemId === itemId);
-		if(!item) return;
+		if (!item) return;
 		await this.state.player.removeItem(item);
 	}
 
@@ -251,9 +228,7 @@ export class DraftRoom extends Room<DraftState> {
 	}
 
 	private async selectTalent(talentId: number) {
-		const talent = this.state.availableTalents.find(
-			(talent) => talent.talentId === talentId
-		);
+		const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
 		if (talent) {
 			this.state.player.talents.push(talent);
 			this.state.remainingTalentPoints--;
@@ -284,7 +259,7 @@ export class DraftRoom extends Room<DraftState> {
 		this.state.player.level++;
 		this.state.player.maxXp += this.state.player.level * 4;
 		this.state.player.xp = leftoverXp;
-    await this.state.player.updateAvailableItemCollections();
+		await this.state.player.updateAvailableItemCollections();
 
 		this.dispatcher.dispatch(new LevelUpTriggerCommand());
 	}

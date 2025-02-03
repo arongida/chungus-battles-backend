@@ -7,7 +7,7 @@ export class ShopPassiveTriggerCommand extends Command<DraftRoom> {
 	execute() {
 		const shopPassiveItemCollections: Talent[] =
 			this.state.player.activeItemCollections.filter((talent) =>
-				talent.tags.includes(TriggerType.SHOP_PASSIVE)
+				talent.triggerType === TriggerType.SHOP_PASSIVE
 			);
 
 		const shopPassiveItemCollectionsContext = {
