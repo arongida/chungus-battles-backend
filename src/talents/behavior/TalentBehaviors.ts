@@ -512,6 +512,7 @@ export const TalentBehaviors = {
 		const { attacker, client, shop } = context;
 		const randomItem = shop[Math.floor(Math.random() * shop.length)];
 		if (randomItem) {
+      attacker.gold += randomItem.price;
 			attacker.getItem(randomItem);
 			client.send('trigger_talent', {
 				playerId: attacker.playerId,

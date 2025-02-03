@@ -22,7 +22,7 @@ export class OnDamageTriggerCommand extends Command<
 		};
 
 		const onDamageTalents: Talent[] = defender.talents.filter((talent) =>
-			talent.tags.includes(TriggerType.ON_DAMAGE)
+			talent.triggerType === TriggerType.ON_DAMAGE
 		);
 
 		onDamageTalents.forEach((talent) => {

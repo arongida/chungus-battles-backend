@@ -9,7 +9,7 @@ export class AfterShopRefreshTriggerCommand extends Command<
 	execute() {
 		const onShopRefreshItemCollections: ItemCollection[] =
 			this.state.player.activeItemCollections.filter((itemCollection) =>
-				itemCollection.tags.includes(TriggerType.AFTER_REFRESH)
+				itemCollection.triggerType === TriggerType.AFTER_REFRESH
 			);
 		const onShopRefreshItemCollectionsContext = {
 			client: this.state.playerClient,

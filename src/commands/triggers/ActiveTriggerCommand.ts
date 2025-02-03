@@ -14,11 +14,11 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
 
 	startActiveEffectsLoop(player: Player, enemy: Player) {
 		const activeTalents: Talent[] = player.talents.filter((talent) =>
-			talent.tags.includes(TriggerType.ACTIVE)
+			talent.triggerType === TriggerType.ACTIVE
 		);
 		const activeItemCollections: ItemCollection[] =
 			player.activeItemCollections.filter((itemCollection) =>
-				itemCollection.tags.includes(TriggerType.ACTIVE)
+				itemCollection.triggerType === TriggerType.ACTIVE
 			);
 		const activeEffectBehaviorContext: TalentBehaviorContext = {
 			client: this.state.playerClient,
