@@ -169,7 +169,7 @@ export class Player extends Schema implements IStats {
 	}
 
 	getItemsForCollection(collectionId: number): Item[] {
-		return this.inventory.filter((item) => item.itemCollections.includes(collectionId));
+		return this.equippedItems.filter((item) => item.itemCollections.includes(collectionId));
 	}
 
 	resetInventory() {
@@ -227,7 +227,7 @@ export class Player extends Schema implements IStats {
 	}
 
 	async updateActiveItemCollections() {
-		const inventoryCollectionIds = this.getNeededIds(this.inventory);
+		const inventoryCollectionIds = this.getNeededIds(this.equippedItems);
 		this.activeItemCollections.clear();
 		let collectionIdsToActivate: number[] = [];
 
@@ -263,7 +263,6 @@ export class Player extends Schema implements IStats {
 
 	async getItem(item: Item) {
 		this.gold -= item.price;
-		increaseStats(this, item.affectedStats);
 		item.sold = true;
 		this.inventory.push(item);
 		await this.updateActiveItemCollections();
@@ -271,17 +270,28 @@ export class Player extends Schema implements IStats {
 
 	async removeItem(item: Item) {
 		this.gold += Math.floor(item.price * 0.7);
-		decreaseStats(this, item.affectedStats);
 		const indexOfDeletedItem = this.inventory.indexOf(item);
 		this.inventory.splice(indexOfDeletedItem, 1);
+		if (item.equipped) {
+			const indexOfDeleteEquippedItem = this.equippedItems.indexOf(item);
+			this.equippedItems.splice(indexOfDeleteEquippedItem, 1);
+			decreaseStats(this, item.affectedStats);
+		}
+
 		await this.updateActiveItemCollections();
 	}
 
 	async setItemEquiped(item: Item) {
-    const unequippedItem = this.equippedItems.find((equippedItem) => equippedItem.type === item.type);
-    if (unequippedItem) unequippedItem.equipped = false;
+		const unequippedItem = this.equippedItems.find((equippedItem) => equippedItem.type === item.type);
+		if (unequippedItem) { 
+			unequippedItem.equipped = false 
+			decreaseStats(this, unequippedItem.affectedStats);
+		};
 		this.equippedItems = this.equippedItems.filter((equippedItem) => equippedItem.type !== item.type);
 		this.equippedItems.push(item);
 		item.equipped = true;
+		increaseStats(this, item.affectedStats);
+		await this.updateActiveItemCollections();
 	}
+
 }

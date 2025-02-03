@@ -31,7 +31,7 @@ export class SetUpInventoryStateCommand extends Command<
 	//create new item for the player in the roomstate from the player inventory in the db
 	async setUpInventory(playerToSetUp: Player, playerObjectFromDb: Player) {
 
-    const equippedItemIdsFromDb = playerObjectFromDb.equippedItems as unknown as number[];
+		const equippedItemIdsFromDb = playerObjectFromDb.equippedItems as unknown as number[];
 
 		if (playerObjectFromDb.inventory.length > 0) {
 			const itemsDataFromDb = (await getItemsById(
@@ -45,11 +45,12 @@ export class SetUpInventoryStateCommand extends Command<
 				itemFromDb.affectedStats = new AffectedStats().assign(affectedStatsData);
 				const newItem = new Item().assign(itemFromDb);
 
+				if (equippedItemIdsFromDb.includes(newItem.itemId)) {
+					newItem.equipped = true;
+					playerToSetUp.equippedItems.push(newItem);
+				}
 				playerToSetUp.inventory.push(newItem);
 				playerToSetUp.initialInventory.push(newItem);
-        if (equippedItemIdsFromDb.includes(newItem.itemId)) {
-          playerToSetUp.equippedItems.push(newItem);
-        }
 			});
 		}
 		await playerToSetUp.updateAvailableItemCollections();
