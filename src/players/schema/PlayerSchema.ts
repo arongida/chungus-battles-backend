@@ -200,27 +200,6 @@ export class Player extends Schema implements IStats {
 			newItemCollection.assign(itemCollection);
 			this.availableItemCollections.push(newItemCollection);
 		});
-
-		//filter out irrelevant shield collections
-		const highestShield = [...this.activeItemCollections.map((itemCollection) => itemCollection.itemCollectionId)]
-			.filter(
-				(collectionId) => collectionId >= ItemCollectionType.SHIELDS_1 && collectionId <= ItemCollectionType.SHIELDS_5
-			)
-			.sort()
-			.pop();
-		const shieldsToRemove = Array.from({ length: highestShield - 1 }, (_, i) => i + 1);
-
-		//filter out already acquired item collections
-		this.availableItemCollections = this.availableItemCollections.filter((itemCollection) => {
-			const activeItemCollectionsIds = [
-				...this.activeItemCollections.map((itemCollection) => itemCollection.itemCollectionId),
-			];
-			return (
-				!activeItemCollectionsIds.includes(itemCollection.itemCollectionId) &&
-				!shieldsToRemove.includes(itemCollection.itemCollectionId) &&
-				itemCollection.tier <= this.level
-			);
-		});
 	}
 
 	getNeededIds(itemSchema: ArraySchema<Item>): number[] {
@@ -233,18 +212,10 @@ export class Player extends Schema implements IStats {
 		let collectionIdsToActivate: number[] = [];
 
 		inventoryCollectionIds.forEach((collectionId) => {
-			if (collectionId >= ItemCollectionType.SHIELDS_1 && collectionId <= ItemCollectionType.SHIELDS_5) {
-				const shields: Item[] = this.equippedItems.filter((item) => item.type === ItemType.SHIELD);
-        const equippedShieldTier = shields[0]?.tier;
-				collectionIdsToActivate.push(equippedShieldTier);
-			}
-
-			if (collectionId >= ItemCollectionType.WARRIOR_1) {
-				const sameCollectionItems = this.getItemsForCollection(collectionId);
-				const uniqueCollectionItems = [...new Set(sameCollectionItems.map((item) => item.itemId))];
-				if (uniqueCollectionItems.length === 3) {
-					collectionIdsToActivate.push(collectionId);
-				}
+			const sameCollectionItems = this.getItemsForCollection(collectionId);
+			const uniqueCollectionItems = [...new Set(sameCollectionItems.map((item) => item.itemId))];
+			if (uniqueCollectionItems.length === 3 || collectionId < ItemCollectionType.WARRIOR_1) {
+				collectionIdsToActivate.push(collectionId);
 			}
 		});
 		collectionIdsToActivate = [...new Set(collectionIdsToActivate)];
