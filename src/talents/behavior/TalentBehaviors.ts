@@ -7,8 +7,6 @@ import { Talent } from '../schema/TalentSchema';
 export const TalentBehaviors = {
 	[TalentType.RAGE]: (context: TalentBehaviorContext) => {
 		const { talent, attacker, client } = context;
-		const selfDamage = talent.activationRate * attacker.hp * 0.01 + 1;
-		attacker.takeDamage(selfDamage, client);
 		attacker.attack += talent.activationRate;
 		client.send('combat_log', `${attacker.name} rages, increased attack by 1!`);
 
