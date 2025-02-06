@@ -105,7 +105,7 @@ export class DraftRoom extends Room<DraftState> {
 
 			// allow disconnected client to reconnect into this room until 20 seconds
 			await this.allowReconnection(client, 20);
-			console.log('client reconnected!');
+			console.log(`${client.sessionId} reconnected!`);
 		} catch (e) {
 			//save player state to db
 			this.state.player.sessionId = '';
