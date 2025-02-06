@@ -89,6 +89,9 @@ export class FightRoom extends Room<FightState> {
 		this.clock.setTimeout(async () => {
 			countdownTimer.clear();
 			this.broadcast('combat_log', 'The battle begins!');
+      console.log('battle started!');
+      console.log('player', this.state.player.name);
+      console.log('enemy', this.state.enemy.name);
 			this.state.battleStarted = true;
 			this.startBattle();
 		}, 5500);
@@ -356,10 +359,11 @@ export class FightRoom extends Room<FightState> {
 
 	private async handleWin() {
 		this.broadcast('combat_log', 'You win!');
+    console.log(`${this.state.player.name} wins!`);
 		this.state.player.wins++;
 		const highestWin = await getHighestWin();
 		if (this.state.player.wins > highestWin) {
-			this.broadcast('game_over', 'YOU ARE THE #1 TOP CHUNGERION! CONGRATULATIONS!');
+			this.broadcast('game_over', 'YOU ARE THE #1 TOP CHUNGERION! CHUNGRATULATIONS!');
 		} else {
 			this.broadcast('end_battle', 'The battle has ended!');
 		}
@@ -367,6 +371,7 @@ export class FightRoom extends Room<FightState> {
 
 	private handleLoose() {
 		this.broadcast('combat_log', 'You loose!');
+    console.log(`${this.state.player.name} looses!`);
 		this.state.player.lives--;
 		if (this.state.player.lives <= 0) {
 			this.broadcast('game_over', 'You have lost the game!');
@@ -376,6 +381,7 @@ export class FightRoom extends Room<FightState> {
 	}
 
 	private handleDraw() {
+    console.log('draw!');
 		this.broadcast('combat_log', "It's a draw!");
 		this.broadcast('end_battle', 'The battle has ended!');
 	}
