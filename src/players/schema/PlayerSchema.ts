@@ -294,4 +294,12 @@ export class Player extends Schema implements IStats {
 		increaseStats(this, item.affectedStats);
 		await this.updateActiveItemCollections();
 	}
+
+	async setItemUnequiped(item: Item){
+		const itemArrayWithoutThisItem = this.equippedItems.filter((equippedItem) => equippedItem.itemId !== item.itemId);
+		item.equipped = false;
+		this.equippedItems = itemArrayWithoutThisItem;
+		decreaseStats(this, item.affectedStats);
+		await this.updateActiveItemCollections();
+	}
 }
