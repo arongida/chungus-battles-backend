@@ -18,6 +18,7 @@ const PlayerSchema = new Schema({
 	wins: Number,
 	avatarUrl: String,
 	talents: [Number],
+	equippedItems: [Number],
 	inventory: [Number],
 	income: Number,
 	hpRegen: Number,
@@ -56,6 +57,7 @@ export async function createNewPlayer(
 		avatarUrl: avatarUrl,
 		talents: [],
 		inventory: [],
+    equippedItems: [],
 		income: 0,
 		hpRegen: 0,
 	});
@@ -69,11 +71,13 @@ export async function copyPlayer(player: Player): Promise<Player> {
 		...playerObject,
 		talents: [0],
 		inventory: [0],
+    equippedItems: [0],
 	};
 	newPlayerObject = {
 		...playerObject,
 		talents: [],
 		inventory: [],
+    equippedItems: [],
 		playerId: await getNextPlayerId(),
 	};
 
@@ -87,14 +91,18 @@ export async function copyPlayer(player: Player): Promise<Player> {
 		newPlayer.inventory.push(item.itemId);
 	});
 
+  playerObject.equippedItems.forEach((item) => {
+		newPlayer.equippedItems.push(item.itemId);
+	});
+
 	await newPlayer.save().catch((err) => console.error(err));
 	return newPlayer.toObject() as unknown as Player;
 }
 
 export async function updatePlayer(player: Player): Promise<Player> {
 	let playerObject = player.toJSON();
-	let newPlayerObject = { ...playerObject, talents: [0], inventory: [0] };
-	newPlayerObject = { ...playerObject, talents: [], inventory: [] };
+	let newPlayerObject = { ...playerObject, talents: [0], inventory: [0], equippedItems: [0] };
+	newPlayerObject = { ...playerObject, talents: [], inventory: [], equippedItems: [] };
 
 	const foundPlayerModel = await playerModel.findOne({
 		playerId: player.playerId,
@@ -105,7 +113,9 @@ export async function updatePlayer(player: Player): Promise<Player> {
 	playerObject.talents.forEach((talent) => {
 		foundPlayerModel.talents.push(talent.talentId);
 	});
-
+	playerObject.equippedItems.forEach((item) => {
+		foundPlayerModel.equippedItems.push(item.itemId);
+	});
 	playerObject.inventory.forEach((item) => {
 		foundPlayerModel.inventory.push(item.itemId);
 	});

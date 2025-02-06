@@ -9,6 +9,7 @@ import { increaseStats, decreaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
 import { getAllItemCollections, getItemCollectionsById } from '../../item-collections/db/ItemCollection';
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
+import { ItemType } from '../../items/types/ItemTypes';
 
 export class Player extends Schema implements IStats {
 	@type('number') playerId: number;
@@ -30,6 +31,7 @@ export class Player extends Schema implements IStats {
 	@type('number') income: number;
 	@type('number') hpRegen: number;
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
+	@type([Item]) equippedItems: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
 	@type([ItemCollection])
@@ -58,9 +60,9 @@ export class Player extends Schema implements IStats {
 	attackTimer: Delayed;
 	poisonTimer: Delayed;
 	regenTimer: Delayed;
-  invincibleTimer: Delayed;
+	invincibleTimer: Delayed;
 	talentsOnCooldown: TalentType[] = [];
-  invincible: boolean = false;
+	invincible: boolean = false;
 	damageToTake: number;
 	rewardRound: number;
 
@@ -126,23 +128,23 @@ export class Player extends Schema implements IStats {
 		this._defense = value < 0 ? 0 : value;
 	}
 
-  setInvincible(clock: ClockTimer, invincibleLenghtMS: number) {
-    console.log('set invincible');
-    this.invincible = true;
-    if (this.invincibleTimer) {
-      const timeLeft = this.invincibleTimer.time - this.invincibleTimer.elapsedTime;
-      this.invincibleTimer.clear();
-      this.invincibleTimer = clock.setTimeout(() => {
-        this.invincible = false;
-      }, timeLeft + invincibleLenghtMS);
-    }
-    this.invincibleTimer = clock.setTimeout(() => {
-      this.invincible = false;
-    }, invincibleLenghtMS);
-  }
+	setInvincible(clock: ClockTimer, invincibleLenghtMS: number) {
+		console.log('set invincible');
+		this.invincible = true;
+		if (this.invincibleTimer) {
+			const timeLeft = this.invincibleTimer.time - this.invincibleTimer.elapsedTime;
+			this.invincibleTimer.clear();
+			this.invincibleTimer = clock.setTimeout(() => {
+				this.invincible = false;
+			}, timeLeft + invincibleLenghtMS);
+		}
+		this.invincibleTimer = clock.setTimeout(() => {
+			this.invincible = false;
+		}, invincibleLenghtMS);
+	}
 
 	takeDamage(damage: number, playerClient: Client) {
-    if (this.invincible) return;
+		if (this.invincible) return;
 		this.hp -= damage;
 		playerClient.send('damage', {
 			playerId: this.playerId,
@@ -168,7 +170,7 @@ export class Player extends Schema implements IStats {
 	}
 
 	getItemsForCollection(collectionId: number): Item[] {
-		return this.inventory.filter((item) => item.itemCollections.includes(collectionId));
+		return this.equippedItems.filter((item) => item.itemCollections.includes(collectionId));
 	}
 
 	resetInventory() {
@@ -186,7 +188,6 @@ export class Player extends Schema implements IStats {
 				this.poisonTimer = null;
 			}
 		}, 10000);
-
 	}
 
 	async updateAvailableItemCollections() {
@@ -227,15 +228,15 @@ export class Player extends Schema implements IStats {
 	}
 
 	async updateActiveItemCollections() {
-		const inventoryCollectionIds = this.getNeededIds(this.inventory);
+		const inventoryCollectionIds = this.getNeededIds(this.equippedItems);
 		this.activeItemCollections.clear();
 		let collectionIdsToActivate: number[] = [];
 
 		inventoryCollectionIds.forEach((collectionId) => {
 			if (collectionId >= ItemCollectionType.SHIELDS_1 && collectionId <= ItemCollectionType.SHIELDS_5) {
-				const shields = this.getItemsForTags(['shield']);
-				const uniqueShieldsNumber = [...new Set(shields.map((shield) => shield.itemId))].length;
-				collectionIdsToActivate.push(uniqueShieldsNumber);
+				const shields: Item[] = this.equippedItems.filter((item) => item.type === ItemType.SHIELD);
+        const equippedShieldTier = shields[0]?.tier;
+				collectionIdsToActivate.push(equippedShieldTier);
 			}
 
 			if (collectionId >= ItemCollectionType.WARRIOR_1) {
@@ -263,7 +264,6 @@ export class Player extends Schema implements IStats {
 
 	async getItem(item: Item) {
 		this.gold -= item.price;
-		increaseStats(this, item.affectedStats);
 		item.sold = true;
 		this.inventory.push(item);
 		await this.updateActiveItemCollections();
@@ -271,9 +271,35 @@ export class Player extends Schema implements IStats {
 
 	async removeItem(item: Item) {
 		this.gold += Math.floor(item.price * 0.7);
-		decreaseStats(this, item.affectedStats);
-		const indexOfDeletedItem = this.inventory.indexOf(item); 
+		const indexOfDeletedItem = this.inventory.indexOf(item);
 		this.inventory.splice(indexOfDeletedItem, 1);
+		if (item.equipped) {
+			const indexOfDeleteEquippedItem = this.equippedItems.indexOf(item);
+			this.equippedItems.splice(indexOfDeleteEquippedItem, 1);
+			decreaseStats(this, item.affectedStats);
+		}
+
+		await this.updateActiveItemCollections();
+	}
+
+	async setItemEquiped(item: Item) {
+		const unequippedItem = this.equippedItems.find((equippedItem) => equippedItem.type === item.type);
+		if (unequippedItem) {
+			unequippedItem.equipped = false;
+			decreaseStats(this, unequippedItem.affectedStats);
+		}
+		this.equippedItems = this.equippedItems.filter((equippedItem) => equippedItem.type !== item.type);
+		this.equippedItems.push(item);
+		item.equipped = true;
+		increaseStats(this, item.affectedStats);
+		await this.updateActiveItemCollections();
+	}
+
+	async setItemUnequiped(item: Item){
+		const itemArrayWithoutThisItem = this.equippedItems.filter((equippedItem) => equippedItem.itemId !== item.itemId);
+		item.equipped = false;
+		this.equippedItems = itemArrayWithoutThisItem;
+		decreaseStats(this, item.affectedStats);
 		await this.updateActiveItemCollections();
 	}
 }

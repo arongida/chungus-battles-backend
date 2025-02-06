@@ -28,7 +28,12 @@ export class DraftRoom extends Room<DraftState> {
 		this.onMessage('sell', async (client, message) => {
 			await this.sellItem(message.itemId, client);
 		});
-
+		this.onMessage('equip', async(client, message) =>{
+			await this.equipItem(message.itemId, client);
+		});
+		this.onMessage('unequip', async(client, message) =>{
+			await this.unequipItem(message.itemId, client);
+		});
 		this.onMessage('refresh_shop', (client, message) => {
 			this.refreshShop(client);
 		});
@@ -207,6 +212,18 @@ export class DraftRoom extends Room<DraftState> {
 		const item = this.state.player.inventory.find((item) => item.itemId === itemId);
 		if (!item) return;
 		await this.state.player.removeItem(item);
+	}
+
+	private async equipItem(itemId: number, client: Client){
+		const item = this.state.player.inventory.find((item)=> item.itemId === itemId);
+		if(!item) return;
+		await this.state.player.setItemEquiped(item);
+	}
+
+	private async unequipItem(itemId: number, client: Client){
+		const item = this.state.player.equippedItems.find((item)=> item.itemId === itemId);
+		if(!item) return;
+		await this.state.player.setItemUnequiped(item);
 	}
 
 	private async refreshShop(client: Client) {

@@ -6,14 +6,12 @@ import { Talent } from '../schema/TalentSchema';
 
 export const TalentBehaviors = {
 	[TalentType.RAGE]: (context: TalentBehaviorContext) => {
-		const { talent, attacker, client } = context;
-		const selfDamage = talent.activationRate * attacker.hp * 0.01 + 1;
-		attacker.takeDamage(selfDamage, client);
-		attacker.attack += talent.activationRate;
-		client.send('combat_log', `${attacker.name} rages, increased attack by 1!`);
+		const { talent, defender, client } = context;
+		defender.attack += talent.activationRate;
+		client.send('combat_log', `${defender.name} rages, increased attack by 1!`);
 
 		client.send('trigger_talent', {
-			playerId: attacker.playerId,
+			playerId: defender.playerId,
 			talentId: TalentType.RAGE,
 		});
 	},
