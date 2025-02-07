@@ -136,7 +136,7 @@ export async function getTopPlayers(number: number): Promise<Player[]> {
 
 export async function getPlayerRank(playerId: number): Promise<number> {
 	const player = await playerModel.findOne({ playerId: playerId }).lean();
-	const rank = await playerModel.countDocuments({ wins: { $gt: player.wins } });
+	const rank = await playerModel.countDocuments({ wins: { $gte: player.wins } });
 	return rank + 1;
 }
 
