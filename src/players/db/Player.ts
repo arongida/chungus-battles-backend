@@ -134,24 +134,28 @@ export async function getNextPlayerId(): Promise<number> {
 export async function getTopPlayers(number: number): Promise<Player[]> {
 	const topPlayers = await playerModel.aggregate([
 		{
-			$sort: { wins: -1 } // Sort by wins in descending order
+			$sort: { wins: -1, _id: 1 } // Sort by wins (descending) and then by _id (ascending) for stability
 		},
 		{
 			$group: {
-				_id: "$originalPlayerId", // Group by originalPlayerId
-				doc: { $first: "$$ROOT" } // Take the first (highest win) document for each player
+				_id: "$originalPlayerId", 
+				doc: { $first: "$$ROOT" } // Keep the first (highest win) document per player
 			}
 		},
 		{
-			$replaceRoot: { newRoot: "$doc" } // Replace root with the selected document
+			$replaceRoot: { newRoot: "$doc" } // Replace root with selected document
 		},
 		{
-			$limit: number
+			$sort: { wins: -1, _id: 1 } // Re-sort to maintain order after grouping
+		},
+		{
+			$limit: number // Limit the number of results
 		}
 	]).exec();
 
 	return topPlayers as unknown as Player[];
 }
+
 
 
 export async function getPlayerRank(playerId: number): Promise<number> {
