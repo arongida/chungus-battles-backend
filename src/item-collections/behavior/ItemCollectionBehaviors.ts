@@ -62,11 +62,7 @@ export const ItemCollectionBehaviors = {
 			damage: damageAfterReduction,
 			attacker: attacker,
 		});
-		attacker.hp -= damageAfterReduction;
-		client.send('damage', {
-			playerId: attacker.playerId,
-			damage: damageAfterReduction,
-		});
+		attacker.takeDamage(damageAfterReduction, client);
 		client.send('combat_log', `${defender.name} reflects ${damageAfterReduction} damage to ${attacker.name}!`);
 		client.send('trigger_collection', {
 			playerId: defender.playerId,
@@ -105,11 +101,7 @@ export const ItemCollectionBehaviors = {
 			damage: damageAfterReduction,
 			attacker: attacker,
 		});
-		defender.hp -= damageAfterReduction;
-		client.send('damage', {
-			playerId: defender.playerId,
-			damage: damageAfterReduction,
-		});
+		defender.takeDamage(damageAfterReduction, client);
 		client.send('combat_log', `${attacker.name} throws weapons for ${damageAfterReduction} damage!`);
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
@@ -233,11 +225,7 @@ export const ItemCollectionBehaviors = {
 		const { attacker, defender, client, itemCollection } = context;
 		const damage = attacker.gold * itemCollection.scaling + itemCollection.base;
 		const damageAfterReduction = defender.getDamageAfterDefense(damage);
-		defender.hp -= damageAfterReduction;
-		client.send('damage', {
-			playerId: defender.playerId,
-			damage: damageAfterReduction,
-		});
+		defender.takeDamage(damageAfterReduction, client);
 		client.send(
 			'combat_log',
 			`${attacker.name} engraved gold on their weapon to deal ${damageAfterReduction} damage to ${defender.name}!`

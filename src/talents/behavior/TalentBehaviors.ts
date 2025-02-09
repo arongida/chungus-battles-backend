@@ -134,16 +134,12 @@ export const TalentBehaviors = {
 			damage: amount,
 			attacker: attacker,
 		});
-		defender.hp -= amount;
+		defender.takeDamage(amount, client);
 		attacker.hp += amount;
 		client.send('combat_log', `${attacker.name} scams ${amount} health from ${defender.name}!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.SCAM,
-		});
-		client.send('damage', {
-			playerId: defender.playerId,
-			damage: amount,
 		});
 		client.send('healing', {
 			playerId: attacker.playerId,
@@ -299,15 +295,11 @@ export const TalentBehaviors = {
 	[TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, talent } = context;
 		const reflectDamage = talent.activationRate * 100 + talent.activationRate * defender.defense;
-		attacker.hp -= reflectDamage;
+    attacker.takeDamage(reflectDamage, client);
 		client.send('combat_log', `${defender.name} reflects ${reflectDamage} damage to ${attacker.name}!`);
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
 			talentId: TalentType.THORNY_FENCE,
-		});
-		client.send('damage', {
-			playerId: attacker.playerId,
-			damage: reflectDamage,
 		});
 	},
 
@@ -319,23 +311,21 @@ export const TalentBehaviors = {
 		}
 		const random = Math.random();
 		if (random < talent.activationRate) {
-			attacker.hp -= damage;
-
+      
       commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
         defender: attacker,
         damage: damage,
         attacker: defender,
       });
 
+      attacker.takeDamage(damage, client);
+
 			client.send('combat_log', `${defender.name} reflects ${damage} damage to ${attacker.name}!`);
 			client.send('trigger_talent', {
 				playerId: defender.playerId,
 				talentId: TalentType.EYE_FOR_AN_EYE,
 			});
-			client.send('damage', {
-				playerId: attacker.playerId,
-				damage: damage,
-			});
+
 			defender.talentsOnCooldown.push(TalentType.EYE_FOR_AN_EYE);
 			clock.setTimeout(() => {
 				defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
