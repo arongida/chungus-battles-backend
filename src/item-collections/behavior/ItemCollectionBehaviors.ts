@@ -1,3 +1,4 @@
+import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerCommand';
 import { ItemCollectionType } from '../types/ItemCollectionTypes';
 import { ItemCollectionBehaviorContext } from './ItemCollectionBehaviorContext';
 
@@ -53,9 +54,14 @@ export const ItemCollectionBehaviors = {
 	},
 
 	[ItemCollectionType.WARRIOR_1]: (context: ItemCollectionBehaviorContext) => {
-		const { attacker, defender, client, itemCollection } = context;
+		const { attacker, defender, client, itemCollection, commandDispatcher } = context;
 		const reflectDamage = itemCollection.base + itemCollection.scaling * defender.level;
 		const damageAfterReduction = attacker.getDamageAfterDefense(reflectDamage);
+    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+			defender: attacker,
+			damage: damageAfterReduction,
+			attacker: attacker,
+		});
 		attacker.hp -= damageAfterReduction;
 		client.send('damage', {
 			playerId: attacker.playerId,
@@ -91,10 +97,14 @@ export const ItemCollectionBehaviors = {
 	},
 
 	[ItemCollectionType.WARRIOR_2]: (context: ItemCollectionBehaviorContext) => {
-		const { attacker, defender, client } = context;
-		attacker.talents = attacker.talents.filter((talent) => talent.tier !== 1);
+		const { attacker, defender, client, commandDispatcher } = context;
 		const initialDamage = attacker.attack;
 		const damageAfterReduction = defender.getDamageAfterDefense(initialDamage);
+    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+			defender: defender,
+			damage: damageAfterReduction,
+			attacker: attacker,
+		});
 		defender.hp -= damageAfterReduction;
 		client.send('damage', {
 			playerId: defender.playerId,

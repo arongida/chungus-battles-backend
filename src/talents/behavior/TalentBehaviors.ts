@@ -322,9 +322,9 @@ export const TalentBehaviors = {
 			attacker.hp -= damage;
 
       commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-        defender: defender,
+        defender: attacker,
         damage: damage,
-        attacker: attacker,
+        attacker: defender,
       });
 
 			client.send('combat_log', `${defender.name} reflects ${damage} damage to ${attacker.name}!`);
