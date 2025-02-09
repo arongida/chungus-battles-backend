@@ -3,6 +3,7 @@ import { Player } from '../../players/schema/PlayerSchema';
 
 const PlayerSchema = new Schema({
 	playerId: Number,
+  originalPlayerId: Number,
 	name: String,
 	hp: { type: Number, alias: '_hp' },
 	attack: { type: Number, alias: '_attack' },
@@ -41,6 +42,7 @@ export async function createNewPlayer(
 	const startingGold = process.env.NODE_ENV === 'production' ? 10 : 1000;
 	const newPlayer = new playerModel({
 		playerId: playerId,
+    originalPlayerId: playerId,
 		name: name,
 		hp: 100,
 		attack: 10,
@@ -130,9 +132,27 @@ export async function getNextPlayerId(): Promise<number> {
 }
 
 export async function getTopPlayers(number: number): Promise<Player[]> {
-	const topPlayers = await playerModel.find().sort({ wins: -1 }).limit(number).lean();
+	const topPlayers = await playerModel.aggregate([
+		{
+			$sort: { wins: -1 } // Sort by wins in descending order
+		},
+		{
+			$group: {
+				_id: "$originalPlayerId", // Group by originalPlayerId
+				doc: { $first: "$$ROOT" } // Take the first (highest win) document for each player
+			}
+		},
+		{
+			$replaceRoot: { newRoot: "$doc" } // Replace root with the selected document
+		},
+		{
+			$limit: number
+		}
+	]).exec();
+
 	return topPlayers as unknown as Player[];
 }
+
 
 export async function getPlayerRank(playerId: number): Promise<number> {
 	const player = await playerModel.findOne({ playerId: playerId }).lean();
@@ -147,15 +167,18 @@ export async function getHighestWin(): Promise<number> {
 
 export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
 	if (round <= 0) {
-		return null;
+    const defaultPlayerClone = await playerModel.findOne({ originalPlayerId: playerId, playerId: {$ne: playerId} }).lean();
+		return defaultPlayerClone as unknown as Player;
 	}
 
 	const randomPlayerWithSameTurn = await playerModel.aggregate([
-		{ $match: { round: round, playerId: { $ne: playerId } } },
+		{ $match: { round: round, originalPlayerId: { $ne: playerId } } },
 		{ $sample: { size: 1 } },
 	]);
 	const [enemyPlayerObject] = randomPlayerWithSameTurn;
+
 	if (!enemyPlayerObject) {
+    console.log('No player found for round', round);
 		return await getSameRoundPlayer(round - 1, playerId);
 	}
 	return enemyPlayerObject as unknown as Player;

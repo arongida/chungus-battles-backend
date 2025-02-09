@@ -12,6 +12,7 @@ import { ItemCollectionType } from '../../item-collections/types/ItemCollectionT
 
 export class Player extends Schema implements IStats {
 	@type('number') playerId: number;
+	@type('number') originalPlayerId: number;
 	@type('string') name: string;
 	@type('number') private _hp: number;
 	@type('number') private _attack: number;
