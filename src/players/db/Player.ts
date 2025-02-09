@@ -120,8 +120,6 @@ export async function updatePlayer(player: Player): Promise<Player> {
 		foundPlayerModel.inventory.push(item.itemId);
 	});
 
-  console.log('Updating player with talents: ', foundPlayerModel.talents);
-
 	await foundPlayerModel.save().catch((err) => console.error(err));
 	return player;
 }
