@@ -24,6 +24,7 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
 			client: this.state.playerClient,
 			attacker: player,
 			defender: enemy,
+      commandDispatcher: this.room.dispatcher,
 		};
 
 		activeTalents.forEach((talent) => {
