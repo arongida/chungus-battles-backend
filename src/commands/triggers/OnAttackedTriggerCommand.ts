@@ -17,6 +17,7 @@ export class OnAttackedTriggerCommand extends Command<
 			defender: defender,
 			damage: damage,
 			clock: this.clock,
+      commandDispatcher: this.room.dispatcher
 		};
 		//handle on attacked talents
 		const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(

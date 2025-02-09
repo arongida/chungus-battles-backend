@@ -21,6 +21,7 @@ export class OnAttackTriggerCommand extends Command<
 			defender: defender,
 			damage: damage,
 			clock: this.clock,
+      commandDispatcher: this.room.dispatcher
 		};
 
     const itemCollectionsToTrigger: ItemCollection[] = attacker.activeItemCollections.filter((talent) =>

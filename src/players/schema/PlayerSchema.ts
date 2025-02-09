@@ -3,13 +3,12 @@ import { Talent } from '../../talents/schema/TalentSchema';
 import { Item } from '../../items/schema/ItemSchema';
 import { IStats } from '../../common/types';
 import { TalentType } from '../../talents/types/TalentTypes';
-import { Client, Clock, Delayed } from 'colyseus';
+import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
 import { increaseStats, decreaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
 import { getAllItemCollections, getItemCollectionsById } from '../../item-collections/db/ItemCollection';
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
-import { ItemType } from '../../items/types/ItemTypes';
 
 export class Player extends Schema implements IStats {
 	@type('number') playerId: number;
