@@ -293,8 +293,13 @@ export const TalentBehaviors = {
 	},
 
 	[TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {
-		const { attacker, defender, client, talent } = context;
+		const { attacker, defender, client, talent, commandDispatcher } = context;
 		const reflectDamage = talent.activationRate * 100 + talent.activationRate * defender.defense;
+    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+      defender: attacker,
+      damage: reflectDamage,
+      attacker: defender,
+    });
     attacker.takeDamage(reflectDamage, client);
 		client.send('combat_log', `${defender.name} reflects ${reflectDamage} damage to ${attacker.name}!`);
 		client.send('trigger_talent', {
