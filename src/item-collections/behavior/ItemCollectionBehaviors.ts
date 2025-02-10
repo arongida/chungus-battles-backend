@@ -222,9 +222,14 @@ export const ItemCollectionBehaviors = {
 	},
 
 	[ItemCollectionType.ROGUE_5]: (context: ItemCollectionBehaviorContext) => {
-		const { attacker, defender, client, itemCollection } = context;
+		const { attacker, defender, client, itemCollection, commandDispatcher } = context;
 		const damage = attacker.gold * itemCollection.scaling + itemCollection.base;
 		const damageAfterReduction = defender.getDamageAfterDefense(damage);
+    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+      defender: defender,
+      damage: damageAfterReduction,
+      attacker: attacker,
+    });
 		defender.takeDamage(damageAfterReduction, client);
 		client.send(
 			'combat_log',
