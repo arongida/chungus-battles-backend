@@ -8,6 +8,7 @@ export interface IStats {
 	hp: number;
 	attack: number;
 	defense: number;
+	dodgeRate: number;
 	attackSpeed: number;
 	income: number;
 	hpRegen: number;
