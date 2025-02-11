@@ -36,7 +36,7 @@ export class FightRoom extends Room<FightState> {
 		//set simulation interval for room
 		this.setSimulationInterval((deltaTime) => this.update(deltaTime), 100);
 
-    this.autoDispose = false;
+		this.autoDispose = false;
 	}
 
 	async onJoin(client: Client, options: any) {
@@ -89,9 +89,9 @@ export class FightRoom extends Room<FightState> {
 		this.clock.setTimeout(async () => {
 			countdownTimer.clear();
 			this.broadcast('combat_log', 'The battle begins!');
-      console.log('battle started!');
-      console.log('player', this.state.player.name);
-      console.log('enemy', this.state.enemy.name);
+			console.log('battle started!');
+			console.log('player', this.state.player.name);
+			console.log('enemy', this.state.enemy.name);
 			this.state.battleStarted = true;
 			this.startBattle();
 		}, 5500);
@@ -122,9 +122,9 @@ export class FightRoom extends Room<FightState> {
 			this.state.player.round++;
 			await updatePlayer(this.state.player);
 			console.log(client.sessionId, 'left!');
-      this.clock.setTimeout(() => {
-        this.disconnect();
-      }, 5000);
+			this.clock.setTimeout(() => {
+				this.disconnect();
+			}, 5000);
 		}
 	}
 
@@ -227,16 +227,14 @@ export class FightRoom extends Room<FightState> {
 	tryAttack(attacker: Player, defender: Player) {
 		const damage = this.calculateOnDamageEffects(attacker.attack, defender);
 
-		if (defender.dodgeRate > 0 && Math.random() < defender.dodgeRate) {
-			const dodgeRateCache = defender.dodgeRate;
-			defender.dodgeRate = 0;
+		if (defender.dodgeRate > 0) {
 
-			this.clock.setTimeout(() => {
-				defender.dodgeRate = dodgeRateCache;
-			}, 1500);
+			const dodgeChance = 1 - (100 / (100 + defender.dodgeRate));
 
-			this.state.playerClient.send('combat_log', `${defender.name} dodged the attack!`);
-			return;
+			if (Math.random() < dodgeChance) {
+				this.state.playerClient.send('combat_log', `${defender.name} dodged the attack!`);
+				return;
+			}
 		}
 
 		this.dispatcher.dispatch(new OnAttackedTriggerCommand(), {
@@ -295,6 +293,7 @@ export class FightRoom extends Room<FightState> {
 	async setUpState(player: Player, isEnemy = false) {
 		const newPlayer = new Player(player);
 		if (!newPlayer.income) newPlayer.income = 0;
+		if (!newPlayer.dodgeRate) newPlayer.dodgeRate = 0;
 		if (!newPlayer.hpRegen) newPlayer.hpRegen = 0;
 		if (!isEnemy) {
 			this.state.player.assign(newPlayer);
@@ -359,7 +358,7 @@ export class FightRoom extends Room<FightState> {
 
 	private async handleWin() {
 		this.broadcast('combat_log', 'You win!');
-    console.log(`${this.state.player.name} wins!`);
+		console.log(`${this.state.player.name} wins!`);
 		this.state.player.wins++;
 		const highestWin = await getHighestWin();
 		if (this.state.player.wins > highestWin) {
@@ -371,7 +370,7 @@ export class FightRoom extends Room<FightState> {
 
 	private handleLoose() {
 		this.broadcast('combat_log', 'You loose!');
-    console.log(`${this.state.player.name} looses!`);
+		console.log(`${this.state.player.name} looses!`);
 		this.state.player.lives--;
 		if (this.state.player.lives <= 0) {
 			this.broadcast('game_over', 'You have lost the game!');
@@ -381,7 +380,7 @@ export class FightRoom extends Room<FightState> {
 	}
 
 	private handleDraw() {
-    console.log('draw!');
+		console.log('draw!');
 		this.broadcast('combat_log', "It's a draw!");
 		this.broadcast('end_battle', 'The battle has ended!');
 	}

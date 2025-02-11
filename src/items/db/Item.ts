@@ -10,6 +10,7 @@ const ItemSchema = new Schema({
     hp: Number,
     attack: Number,
     defense: Number,
+    dodgeRate: Number,
     attackSpeed: Number,
     income: Number,
     hpRegen: Number,

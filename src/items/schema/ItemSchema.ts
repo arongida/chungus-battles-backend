@@ -5,6 +5,7 @@ export class AffectedStats extends Schema implements IStats {
   @type('number') hp: number = 0;
   @type('number') attack: number = 0;
   @type('number') defense: number = 0;
+  @type('number') dodgeRate: number = 0;
   @type('number') attackSpeed: number = 0;
   @type('number') income: number = 0;
   @type('number') hpRegen: number = 0;

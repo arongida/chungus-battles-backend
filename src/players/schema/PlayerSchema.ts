@@ -5,7 +5,7 @@ import { IStats } from '../../common/types';
 import { TalentType } from '../../talents/types/TalentTypes';
 import { Client, Delayed } from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
-import { increaseStats, decreaseStats } from '../../common/utils';
+import { increaseStats } from '../../common/utils';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
 import { getAllItemCollections, getItemCollectionsById } from '../../item-collections/db/ItemCollection';
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
@@ -36,13 +36,14 @@ export class Player extends Schema implements IStats {
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
 	@type([ItemCollection])
 	availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
-	@type('number') dodgeRate: number = 0;
+	@type('number') dodgeRate: number;
 	@type('number') refreshShopCost: number = 2;
 	@type('number') maxHp: number;
 	initialStats: IStats = {
 		hp: 0,
 		attack: 0,
 		defense: 0,
+    dodgeRate: 0,
 		attackSpeed: 0,
 		income: 0,
 		hpRegen: 0,
@@ -51,6 +52,7 @@ export class Player extends Schema implements IStats {
 		hp: 0,
 		attack: 0,
 		defense: 0,
+    dodgeRate: 0,
 		attackSpeed: 0,
 		income: 0,
 		hpRegen: 0,
@@ -247,7 +249,7 @@ export class Player extends Schema implements IStats {
 		if (item.equipped) {
 			const indexOfDeleteEquippedItem = this.equippedItems.indexOf(item);
 			this.equippedItems.splice(indexOfDeleteEquippedItem, 1);
-			decreaseStats(this, item.affectedStats);
+			increaseStats(this, item.affectedStats, -1);
 		}
 
 		await this.updateActiveItemCollections();
@@ -257,7 +259,7 @@ export class Player extends Schema implements IStats {
 		const unequippedItem = this.equippedItems.find((equippedItem) => equippedItem.type === item.type);
 		if (unequippedItem) {
 			unequippedItem.equipped = false;
-			decreaseStats(this, unequippedItem.affectedStats);
+			increaseStats(this, unequippedItem.affectedStats, -1);
 		}
 		this.equippedItems = this.equippedItems.filter((equippedItem) => equippedItem.type !== item.type);
 		this.equippedItems.push(item);
@@ -270,7 +272,7 @@ export class Player extends Schema implements IStats {
 		const itemArrayWithoutThisItem = this.equippedItems.filter((equippedItem) => equippedItem.itemId !== item.itemId);
 		item.equipped = false;
 		this.equippedItems = itemArrayWithoutThisItem;
-		decreaseStats(this, item.affectedStats);
+		increaseStats(this, item.affectedStats, -1);
 		await this.updateActiveItemCollections();
 	}
 }
