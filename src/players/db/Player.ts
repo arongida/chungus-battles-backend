@@ -6,7 +6,8 @@ const PlayerSchema = new Schema({
   originalPlayerId: Number,
 	name: String,
 	hp: { type: Number, alias: '_hp' },
-	attack: { type: Number, alias: '_attack' },
+	strength: { type: Number, alias: '_strength' },
+	accuracy: { type: Number, alias: '_accuracy' },
 	gold: { type: Number, alias: '_gold' },
 	xp: Number,
 	level: { type: Number, alias: '_level' },
@@ -23,7 +24,8 @@ const PlayerSchema = new Schema({
 	inventory: [Number],
 	income: Number,
 	hpRegen: Number,
-  dodgeRate: Number
+  dodgeRate: Number,
+  flatDmgReduction: Number
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
@@ -40,13 +42,14 @@ export async function createNewPlayer(
 	sessionId: string,
 	avatarUrl: string
 ): Promise<Player> {
-	const startingGold = process.env.NODE_ENV === 'production' ? 10 : 1000;
+	const startingGold = process.env.NODE_ENV === 'production' ? 6 : 1000;
 	const newPlayer = new playerModel({
 		playerId: playerId,
     originalPlayerId: playerId,
 		name: name,
 		hp: 100,
-		attack: 10,
+		strength: 3,
+    accuracy: 0,
 		gold: startingGold,
 		xp: 0,
 		level: 1,
@@ -63,7 +66,8 @@ export async function createNewPlayer(
     equippedItems: [],
 		income: 0,
 		hpRegen: 0,
-    dodgeRate: 0
+    dodgeRate: 0,
+    flatDmgReduction: 0
 	});
 	await newPlayer.save().catch((err) => console.error(err));
 	return newPlayer.toObject() as unknown as Player;

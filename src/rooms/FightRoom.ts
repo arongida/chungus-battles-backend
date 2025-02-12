@@ -1,4 +1,4 @@
-import { Room, Client } from '@colyseus/core';
+import { Room, Client, debugMatchMaking } from '@colyseus/core';
 import { FightState } from './schema/FightState';
 import { getHighestWin, getPlayer, getSameRoundPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
@@ -195,9 +195,12 @@ export class FightRoom extends Room<FightState> {
 		if (player.hpRegen) {
 			player.regenTimer = this.clock.setInterval(() => {
 				player.hp += player.hpRegen;
-				this.state.playerClient.send('healing', {
+        const isMinusRegen = player.hpRegen < 0 ? true : false;
+        this.state.playerClient.send('combat_log', `${player.name} regenerates ${player.hpRegen} hp!`);
+				this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {
 					playerId: player.playerId,
 					healing: player.hpRegen,
+          damage: player.hpRegen * -1
 				});
 			}, 1000);
 		}
@@ -217,7 +220,13 @@ export class FightRoom extends Room<FightState> {
 		if (!defender.poisonTimer) {
 			defender.poisonTimer = this.clock.setInterval(() => {
 				const poisonDamage = defender.poisonStack * (activationRate * defender.maxHp + activationRate * 100) * 0.1;
-				this.calculateOnDamageEffects(poisonDamage, defender);
+				
+        this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
+          defender: defender,
+          damage: poisonDamage,
+          attacker: this.state.player,
+        });
+
 				defender.takeDamage(poisonDamage, this.state.playerClient);
 				this.state.playerClient.send('combat_log', `${defender.name} takes ${poisonDamage} poison damage!`);
 			}, 1000);
@@ -225,7 +234,13 @@ export class FightRoom extends Room<FightState> {
 	}
 
 	tryAttack(attacker: Player, defender: Player) {
-		const damage = this.calculateOnDamageEffects(attacker.attack, defender);
+
+    const attackRoll = Math.floor(Math.random() * attacker.strength) + attacker.accuracy;
+
+
+		const damage = defender.getDamageAfterDefense(attackRoll);
+
+    
 
 		if (defender.dodgeRate > 0) {
 
@@ -247,24 +262,17 @@ export class FightRoom extends Room<FightState> {
 			defender: defender,
 			damage: damage,
 		});
+    this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
+			defender: defender,
+			damage: damage,
+			attacker: this.state.player,
+		});
 
-		defender.takeDamage(defender.damageToTake, this.state.playerClient);
+		defender.takeDamage(damage, this.state.playerClient);
 
 		//broadcast attack and damage
 		this.state.playerClient.send('combat_log', `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
 		this.state.playerClient.send('attack', attacker.playerId);
-	}
-
-	calculateOnDamageEffects(initialDamage: number, defender: Player): number {
-		let reducedDamage = defender.getDamageAfterDefense(initialDamage);
-		defender.damageToTake = reducedDamage;
-		this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
-			defender: defender,
-			damage: reducedDamage,
-			attacker: this.state.player,
-		});
-		reducedDamage = Math.max(defender.damageToTake, 1);
-		return reducedDamage;
 	}
 
 	//start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
@@ -295,6 +303,7 @@ export class FightRoom extends Room<FightState> {
 		if (!newPlayer.income) newPlayer.income = 0;
 		if (!newPlayer.dodgeRate) newPlayer.dodgeRate = 0;
 		if (!newPlayer.hpRegen) newPlayer.hpRegen = 0;
+		if (!newPlayer.flatDmgReduction) newPlayer.flatDmgReduction = 0;
 		if (!isEnemy) {
 			this.state.player.assign(newPlayer);
 		} else {
@@ -347,7 +356,7 @@ export class FightRoom extends Room<FightState> {
 		//trigger fight-end effects
 		this.dispatcher.dispatch(new FightEndTriggerCommand());
 
-		const goldToGet = this.state.player.rewardRound * 4 + this.state.player.income;
+		const goldToGet = this.state.player.rewardRound * 2 + this.state.player.income;
 
 		this.state.player.gold += goldToGet;
 		this.state.player.xp += this.state.player.rewardRound * 2;

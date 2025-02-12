@@ -2,11 +2,15 @@ import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { IStats } from '../../common/types';
 
 export class AffectedStats extends Schema implements IStats {
+  @type('number') strength: number = 0;
+  @type('number') accuracy: number = 0;
+  @type('number') minDmg: number = 0;
+  @type('number') maxDmg: number = 0;
+  @type('number') attackSpeed: number = 0;
   @type('number') hp: number = 0;
-  @type('number') attack: number = 0;
   @type('number') defense: number = 0;
   @type('number') dodgeRate: number = 0;
-  @type('number') attackSpeed: number = 0;
+  @type('number') flatDmgReduction: number = 0;
   @type('number') income: number = 0;
   @type('number') hpRegen: number = 0;
 }

@@ -8,7 +8,7 @@ import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerC
 export const TalentBehaviors = {
 	[TalentType.RAGE]: (context: TalentBehaviorContext) => {
 		const { talent, defender, client } = context;
-		defender.attack += talent.activationRate;
+		defender.strength += talent.activationRate;
 		client.send('combat_log', `${defender.name} rages, increased attack by 1!`);
 
 		client.send('trigger_talent', {
@@ -87,10 +87,10 @@ export const TalentBehaviors = {
 
 	[TalentType.SNITCH]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
-		if (attacker.attack > 1) {
-			defender.attack -= 1;
-			attacker.attack += 1;
-			client.send('combat_log', `${attacker.name} snitches 1 attack from ${defender.name}!`);
+		if (attacker.strength > 1) {
+			defender.strength -= 1;
+			attacker.strength += 1;
+			client.send('combat_log', `${attacker.name} snitches 1 strength from ${defender.name}!`);
 			client.send('trigger_talent', {
 				playerId: attacker.playerId,
 				talentId: TalentType.SNITCH,
@@ -205,8 +205,8 @@ export const TalentBehaviors = {
 
 		const numberOfMeleeWeapons = attacker.getNumberOfItemsForTags(['weapon', 'melee']);
 		const attackBonus = numberOfMeleeWeapons * talent.activationRate;
-		attacker.attack += attackBonus;
-		client.send('combat_log', `${attacker.name} gains ${attackBonus} attack from Weapon Whisperer!`);
+		attacker.strength += attackBonus;
+		client.send('combat_log', `${attacker.name} gains ${attackBonus} strength from Weapon Whisperer!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.WEAPON_WHISPERER,
@@ -227,15 +227,15 @@ export const TalentBehaviors = {
 	[TalentType.STRONG]: (context: TalentBehaviorContext) => {
 		const { attacker, talent, client } = context;
 		const hpBonus = attacker.hp * talent.activationRate;
-		const attackBonus = attacker.attack * talent.activationRate;
+		const attackBonus = attacker.strength * talent.activationRate;
 		attacker.maxHp += hpBonus;
 		attacker.baseStats.hp += hpBonus;
 		attacker.hp += hpBonus;
-		attacker.attack += attackBonus;
-		attacker.baseStats.attack += attackBonus;
+		attacker.strength += attackBonus;
+		attacker.baseStats.strength += attackBonus;
 		client.send('combat_log', `${attacker.name} is strong hence gets an increase to stats!`);
 		client.send('combat_log', `${attacker.name} gains ${hpBonus} hp!`);
-		client.send('combat_log', `${attacker.name} gains ${attackBonus} attack!`);
+		client.send('combat_log', `${attacker.name} gains ${attackBonus} strength!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.STRONG,
@@ -342,10 +342,10 @@ export const TalentBehaviors = {
 
 	[TalentType.TRICKSTER]: (context: TalentBehaviorContext) => {
 		const { client, attacker, defender } = context;
-		const enemyAttack = defender.attack;
-		const playerAttack = attacker.attack;
-		attacker.attack = enemyAttack;
-		defender.attack = playerAttack;
+		const enemyAttack = defender.strength;
+		const playerAttack = attacker.strength;
+		attacker.strength = enemyAttack;
+		defender.strength = playerAttack;
 		client.send('combat_log', `${attacker.name} tricks ${defender.name}!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
@@ -356,7 +356,7 @@ export const TalentBehaviors = {
 	[TalentType.ARMOR_ADDICT]: (context: TalentBehaviorContext) => {
 		const { defender, client, talent, damage } = context;
 		const armorAddictReduction = talent.activationRate * defender.getNumberOfItemsForTags(['armor']);
-		defender.damageToTake = damage - armorAddictReduction;
+		//defender.damageToTake = damage - armorAddictReduction;
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
 			talentId: TalentType.ARMOR_ADDICT,
@@ -396,7 +396,7 @@ export const TalentBehaviors = {
 
 	[TalentType.GUARDIAN_ANGEL]: (context: TalentBehaviorContext) => {
 		const { attacker, client, defender, clock, talent, damage } = context;
-    const damageToCheck = damage ?? defender.damageToTake;
+    const damageToCheck = damage;
 		if (defender.hp - damageToCheck <= 0 && !defender.talentsOnCooldown.includes(TalentType.GUARDIAN_ANGEL)) {
 			defender.hp = 1;
 			defender.setInvincible(clock, talent.activationRate);
