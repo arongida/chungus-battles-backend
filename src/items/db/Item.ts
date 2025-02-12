@@ -14,6 +14,7 @@ const ItemSchema = new Schema({
     attackSpeed: Number,
     income: Number,
     hpRegen: Number,
+    flatDmgReduction: Number,
   },
   image: String,
   tags: [String],

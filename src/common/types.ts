@@ -14,6 +14,7 @@ export interface IStats {
 	hpRegen: number;
 	maxHp?: number;
 	baseAttackSpeed?: number;
+  flatDmgReduction?: number;
 }
 
 export enum TriggerType {

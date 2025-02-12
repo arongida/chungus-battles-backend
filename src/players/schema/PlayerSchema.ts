@@ -21,6 +21,7 @@ export class Player extends Schema implements IStats {
 	@type('number') private _level: number;
 	@type('string') sessionId: string;
 	@type('number') private _defense: number;
+  @type('number') flatDmgReduction: number;
 	@type('number') private _attackSpeed: number;
 	@type('number') baseAttackSpeed: number = 0.8;
 	@type('number') maxXp: number;
@@ -47,6 +48,7 @@ export class Player extends Schema implements IStats {
 		attackSpeed: 0,
 		income: 0,
 		hpRegen: 0,
+    flatDmgReduction: 0,
 	};
 	baseStats: IStats = {
 		hp: 0,
@@ -56,6 +58,7 @@ export class Player extends Schema implements IStats {
 		attackSpeed: 0,
 		income: 0,
 		hpRegen: 0,
+    flatDmgReduction: 0,
 	};
 	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
@@ -65,7 +68,6 @@ export class Player extends Schema implements IStats {
 	invincibleTimer: Delayed;
 	talentsOnCooldown: TalentType[] = [];
 	invincible: boolean = false;
-	damageToTake: number;
 	rewardRound: number;
 
 	get gold(): number {
@@ -155,7 +157,7 @@ export class Player extends Schema implements IStats {
 	}
 
 	getDamageAfterDefense(initialDamage: number): number {
-		return initialDamage * (100 / (100 + this.defense));
+		return (initialDamage * (100 / (100 + this.defense))) - this.flatDmgReduction;
 	}
 
 	getNumberOfItemsForTags(tags: string[]): number {

@@ -6,7 +6,7 @@ export const ItemCollectionBehaviors = {
 	[ItemCollectionType.SHIELDS_1]: (context: ItemCollectionBehaviorContext) => {
 		const { defender, client, itemCollection, damage } = context;
 		const armorAddictReduction = itemCollection.base;
-		defender.damageToTake = damage - armorAddictReduction;
+		//defender.damageToTake = damage - armorAddictReduction;
 		client.send('trigger_collection', {
 			playerId: defender.playerId,
 			collectionId: ItemCollectionType.SHIELDS_1,
@@ -16,7 +16,7 @@ export const ItemCollectionBehaviors = {
 	[ItemCollectionType.SHIELDS_2]: (context: ItemCollectionBehaviorContext) => {
 		const { defender, client, itemCollection, damage } = context;
 		const armorAddictReduction = itemCollection.base;
-		defender.damageToTake = damage - armorAddictReduction;
+		//defender.damageToTake = damage - armorAddictReduction;
 		client.send('trigger_collection', {
 			playerId: defender.playerId,
 			collectionId: ItemCollectionType.SHIELDS_2,
@@ -26,7 +26,7 @@ export const ItemCollectionBehaviors = {
 	[ItemCollectionType.SHIELDS_3]: (context: ItemCollectionBehaviorContext) => {
 		const { defender, client, itemCollection, damage } = context;
 		const armorAddictReduction = itemCollection.base;
-		defender.damageToTake = damage - armorAddictReduction;
+		//defender.damageToTake = damage - armorAddictReduction;
 		client.send('trigger_collection', {
 			playerId: defender.playerId,
 			collectionId: ItemCollectionType.SHIELDS_3,
@@ -36,7 +36,7 @@ export const ItemCollectionBehaviors = {
 	[ItemCollectionType.SHIELDS_4]: (context: ItemCollectionBehaviorContext) => {
 		const { defender, client, itemCollection, damage } = context;
 		const armorAddictReduction = itemCollection.base;
-		defender.damageToTake = damage - armorAddictReduction;
+		//defender.damageToTake = damage - armorAddictReduction;
 		client.send('trigger_collection', {
 			playerId: defender.playerId,
 			collectionId: ItemCollectionType.SHIELDS_4,
@@ -46,7 +46,7 @@ export const ItemCollectionBehaviors = {
 	[ItemCollectionType.SHIELDS_5]: (context: ItemCollectionBehaviorContext) => {
 		const { defender, client, itemCollection, damage } = context;
 		const armorAddictReduction = itemCollection.base;
-		defender.damageToTake = damage - armorAddictReduction;
+		//defender.damageToTake = damage - armorAddictReduction;
 		client.send('trigger_collection', {
 			playerId: defender.playerId,
 			collectionId: ItemCollectionType.SHIELDS_5,

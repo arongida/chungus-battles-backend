@@ -356,7 +356,7 @@ export const TalentBehaviors = {
 	[TalentType.ARMOR_ADDICT]: (context: TalentBehaviorContext) => {
 		const { defender, client, talent, damage } = context;
 		const armorAddictReduction = talent.activationRate * defender.getNumberOfItemsForTags(['armor']);
-		defender.damageToTake = damage - armorAddictReduction;
+		//defender.damageToTake = damage - armorAddictReduction;
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
 			talentId: TalentType.ARMOR_ADDICT,
@@ -396,7 +396,7 @@ export const TalentBehaviors = {
 
 	[TalentType.GUARDIAN_ANGEL]: (context: TalentBehaviorContext) => {
 		const { attacker, client, defender, clock, talent, damage } = context;
-    const damageToCheck = damage ?? defender.damageToTake;
+    const damageToCheck = damage;
 		if (defender.hp - damageToCheck <= 0 && !defender.talentsOnCooldown.includes(TalentType.GUARDIAN_ANGEL)) {
 			defender.hp = 1;
 			defender.setInvincible(clock, talent.activationRate);

@@ -23,7 +23,8 @@ const PlayerSchema = new Schema({
 	inventory: [Number],
 	income: Number,
 	hpRegen: Number,
-  dodgeRate: Number
+  dodgeRate: Number,
+  flatDmgReduction: Number
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
@@ -63,7 +64,8 @@ export async function createNewPlayer(
     equippedItems: [],
 		income: 0,
 		hpRegen: 0,
-    dodgeRate: 0
+    dodgeRate: 0,
+    flatDmgReduction: 0
 	});
 	await newPlayer.save().catch((err) => console.error(err));
 	return newPlayer.toObject() as unknown as Player;

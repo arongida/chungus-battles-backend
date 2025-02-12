@@ -19,6 +19,7 @@ export function increaseStats(entity: IStats, stats: IStats, multiplier = 1) {
   entity.dodgeRate += multiplier * stats.dodgeRate;
 	entity.income += multiplier * stats.income;
 	entity.hpRegen += multiplier * stats.hpRegen;
+  entity.flatDmgReduction += multiplier * stats.flatDmgReduction;
 }
 
 export function setStats(entity: IStats, stats: IStats) {
@@ -30,4 +31,5 @@ export function setStats(entity: IStats, stats: IStats) {
 	entity.attackSpeed = stats.attackSpeed;
 	entity.income = stats.income;
 	entity.hpRegen = stats.hpRegen;
+  entity.flatDmgReduction = stats.flatDmgReduction;
 }
