@@ -147,6 +147,8 @@ export class Player extends Schema implements IStats {
 
 	takeDamage(damage: number, playerClient: Client) {
 		if (this.invincible) return;
+    if (this.hp <= 0) return;
+    if (this.hp - damage <= 0) console.log('player died from damage', damage);
 		this.hp -= damage;
 		playerClient.send('damage', {
 			playerId: this.playerId,
