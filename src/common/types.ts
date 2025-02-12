@@ -6,15 +6,16 @@ export enum FightResultType {
 
 export interface IStats {
 	hp: number;
-	attack: number;
+	strength: number;
+  accuracy: number;
 	defense: number;
 	dodgeRate: number;
 	attackSpeed: number;
 	income: number;
 	hpRegen: number;
+  flatDmgReduction: number;
 	maxHp?: number;
 	baseAttackSpeed?: number;
-  flatDmgReduction?: number;
 }
 
 export enum TriggerType {

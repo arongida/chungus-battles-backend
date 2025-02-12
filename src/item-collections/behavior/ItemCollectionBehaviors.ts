@@ -94,7 +94,7 @@ export const ItemCollectionBehaviors = {
 
 	[ItemCollectionType.WARRIOR_2]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, defender, client, commandDispatcher } = context;
-		const initialDamage = attacker.attack;
+		const initialDamage = attacker.strength;
 		const damageAfterReduction = defender.getDamageAfterDefense(initialDamage);
     commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
@@ -160,10 +160,10 @@ export const ItemCollectionBehaviors = {
 	[ItemCollectionType.WARRIOR_4]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
 		const missingHPPercentage = (attacker.maxHp - attacker.hp) / attacker.maxHp;
-		const bonusAttack = attacker.baseStats.attack * missingHPPercentage;
+		const bonusAttack = attacker.baseStats.strength * missingHPPercentage;
 		const previousSavedValue = itemCollection.savedValue;
 		itemCollection.savedValue = bonusAttack;
-		attacker.attack += bonusAttack - previousSavedValue;
+		attacker.strength += bonusAttack - previousSavedValue;
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.WARRIOR_4,
@@ -185,9 +185,13 @@ export const ItemCollectionBehaviors = {
 		const { attacker, client, itemCollection } = context;
 		const bonusCoefficent = (attacker.income * itemCollection.scaling + itemCollection.base) / 100;
 
-		const attackBonus = Math.round(attacker.attack * bonusCoefficent);
-		attacker.attack += attackBonus;
-		attacker.initialStats.attack += attackBonus;
+		const attackBonus = Math.round(attacker.strength * bonusCoefficent);
+		attacker.strength += attackBonus;
+		attacker.initialStats.strength += attackBonus;
+
+    const accuracyBonus = Math.round(attacker.accuracy * bonusCoefficent);
+		attacker.accuracy += attackBonus;
+		attacker.initialStats.accuracy += attackBonus;
 
 		const defenseBonus = Math.round(attacker.defense * bonusCoefficent);
 		attacker.defense += defenseBonus;

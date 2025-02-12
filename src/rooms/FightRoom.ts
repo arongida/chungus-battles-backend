@@ -195,9 +195,12 @@ export class FightRoom extends Room<FightState> {
 		if (player.hpRegen) {
 			player.regenTimer = this.clock.setInterval(() => {
 				player.hp += player.hpRegen;
-				this.state.playerClient.send('healing', {
+        const isMinusRegen = player.hpRegen < 0 ? true : false;
+        this.state.playerClient.send('combat_log', `${player.name} regenerates ${player.hpRegen} hp!`);
+				this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {
 					playerId: player.playerId,
 					healing: player.hpRegen,
+          damage: player.hpRegen * -1
 				});
 			}, 1000);
 		}
@@ -231,7 +234,11 @@ export class FightRoom extends Room<FightState> {
 	}
 
 	tryAttack(attacker: Player, defender: Player) {
-		const damage = defender.getDamageAfterDefense(attacker.attack);
+
+    const attackRoll = Math.floor(Math.random() * attacker.strength) + attacker.accuracy;
+
+
+		const damage = defender.getDamageAfterDefense(attackRoll);
 
     
 
@@ -349,7 +356,7 @@ export class FightRoom extends Room<FightState> {
 		//trigger fight-end effects
 		this.dispatcher.dispatch(new FightEndTriggerCommand());
 
-		const goldToGet = this.state.player.rewardRound * 4 + this.state.player.income;
+		const goldToGet = this.state.player.rewardRound * 2 + this.state.player.income;
 
 		this.state.player.gold += goldToGet;
 		this.state.player.xp += this.state.player.rewardRound * 2;

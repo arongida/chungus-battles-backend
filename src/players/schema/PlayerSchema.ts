@@ -11,11 +11,12 @@ import { getAllItemCollections, getItemCollectionsById } from '../../item-collec
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
 
 export class Player extends Schema implements IStats {
-	@type('number') playerId: number;
+  @type('number') playerId: number;
 	@type('number') originalPlayerId: number;
 	@type('string') name: string;
 	@type('number') private _hp: number;
-	@type('number') private _attack: number;
+  @type('number') private _accuracy: number;
+	@type('number') private _strength: number;
 	@type('number') private _gold: number;
 	@type('number') xp: number;
 	@type('number') private _level: number;
@@ -41,25 +42,27 @@ export class Player extends Schema implements IStats {
 	@type('number') refreshShopCost: number = 2;
 	@type('number') maxHp: number;
 	initialStats: IStats = {
-		hp: 0,
-		attack: 0,
-		defense: 0,
+    hp: 0,
+    strength: 0,
+    defense: 0,
     dodgeRate: 0,
-		attackSpeed: 0,
-		income: 0,
-		hpRegen: 0,
+    attackSpeed: 0,
+    income: 0,
+    hpRegen: 0,
     flatDmgReduction: 0,
-	};
+    accuracy: 0,
+  };
 	baseStats: IStats = {
-		hp: 0,
-		attack: 0,
-		defense: 0,
+    hp: 0,
+    strength: 0,
+    defense: 0,
     dodgeRate: 0,
-		attackSpeed: 0,
-		income: 0,
-		hpRegen: 0,
+    attackSpeed: 0,
+    income: 0,
+    hpRegen: 0,
     flatDmgReduction: 0,
-	};
+    accuracy: 0,
+  };
 	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
 	attackTimer: Delayed;
@@ -102,12 +105,20 @@ export class Player extends Schema implements IStats {
 		this._hp = value > this.maxHp ? this.maxHp : value;
 	}
 
-	get attack(): number {
-		return this._attack;
+	get strength(): number {
+		return this._strength;
 	}
 
-	set attack(value: number) {
-		this._attack = value < 1 ? 1 : value;
+  get accuracy(): number {
+		return this._accuracy;
+	}
+
+	set strength(value: number) {
+		this._strength = value < 1 ? 1 : value;
+	}
+
+  set accuracy(value: number) {
+		this._accuracy = value < 1 ? 1 : value;
 	}
 
 	get poisonStack(): number {
