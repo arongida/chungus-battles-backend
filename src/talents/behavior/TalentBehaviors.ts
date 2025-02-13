@@ -21,7 +21,7 @@ export const TalentBehaviors = {
 		const { talent, attacker, defender, client, commandDispatcher } = context;
 		const stabDamage = talent.activationRate * 100 + (defender.maxHp - defender.hp) * talent.activationRate;
 		const calculatedStabDamage = defender.getDamageAfterDefense(stabDamage);
-    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: calculatedStabDamage,
 			attacker: attacker,
@@ -38,7 +38,7 @@ export const TalentBehaviors = {
 		const { talent, attacker, defender, client, commandDispatcher } = context;
 		const bearDamage = talent.activationRate * 100 + attacker.maxHp * talent.activationRate;
 		const calculatedBearDamage = defender.getDamageAfterDefense(bearDamage);
-    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: calculatedBearDamage,
 			attacker: attacker,
@@ -129,7 +129,7 @@ export const TalentBehaviors = {
 	[TalentType.SCAM]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, commandDispatcher } = context;
 		const amount = 2 + attacker.level;
-    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: amount,
 			attacker: attacker,
@@ -295,12 +295,12 @@ export const TalentBehaviors = {
 	[TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, talent, commandDispatcher } = context;
 		const reflectDamage = talent.activationRate * 100 + talent.activationRate * defender.defense;
-    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-      defender: attacker,
-      damage: reflectDamage,
-      attacker: defender,
-    });
-    attacker.takeDamage(reflectDamage, client);
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+			defender: attacker,
+			damage: reflectDamage,
+			attacker: defender,
+		});
+		attacker.takeDamage(reflectDamage, client);
 		client.send('combat_log', `${defender.name} reflects ${reflectDamage} damage to ${attacker.name}!`);
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
@@ -316,14 +316,14 @@ export const TalentBehaviors = {
 		}
 		const random = Math.random();
 		if (random < talent.activationRate) {
-      
-      commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-        defender: attacker,
-        damage: damage,
-        attacker: defender,
-      });
 
-      attacker.takeDamage(damage, client);
+			commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+				defender: attacker,
+				damage: damage,
+				attacker: defender,
+			});
+
+			attacker.takeDamage(damage, client);
 
 			client.send('combat_log', `${defender.name} reflects ${damage} damage to ${attacker.name}!`);
 			client.send('trigger_talent', {
@@ -396,7 +396,7 @@ export const TalentBehaviors = {
 
 	[TalentType.GUARDIAN_ANGEL]: (context: TalentBehaviorContext) => {
 		const { attacker, client, defender, clock, talent, damage } = context;
-    const damageToCheck = damage;
+		const damageToCheck = damage;
 		if (defender.hp - damageToCheck <= 0 && !defender.talentsOnCooldown.includes(TalentType.GUARDIAN_ANGEL)) {
 			defender.hp = 1;
 			defender.setInvincible(clock, talent.activationRate);
@@ -446,5 +446,21 @@ export const TalentBehaviors = {
 			});
 			client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}!`);
 		}
+	},
+	[TalentType.MARTIAL_ARTIST]: (context: TalentBehaviorContext) => {
+		const { attacker, client } = context;
+		attacker.accuracy += attacker.level;
+		attacker.strength += attacker.level;
+		attacker.attackSpeed += attacker.level * 0.5;
+		const weapon = attacker.equippedItems.find(item => item.type === "weapon");
+		console.log("weapon: ", weapon);
+		if(weapon){
+			attacker.setItemUnequiped(weapon);
+		}
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.MARTIAL_ARTIST,
+		});
+		client.send('combat_log', `${attacker.name} trained hard and gets: ${attacker.accuracy} accuracy, ${attacker.strength} strength and ${attacker.attackSpeed} attack speed!`);
 	},
 };

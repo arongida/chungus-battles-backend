@@ -33,4 +33,5 @@ export enum TalentType {
 	ROBBERY = 34,
 	ARMOR_ADDICT = 35,
 	CORRODING_COLLECTION = 36,
+	MARTIAL_ARTIST = 37,
 }
