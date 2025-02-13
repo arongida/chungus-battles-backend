@@ -272,12 +272,14 @@ export class Player extends Schema implements IStats {
 
 	async setItemEquiped(item: Item) {
 		const unequippedItem = this.equippedItems.find((equippedItem) => equippedItem.type === item.type);
-
+		const sameItemTypeIndex = this.equippedItems.indexOf(unequippedItem);
 		if (unequippedItem) {
 			unequippedItem.equipped = false;
 			increaseStats(this, unequippedItem.affectedStats, -1);
+			this.equippedItems.splice(sameItemTypeIndex, 1);
+			this.inventory.push(unequippedItem);
 		}
-		this.equippedItems = this.equippedItems.filter((equippedItem) => equippedItem.type !== item.type);
+		
 		this.equippedItems.push(item);
 		item.equipped = true;
 		increaseStats(this, item.affectedStats);
