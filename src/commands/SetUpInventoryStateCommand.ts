@@ -38,12 +38,20 @@ export class SetUpInventoryStateCommand extends Command<
 				itemFromDb.affectedStats = new AffectedStats().assign(affectedStatsData);
 				const newItem = new Item().assign(itemFromDb);
 
-				if (equippedItemIdsFromDb?.includes(newItem.itemId)) {
-					newItem.equipped = true;
-					playerToSetUp.equippedItems.push(newItem);
-				}
 				playerToSetUp.inventory.push(newItem);
 				playerToSetUp.initialInventory.push(newItem);
+			});
+		}
+
+		if (playerObjectFromDb.equippedItems.length > 0) {
+			const itemsDataFromDb = (await getItemsById(playerObjectFromDb.equippedItems as unknown as number[])) as Item[];
+			playerObjectFromDb.equippedItems.forEach((itemId) => {
+				let itemFromDb = itemsDataFromDb.find((item) => item.itemId === (itemId as unknown as number));
+				const affectedStatsData = itemFromDb.affectedStats;
+				itemFromDb.affectedStats = new AffectedStats().assign(affectedStatsData);
+				const newItem = new Item().assign(itemFromDb);
+
+				playerToSetUp.equippedItems.push(newItem);
 			});
 		}
 		await playerToSetUp.updateAvailableItemCollections();
