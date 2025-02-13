@@ -272,6 +272,7 @@ export class Player extends Schema implements IStats {
 
 	async setItemEquiped(item: Item) {
 		const unequippedItem = this.equippedItems.find((equippedItem) => equippedItem.type === item.type);
+
 		if (unequippedItem) {
 			unequippedItem.equipped = false;
 			increaseStats(this, unequippedItem.affectedStats, -1);
@@ -280,13 +281,19 @@ export class Player extends Schema implements IStats {
 		this.equippedItems.push(item);
 		item.equipped = true;
 		increaseStats(this, item.affectedStats);
+		const indexOfEquipedItem = this.inventory.indexOf(item);
+		this.inventory.splice(indexOfEquipedItem, 1);
 		await this.updateActiveItemCollections();
 	}
 
 	async setItemUnequiped(item: Item){
-		const itemArrayWithoutThisItem = this.equippedItems.filter((equippedItem) => equippedItem.itemId !== item.itemId);
+	
+		const indexOfUnequipedItem = this.equippedItems.indexOf(item);
+		this.equippedItems.splice(indexOfUnequipedItem, 1);
 		item.equipped = false;
-		this.equippedItems = itemArrayWithoutThisItem;
+		
+		this.inventory.push(item);
+		
 		increaseStats(this, item.affectedStats, -1);
 		await this.updateActiveItemCollections();
 	}
