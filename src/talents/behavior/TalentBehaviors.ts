@@ -469,15 +469,42 @@ export const TalentBehaviors = {
 		attacker.xp += attacker.level * 2;
 		const rewardCount = attacker.level + 1;
 
-		for(let i = 0; i < rewardCount; i++){
-				shop[i].price = 0;
+		for (let i = 0; i < rewardCount; i++) {
+			shop[i].price = 0;
 		}
-		
-		
+
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.COMRADE,
 		});
 		client.send('draft_log', `Comrade ${attacker.name} achieved the requirements of the five-year plan and get a reward: The first ${rewardCount} items is free in the shop!`);
+	},
+	[TalentType.GAMBLER]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client, commandDispatcher } = context;
+		const weapon = attacker.equippedItems.find(item => item.type === "weapon");
+
+		if (weapon) {
+			attacker.setItemUnequiped(weapon);
+		}
+		const initialDamage = rollTheDice(1, 6) + attacker.income;
+		const damage = defender.getDamageAfterDefense(initialDamage);
+
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+			defender: defender,
+			damage: damage,
+			attacker: attacker,
+		});
+
+		function rollTheDice(min: number, max: number) {
+			return Math.floor(Math.random() * (max - min + 1)) + min;
+		}
+
+		defender.takeDamage(damage, client);
+
+		client.send('combat_log', `${attacker.name} roll the dice and deal ${damage} damage!`);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.GAMBLER,
+		});
 	},
 };
