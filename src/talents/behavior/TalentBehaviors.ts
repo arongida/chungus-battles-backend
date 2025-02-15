@@ -488,7 +488,7 @@ export const TalentBehaviors = {
 		});
 		client.send(
 			'draft_log',
-			`Comrade ${attacker.name} achieved the requirements of the five-year plan and get a reward: The first ${rewardCount} items is free in the shop!`
+			`Comrade ${attacker.name} achieved the requirements of the five-year plan and gets a reward: The first ${rewardCount} items are free in the shop!`
 		);
 	},
 
@@ -516,7 +516,7 @@ export const TalentBehaviors = {
 
 		defender.takeDamage(damage, client);
 
-		client.send('combat_log', `${attacker.name} roll the dice and deal ${damage} damage!`);
+		client.send('combat_log', `${attacker.name} rolls the dice and deal ${damage} damage!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.GAMBLER,
