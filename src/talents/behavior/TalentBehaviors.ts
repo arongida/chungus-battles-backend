@@ -21,7 +21,7 @@ export const TalentBehaviors = {
 		const { talent, attacker, defender, client, commandDispatcher } = context;
 		const stabDamage = talent.activationRate * 100 + (defender.maxHp - defender.hp) * talent.activationRate;
 		const calculatedStabDamage = defender.getDamageAfterDefense(stabDamage);
-    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: calculatedStabDamage,
 			attacker: attacker,
@@ -38,7 +38,7 @@ export const TalentBehaviors = {
 		const { talent, attacker, defender, client, commandDispatcher } = context;
 		const bearDamage = talent.activationRate * 100 + attacker.maxHp * talent.activationRate;
 		const calculatedBearDamage = defender.getDamageAfterDefense(bearDamage);
-    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: calculatedBearDamage,
 			attacker: attacker,
@@ -128,8 +128,8 @@ export const TalentBehaviors = {
 
 	[TalentType.SCAM]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, commandDispatcher } = context;
-		const amount = 2 + attacker.level;
-    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+		const amount = attacker.level;
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: amount,
 			attacker: attacker,
@@ -149,7 +149,7 @@ export const TalentBehaviors = {
 
 	[TalentType.BANDAGE]: (context: TalentBehaviorContext) => {
 		const { attacker, client } = context;
-		const healing = 5 + attacker.level;
+		const healing = 2 + attacker.level;
 		attacker.hp += healing;
 		client.send('combat_log', `${attacker.name} restores ${healing} health!`);
 		client.send('trigger_talent', {
@@ -164,7 +164,7 @@ export const TalentBehaviors = {
 
 	[TalentType.THROW_MONEY]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, commandDispatcher } = context;
-		const initialDamage = 7 + attacker.gold * 0.7;
+		const initialDamage = 5 + attacker.gold * 0.5;
 		const damage = defender.getDamageAfterDefense(initialDamage);
 
 		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
@@ -203,14 +203,16 @@ export const TalentBehaviors = {
 	[TalentType.WEAPON_WHISPERER]: (context: TalentBehaviorContext) => {
 		const { attacker, talent, client } = context;
 
-		const numberOfMeleeWeapons = attacker.getNumberOfItemsForTags(['weapon', 'melee']);
-		const attackBonus = numberOfMeleeWeapons * talent.activationRate;
-		attacker.strength += attackBonus;
-		client.send('combat_log', `${attacker.name} gains ${attackBonus} strength from Weapon Whisperer!`);
-		client.send('trigger_talent', {
-			playerId: attacker.playerId,
-			talentId: TalentType.WEAPON_WHISPERER,
-		});
+		//get equipped weapon
+		const weapon = attacker.equippedItems.find((item) => item.type === 'weapon');
+		if (weapon) {
+			attacker.equippedItems = attacker.equippedItems.filter((item) => item !== weapon);
+			client.send('combat_log', `${attacker.name} consumed ${weapon.name}!`);
+			client.send('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.WEAPON_WHISPERER,
+			});
+		}
 	},
 
 	[TalentType.GOLD_GENIE]: (context: TalentBehaviorContext) => {
@@ -295,12 +297,12 @@ export const TalentBehaviors = {
 	[TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, talent, commandDispatcher } = context;
 		const reflectDamage = talent.activationRate * 100 + talent.activationRate * defender.defense;
-    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-      defender: attacker,
-      damage: reflectDamage,
-      attacker: defender,
-    });
-    attacker.takeDamage(reflectDamage, client);
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+			defender: attacker,
+			damage: reflectDamage,
+			attacker: defender,
+		});
+		attacker.takeDamage(reflectDamage, client);
 		client.send('combat_log', `${defender.name} reflects ${reflectDamage} damage to ${attacker.name}!`);
 		client.send('trigger_talent', {
 			playerId: defender.playerId,
@@ -316,14 +318,13 @@ export const TalentBehaviors = {
 		}
 		const random = Math.random();
 		if (random < talent.activationRate) {
-      
-      commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-        defender: attacker,
-        damage: damage,
-        attacker: defender,
-      });
+			commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+				defender: attacker,
+				damage: damage,
+				attacker: defender,
+			});
 
-      attacker.takeDamage(damage, client);
+			attacker.takeDamage(damage, client);
 
 			client.send('combat_log', `${defender.name} reflects ${damage} damage to ${attacker.name}!`);
 			client.send('trigger_talent', {
@@ -396,7 +397,7 @@ export const TalentBehaviors = {
 
 	[TalentType.GUARDIAN_ANGEL]: (context: TalentBehaviorContext) => {
 		const { attacker, client, defender, clock, talent, damage } = context;
-    const damageToCheck = damage;
+		const damageToCheck = damage;
 		if (defender.hp - damageToCheck <= 0 && !defender.talentsOnCooldown.includes(TalentType.GUARDIAN_ANGEL)) {
 			defender.hp = 1;
 			defender.setInvincible(clock, talent.activationRate);
@@ -446,5 +447,79 @@ export const TalentBehaviors = {
 			});
 			client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}!`);
 		}
+	},
+	[TalentType.MARTIAL_ARTIST]: (context: TalentBehaviorContext) => {
+		const { attacker, client } = context;
+
+		const weapon = attacker.equippedItems.find((item) => item.type === 'weapon');
+		console.log('weapon: ', weapon);
+		if (weapon) {
+			return;
+			//attacker.setItemUnequiped(weapon);
+		}
+
+		attacker.accuracy += attacker.level;
+		attacker.strength += attacker.level;
+		attacker.attackSpeed += attacker.level * 1.1 * attacker.baseAttackSpeed - attacker.baseAttackSpeed;
+
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.MARTIAL_ARTIST,
+		});
+		client.send(
+			'combat_log',
+			`${attacker.name} trained hard and gets: ${attacker.accuracy} accuracy, ${attacker.strength} strength and ${attacker.attackSpeed} attack speed!`
+		);
+	},
+
+	[TalentType.COMRADE]: (context: TalentBehaviorContext) => {
+		const { attacker, client, shop } = context;
+		attacker.gold = 0;
+		attacker.xp += attacker.level * 2;
+		const rewardCount = attacker.level + 1;
+
+		for (let i = 0; i < rewardCount; i++) {
+			shop[i].price = 0;
+		}
+
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.COMRADE,
+		});
+		client.send(
+			'draft_log',
+			`Comrade ${attacker.name} achieved the requirements of the five-year plan and get a reward: The first ${rewardCount} items is free in the shop!`
+		);
+	},
+
+	[TalentType.GAMBLER]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client, commandDispatcher } = context;
+		const weapon = attacker.equippedItems.find((item) => item.type === 'weapon');
+
+		if (weapon) {
+			//attacker.setItemUnequiped(weapon);
+			return;
+		}
+
+		const initialDamage = rollTheDice(1, 6) + attacker.income;
+		const damage = defender.getDamageAfterDefense(initialDamage);
+
+		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+			defender: defender,
+			damage: damage,
+			attacker: attacker,
+		});
+
+		function rollTheDice(min: number, max: number) {
+			return Math.floor(Math.random() * (max - min + 1)) + min;
+		}
+
+		defender.takeDamage(damage, client);
+
+		client.send('combat_log', `${attacker.name} roll the dice and deal ${damage} damage!`);
+		client.send('trigger_talent', {
+			playerId: attacker.playerId,
+			talentId: TalentType.GAMBLER,
+		});
 	},
 };
