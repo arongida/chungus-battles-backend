@@ -128,7 +128,7 @@ export const TalentBehaviors = {
 
 	[TalentType.SCAM]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, commandDispatcher } = context;
-		const amount = 2 + attacker.level;
+		const amount = attacker.level;
 		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: amount,
@@ -149,7 +149,7 @@ export const TalentBehaviors = {
 
 	[TalentType.BANDAGE]: (context: TalentBehaviorContext) => {
 		const { attacker, client } = context;
-		const healing = 5 + attacker.level;
+		const healing = 2 + attacker.level;
 		attacker.hp += healing;
 		client.send('combat_log', `${attacker.name} restores ${healing} health!`);
 		client.send('trigger_talent', {
@@ -164,7 +164,7 @@ export const TalentBehaviors = {
 
 	[TalentType.THROW_MONEY]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, commandDispatcher } = context;
-		const initialDamage = 7 + attacker.gold * 0.7;
+		const initialDamage = 5 + attacker.gold * 0.5;
 		const damage = defender.getDamageAfterDefense(initialDamage);
 
 		commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
@@ -203,14 +203,16 @@ export const TalentBehaviors = {
 	[TalentType.WEAPON_WHISPERER]: (context: TalentBehaviorContext) => {
 		const { attacker, talent, client } = context;
 
-		const numberOfMeleeWeapons = attacker.getNumberOfItemsForTags(['weapon', 'melee']);
-		const attackBonus = numberOfMeleeWeapons * talent.activationRate;
-		attacker.strength += attackBonus;
-		client.send('combat_log', `${attacker.name} gains ${attackBonus} strength from Weapon Whisperer!`);
-		client.send('trigger_talent', {
-			playerId: attacker.playerId,
-			talentId: TalentType.WEAPON_WHISPERER,
-		});
+		//get equipped weapon
+		const weapon = attacker.equippedItems.find((item) => item.type === 'weapon');
+		if (weapon) {
+			attacker.equippedItems = attacker.equippedItems.filter((item) => item !== weapon);
+			client.send('combat_log', `${attacker.name} consumed ${weapon.name}!`);
+			client.send('trigger_talent', {
+				playerId: attacker.playerId,
+				talentId: TalentType.WEAPON_WHISPERER,
+			});
+		}
 	},
 
 	[TalentType.GOLD_GENIE]: (context: TalentBehaviorContext) => {
@@ -316,7 +318,6 @@ export const TalentBehaviors = {
 		}
 		const random = Math.random();
 		if (random < talent.activationRate) {
-
 			commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
 				defender: attacker,
 				damage: damage,
@@ -449,20 +450,28 @@ export const TalentBehaviors = {
 	},
 	[TalentType.MARTIAL_ARTIST]: (context: TalentBehaviorContext) => {
 		const { attacker, client } = context;
+
+		const weapon = attacker.equippedItems.find((item) => item.type === 'weapon');
+		console.log('weapon: ', weapon);
+		if (weapon) {
+			return;
+			//attacker.setItemUnequiped(weapon);
+		}
+
 		attacker.accuracy += attacker.level;
 		attacker.strength += attacker.level;
-		attacker.attackSpeed += attacker.level * 0.5;
-		const weapon = attacker.equippedItems.find(item => item.type === "weapon");
-		console.log("weapon: ", weapon);
-		if (weapon) {
-			attacker.setItemUnequiped(weapon);
-		}
+		attacker.attackSpeed += attacker.level * 1.1 * attacker.baseAttackSpeed - attacker.baseAttackSpeed;
+
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.MARTIAL_ARTIST,
 		});
-		client.send('combat_log', `${attacker.name} trained hard and gets: ${attacker.accuracy} accuracy, ${attacker.strength} strength and ${attacker.attackSpeed} attack speed!`);
+		client.send(
+			'combat_log',
+			`${attacker.name} trained hard and gets: ${attacker.accuracy} accuracy, ${attacker.strength} strength and ${attacker.attackSpeed} attack speed!`
+		);
 	},
+
 	[TalentType.COMRADE]: (context: TalentBehaviorContext) => {
 		const { attacker, client, shop } = context;
 		attacker.gold = 0;
@@ -477,15 +486,21 @@ export const TalentBehaviors = {
 			playerId: attacker.playerId,
 			talentId: TalentType.COMRADE,
 		});
-		client.send('draft_log', `Comrade ${attacker.name} achieved the requirements of the five-year plan and get a reward: The first ${rewardCount} items is free in the shop!`);
+		client.send(
+			'draft_log',
+			`Comrade ${attacker.name} achieved the requirements of the five-year plan and get a reward: The first ${rewardCount} items is free in the shop!`
+		);
 	},
+
 	[TalentType.GAMBLER]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, commandDispatcher } = context;
-		const weapon = attacker.equippedItems.find(item => item.type === "weapon");
+		const weapon = attacker.equippedItems.find((item) => item.type === 'weapon');
 
 		if (weapon) {
-			attacker.setItemUnequiped(weapon);
+			//attacker.setItemUnequiped(weapon);
+			return;
 		}
+
 		const initialDamage = rollTheDice(1, 6) + attacker.income;
 		const damage = defender.getDamageAfterDefense(initialDamage);
 
