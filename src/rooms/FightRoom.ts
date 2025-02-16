@@ -118,7 +118,7 @@ export class FightRoom extends Room<FightState> {
 			this.state.player.sessionId = '';
 			//set player for next round
 			setStats(this.state.player, this.state.player.initialStats);
-			this.state.player.resetInventory();
+			//this.state.player.resetInventory();
 			this.state.player.round++;
 			await updatePlayer(this.state.player);
 			console.log(client.sessionId, 'left!');

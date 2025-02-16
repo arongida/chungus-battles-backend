@@ -265,6 +265,7 @@ export class Player extends Schema implements IStats {
 			const indexOfDeleteEquippedItem = this.equippedItems.indexOf(item);
 			this.equippedItems.splice(indexOfDeleteEquippedItem, 1);
 			increaseStats(this, item.affectedStats, -1);
+      increaseStats(this.initialStats, item.affectedStats, -1);
 		}
 
 		await this.updateActiveItemCollections();
@@ -276,6 +277,7 @@ export class Player extends Schema implements IStats {
 		if (unequippedItem) {
 			unequippedItem.equipped = false;
 			increaseStats(this, unequippedItem.affectedStats, -1);
+      increaseStats(this.initialStats, item.affectedStats, -1);
 			this.equippedItems.splice(sameItemTypeIndex, 1);
 			this.inventory.push(unequippedItem);
 		}
@@ -283,6 +285,7 @@ export class Player extends Schema implements IStats {
 		this.equippedItems.push(item);
 		item.equipped = true;
 		increaseStats(this, item.affectedStats);
+    increaseStats(this.initialStats, item.affectedStats);
 		const indexOfEquipedItem = this.inventory.indexOf(item);
 		this.inventory.splice(indexOfEquipedItem, 1);
 		await this.updateActiveItemCollections();
@@ -297,6 +300,7 @@ export class Player extends Schema implements IStats {
 		this.inventory.push(item);
 		
 		increaseStats(this, item.affectedStats, -1);
+    increaseStats(this.initialStats, item.affectedStats, -1);
 		await this.updateActiveItemCollections();
 	}
 }

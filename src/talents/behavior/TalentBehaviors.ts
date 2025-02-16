@@ -245,11 +245,13 @@ export const TalentBehaviors = {
 	},
 
 	[TalentType.INTIMIDATING_WEALTH]: (context: TalentBehaviorContext) => {
-		const { attacker, defender, client } = context;
-		const attackSpeedBonus = Math.min(0.2 + attacker.gold * 0.0025, 0.4) * defender.attackSpeed;
-		defender.attackSpeed -= attackSpeedBonus;
-		client.send('combat_log', `${attacker.name} intimidates ${defender.name} with their wealth!`);
-		client.send('combat_log', `${defender.name} looses ${attackSpeedBonus} attack!`);
+		const { attacker, defender, client, talent } = context;
+		if (!defender) return;
+		const attackSpeedBonus = Math.min(0.2 + attacker.gold * 0.003, 0.5) * defender.attackSpeed;
+		const previousSavedValue = talent.savedValues ?? { attackSpeed: 0 };
+		talent.savedValues = { attackSpeed: attackSpeedBonus };
+		attacker.attackSpeed += attackSpeedBonus - previousSavedValue.attackSpeed;
+		defender.attackSpeed -= attackSpeedBonus - previousSavedValue.attackSpeed;
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.INTIMIDATING_WEALTH,
@@ -448,28 +450,31 @@ export const TalentBehaviors = {
 			client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}!`);
 		}
 	},
+
 	[TalentType.MARTIAL_ARTIST]: (context: TalentBehaviorContext) => {
-		const { attacker, client } = context;
+		const { attacker, client, talent } = context;
 
 		const weapon = attacker.equippedItems.find((item) => item.type === 'weapon');
-		console.log('weapon: ', weapon);
 		if (weapon) {
-			return;
-			//attacker.setItemUnequiped(weapon);
+			client.send('combat_log', `${attacker.name} is a martial artist and doesn't need a weapon!`);
+			attacker.setItemUnequiped(weapon);
 		}
 
-		attacker.accuracy += attacker.level;
-		attacker.strength += attacker.level;
-		attacker.attackSpeed += attacker.level * 1.1 * attacker.baseAttackSpeed - attacker.baseAttackSpeed;
+		const previousSavedValues = talent.savedValues ?? { accuracy: 0, strength: 0, attackSpeed: 0 };
+		talent.savedValues = {
+			accuracy: attacker.level,
+			strength: attacker.level,
+			attackSpeed: attacker.level * (1.5 * attacker.baseAttackSpeed - attacker.baseAttackSpeed),
+		};
 
-		client.send('trigger_talent', {
-			playerId: attacker.playerId,
-			talentId: TalentType.MARTIAL_ARTIST,
-		});
-		client.send(
-			'combat_log',
-			`${attacker.name} trained hard and gets: ${attacker.accuracy} accuracy, ${attacker.strength} strength and ${attacker.attackSpeed} attack speed!`
-		);
+		attacker.accuracy += talent.savedValues.accuracy - previousSavedValues.accuracy;
+		attacker.strength += talent.savedValues.strength - previousSavedValues.strength;
+		attacker.attackSpeed += talent.savedValues.attackSpeed - previousSavedValues.attackSpeed;
+
+		// client.send(
+		// 	'combat_log',
+		// 	`${attacker.name} trained hard and gets: ${attacker.accuracy} accuracy, ${attacker.strength} strength and ${attacker.attackSpeed} attack speed!`
+		// );
 	},
 
 	[TalentType.COMRADE]: (context: TalentBehaviorContext) => {
@@ -497,8 +502,7 @@ export const TalentBehaviors = {
 		const weapon = attacker.equippedItems.find((item) => item.type === 'weapon');
 
 		if (weapon) {
-			//attacker.setItemUnequiped(weapon);
-			return;
+			attacker.setItemUnequiped(weapon);
 		}
 
 		const initialDamage = rollTheDice(1, 6) + attacker.income;
@@ -516,7 +520,7 @@ export const TalentBehaviors = {
 
 		defender.takeDamage(damage, client);
 
-		client.send('combat_log', `${attacker.name} rolls the dice and deal ${damage} damage!`);
+		client.send('combat_log', `${attacker.name} rolls the dice and deals ${damage} damage!`);
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.GAMBLER,

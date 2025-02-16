@@ -15,7 +15,7 @@ export class ItemCollection extends Schema {
 	base: number;
 	scaling: number;
 	activationRate: number;
-	savedValue: number = 0;
+	savedValue: {strength?: number} = null;
 
 	executeBehavior(context: BehaviorContext) {
 		const behaviorKey = this
@@ -26,9 +26,7 @@ export class ItemCollection extends Schema {
 				...context,
 				itemCollection: this,
 			};
-      console.log(
-        `Executing behavior for item collection ${this.name}`
-      );
+
 			behavior(itemCollectionContext);
 		} else {
 			throw new Error(
