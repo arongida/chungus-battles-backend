@@ -11,14 +11,14 @@ export class Talent extends Schema {
 	@type('number') activationRate: number;
 	@type('string') image: string;
 	@type(['string']) tags: ArraySchema<string>;
-  @type('string') triggerType: string;
+	@type('string') triggerType: string;
+	savedValues: { strength?: number; accuracy?: number; attackSpeed?: number } = null;
 
 	executeBehavior(context: BehaviorContext) {
 		const behaviorKey = this.talentId as keyof typeof TalentBehaviors;
 		const behavior = TalentBehaviors[behaviorKey];
 		if (behavior) {
 			const talentContext: TalentBehaviorContext = { ...context, talent: this };
-      console.log(`Executing behavior for talent ${this.name}`);
 			behavior(talentContext);
 		} else {
 			throw new Error(`No behavior defined for talentId ${this.talentId}`);

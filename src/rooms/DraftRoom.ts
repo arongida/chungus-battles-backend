@@ -5,15 +5,14 @@ import { Talent } from '../talents/schema/TalentSchema';
 import { copyPlayer, getPlayer, updatePlayer, createNewPlayer } from '../players/db/Player';
 import { getNumberOfItems } from '../items/db/Item';
 import { Player } from '../players/schema/PlayerSchema';
-import { delay } from '../common/utils';
+import { delay, setStats } from '../common/utils';
 import { getRandomTalents, getTalentsById } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
 import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCommand';
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
 import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
-import { ShopPassiveTriggerCommand } from '../commands/triggers/ShopPassiveTriggerCommand';
-
+import { AuraTriggerCommand } from '../commands/triggers/AuraTriggerCommand';
 export class DraftRoom extends Room<DraftState> {
 	maxClients = 1;
 
@@ -55,7 +54,7 @@ export class DraftRoom extends Room<DraftState> {
 	}
 
 	update(deltaTime: number) {
-		this.dispatcher.dispatch(new ShopPassiveTriggerCommand());
+		this.dispatcher.dispatch(new AuraTriggerCommand());
 	}
 
 	async onJoin(client: Client, options: any) {
@@ -87,6 +86,10 @@ export class DraftRoom extends Room<DraftState> {
 			this.state.remainingTalentPoints = 1;
 		}
 
+    setStats(this.state.player.initialStats, this.state.player);
+    setStats(this.state.player.baseStats, this.state.player);
+    this.state.player.maxHp = this.state.player.hp;
+
 		//set room state
 		if (this.state.player.round === 1) await this.updateTalentSelection();
 		if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
@@ -109,6 +112,7 @@ export class DraftRoom extends Room<DraftState> {
 		} catch (e) {
 			//save player state to db
 			this.state.player.sessionId = '';
+      setStats(this.state.player, this.state.player.initialStats);
 			const copiedPlayer = await copyPlayer(this.state.player);
 			const updatedPlayer = await updatePlayer(this.state.player);
 			console.log(client.sessionId, 'left!');
