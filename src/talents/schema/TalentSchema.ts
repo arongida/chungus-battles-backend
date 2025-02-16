@@ -12,7 +12,7 @@ export class Talent extends Schema {
 	@type('string') image: string;
 	@type(['string']) tags: ArraySchema<string>;
 	@type('string') triggerType: string;
-	savedValues: { strength?: number; accuracy?: number; attackSpeed?: number } = null;
+	savedValues: { strength?: number; accuracy?: number; attackSpeed?: number; damage?: number } = null;
 
 	executeBehavior(context: BehaviorContext) {
 		const behaviorKey = this.talentId as keyof typeof TalentBehaviors;

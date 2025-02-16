@@ -8,6 +8,8 @@ import { BehaviorContext } from '../../common/BehaviorContext';
 
 export class AuraTriggerCommand extends Command<FightRoom | DraftRoom> {
 	execute() {
+
+
 		const auraItemCollections: ItemCollection[] = this.state.player.activeItemCollections.filter(
 			(itemCollection) => itemCollection.triggerType === TriggerType.AURA
 		);
@@ -17,11 +19,13 @@ export class AuraTriggerCommand extends Command<FightRoom | DraftRoom> {
 		let behaviorContext: BehaviorContext = {
 			client: this.state.playerClient,
 			attacker: this.state.player,
+      questItems: this.state.questItems,
 		};
 
 		if ('enemy' in this.state) { 
 			behaviorContext = { ...behaviorContext, defender: this.state.enemy };
 		}
+
 
 		auraItemCollections.forEach((itemCollection) => {
 			itemCollection.executeBehavior(behaviorContext);
@@ -30,5 +34,6 @@ export class AuraTriggerCommand extends Command<FightRoom | DraftRoom> {
 		auraTalents.forEach((talent) => {
 			talent.executeBehavior(behaviorContext);
 		});
+
 	}
 }

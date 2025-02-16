@@ -1,7 +1,7 @@
 import { TalentType } from '../types/TalentTypes';
 import { TalentBehaviorContext } from './TalentBehaviorContext';
 import { increaseStats } from '../../common/utils';
-import { Item } from '../../items/schema/ItemSchema';
+import { AffectedStats, Item } from '../../items/schema/ItemSchema';
 import { Talent } from '../schema/TalentSchema';
 import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerCommand';
 
@@ -525,5 +525,34 @@ export const TalentBehaviors = {
 			playerId: attacker.playerId,
 			talentId: TalentType.GAMBLER,
 		});
+	},
+
+	[TalentType.RING_WEAPON]: (context: TalentBehaviorContext) => {
+		const { attacker, defender, client, talent, commandDispatcher, questItems } = context;
+
+		if (
+			!attacker.inventory.find((item) => item.itemId === 702) &&
+			!attacker.equippedItems.find((item) => item.itemId === 702)
+		) {
+			const ringWeapon = questItems.find((item) => item.itemId === 702);
+			if (ringWeapon) {
+				attacker.getItem(ringWeapon);
+				client.send('combat_log', `${attacker.name} found a ring weapon!`);
+				client.send('trigger_talent', {
+					playerId: attacker.playerId,
+					talentId: TalentType.RING_WEAPON,
+				});
+			}
+		}
+
+		if (attacker.equippedItems.find((item) => item.itemId === 702) && defender) {
+			const previousDamage = talent.savedValues?.damage ?? 0;
+			const newDamage = previousDamage + 1;
+			talent.savedValues = { damage: newDamage };
+			const getDamageAfterDefense = defender.getDamageAfterDefense(newDamage);
+			defender.takeDamage(getDamageAfterDefense, client);
+			client.send('combat_log', `${attacker.name} deals ${getDamageAfterDefense} damage with the magic ring!`);
+			client.send('trigger_talent', { playerId: attacker.playerId, talentId: TalentType.RING_WEAPON });
+		}
 	},
 };

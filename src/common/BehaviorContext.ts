@@ -16,5 +16,6 @@ export interface BehaviorContext {
 	damage?: number;
 	shop?: ArraySchema<Item>;
   availableTalents?: Talent[];
+  questItems?: ArraySchema<Item>;
   commandDispatcher?: Dispatcher<FightRoom | DraftRoom> 
 }
