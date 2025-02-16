@@ -3,7 +3,7 @@ import { DraftState } from './schema/DraftState';
 import { AffectedStats, Item } from '../items/schema/ItemSchema';
 import { Talent } from '../talents/schema/TalentSchema';
 import { copyPlayer, getPlayer, updatePlayer, createNewPlayer } from '../players/db/Player';
-import { getNumberOfItems } from '../items/db/Item';
+import { getNumberOfItems, getQuestItems } from '../items/db/Item';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay, setStats } from '../common/utils';
 import { getRandomTalents, getTalentsById } from '../talents/db/Talent';
@@ -13,6 +13,7 @@ import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerComman
 import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
 import { AuraTriggerCommand } from '../commands/triggers/AuraTriggerCommand';
+import { SetUpQuestItemsCommand } from '../commands/SetUpQuestItemsCommand';
 export class DraftRoom extends Room<DraftState> {
 	maxClients = 1;
 
@@ -27,10 +28,10 @@ export class DraftRoom extends Room<DraftState> {
 		this.onMessage('sell', async (client, message) => {
 			await this.sellItem(message.itemId, client);
 		});
-		this.onMessage('equip', async(client, message) =>{
+		this.onMessage('equip', async (client, message) => {
 			await this.equipItem(message.itemId, client);
 		});
-		this.onMessage('unequip', async(client, message) =>{
+		this.onMessage('unequip', async (client, message) => {
 			await this.unequipItem(message.itemId, client);
 		});
 		this.onMessage('refresh_shop', (client, message) => {
@@ -68,15 +69,12 @@ export class DraftRoom extends Room<DraftState> {
 		await delay(1000, this.clock);
 		const foundPlayer = await getPlayer(options.playerId);
 
-		this.state.playerClient = client;
-
 		//if player already exists, check if player is already playing
 		if (foundPlayer) {
 			if (foundPlayer.sessionId !== '') throw new Error('Player already playing!');
 			if (foundPlayer.lives <= 0) throw new Error('Player has no lives left!');
 
-			await this.setUpState(foundPlayer);
-			this.state.player.sessionId = client.sessionId;
+			await this.setUpState(foundPlayer, client);
 
 			//check levelup after battle
 			this.checkLevelUp();
@@ -84,19 +82,17 @@ export class DraftRoom extends Room<DraftState> {
 			const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId, options.avatarUrl);
 			this.state.player.assign(newPlayer);
 			this.state.remainingTalentPoints = 1;
+			await this.setUpState(newPlayer, client);
 		}
-
-    setStats(this.state.player.initialStats, this.state.player);
-    setStats(this.state.player.baseStats, this.state.player);
-    this.state.player.maxHp = this.state.player.hp;
 
 		//set room state
 		if (this.state.player.round === 1) await this.updateTalentSelection();
 		if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
 
-		await this.state.player.updateAvailableItemCollections();
+		//set quest items
+		this.dispatcher.dispatch(new SetUpQuestItemsCommand(), { questItemsFromDb: (await getQuestItems()) as Item[] });
 
-		//robbery command
+		//shop start trigger
 		this.dispatcher.dispatch(new ShopStartTriggerCommand());
 	}
 
@@ -112,9 +108,15 @@ export class DraftRoom extends Room<DraftState> {
 		} catch (e) {
 			//save player state to db
 			this.state.player.sessionId = '';
-      setStats(this.state.player, this.state.player.initialStats);
+      console.log('player aspeed', this.state.player.attackSpeed);
+      console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
+			setStats(this.state.player, this.state.player.initialStats);
+      console.log('player aspeed', this.state.player.attackSpeed);
+      console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
 			const copiedPlayer = await copyPlayer(this.state.player);
 			const updatedPlayer = await updatePlayer(this.state.player);
+      console.log('player aspeed', this.state.player.attackSpeed);
+      console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
 			console.log(client.sessionId, 'left!');
 			this.clock.setTimeout(() => {
 				this.disconnect();
@@ -173,7 +175,7 @@ export class DraftRoom extends Room<DraftState> {
 	}
 
 	//get player, enemy, items and talents from db and map them to the room state
-	private async setUpState(player: Player) {
+	private async setUpState(player: Player, client: Client) {
 		//get player item, talent info
 		const talents = (await getTalentsById(player.talents as unknown as number[])) as Talent[];
 
@@ -199,6 +201,15 @@ export class DraftRoom extends Room<DraftState> {
 			isEnemy: false,
 		});
 		await this.updateTalentSelection();
+
+		setStats(this.state.player.initialStats, this.state.player);
+		setStats(this.state.player.baseStats, this.state.player);
+		this.state.player.maxHp = this.state.player.hp;
+
+		this.state.player.sessionId = client.sessionId;
+		this.state.playerClient = client;
+
+		this.state.playerClient = client;
 	}
 
 	private async buyItem(itemId: number, client: Client) {
@@ -218,15 +229,15 @@ export class DraftRoom extends Room<DraftState> {
 		await this.state.player.removeItem(item);
 	}
 
-	private async equipItem(itemId: number, client: Client){
-		const item = this.state.player.inventory.find((item)=> item.itemId === itemId);
-		if(!item) return;
+	private async equipItem(itemId: number, client: Client) {
+		const item = this.state.player.inventory.find((item) => item.itemId === itemId);
+		if (!item) return;
 		await this.state.player.setItemEquiped(item);
 	}
 
-	private async unequipItem(itemId: number, client: Client){
-		const item = this.state.player.equippedItems.find((item)=> item.itemId === itemId);
-		if(!item) return;
+	private async unequipItem(itemId: number, client: Client) {
+		const item = this.state.player.equippedItems.find((item) => item.itemId === itemId);
+		if (!item) return;
 		await this.state.player.setItemUnequiped(item);
 	}
 

@@ -6,6 +6,9 @@ import { ItemCollection } from '../../item-collections/schema/ItemCollectionSche
 
 export class ShopStartTriggerCommand extends Command<DraftRoom> {
 	execute() {
+
+    this.state.player.updateAvailableItemCollections();
+
 		const onShopStartTalents: Talent[] = this.state.player.talents.filter(
 			(talent) => talent.triggerType === TriggerType.SHOP_START
 		);

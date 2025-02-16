@@ -17,6 +17,9 @@ import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateComma
 import { AuraTriggerCommand } from '../commands/triggers/AuraTriggerCommand';
 import { TalentType } from '../talents/types/TalentTypes';
 import { ItemCollectionType } from '../item-collections/types/ItemCollectionTypes';
+import { getQuestItems } from '../items/db/Item';
+import { Item } from '../items/schema/ItemSchema';
+import { SetUpQuestItemsCommand } from '../commands/SetUpQuestItemsCommand';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
@@ -51,34 +54,29 @@ export class FightRoom extends Room<FightState> {
 		let player = await getPlayer(options.playerId);
 		if (!player) throw new Error('Player not found!');
 
+    console.log('player aspeed', player.attackSpeed);  
+
 		//set up player state
 		await this.setUpState(player);
-
-		setStats(this.state.player.initialStats, this.state.player);
-		setStats(this.state.player.baseStats, this.state.player);
-		//player init stats
-
-		this.state.player.maxHp = this.state.player.hp;
-		this.state.playerClient = client;
 
 		//set up enemy state
 		if (!this.state.enemy.playerId) {
 			let enemy = await getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
 			//set up enemy state
 			await this.setUpState(enemy, true);
-			setStats(this.state.enemy.initialStats, this.state.enemy);
-			setStats(this.state.enemy.baseStats, this.state.enemy);
-			//enemy init stats
-			this.state.enemy.maxHp = this.state.enemy.hp;
 		}
+
+    // check if player is already playing
+		if (this.state.player.sessionId !== '') throw new Error('Player already playing!');
+		if (this.state.player.lives <= 0) throw new Error('Player has no lives left!');
+		this.state.playerClient = client;
+		this.state.player.sessionId = client.sessionId;
 
 		//load talents from db
 		this.state.availableTalents = (await getAllTalents()) as Talent[];
 
-		// check if player is already playing
-		if (this.state.player.sessionId !== '') throw new Error('Player already playing!');
-		if (this.state.player.lives <= 0) throw new Error('Player has no lives left!');
-		this.state.player.sessionId = client.sessionId;
+		//set quest items
+		this.dispatcher.dispatch(new SetUpQuestItemsCommand(), { questItemsFromDb: (await getQuestItems()) as Item[] });
 
 		//start battle after 5 seconds
 		let countdown = 5;
@@ -195,12 +193,12 @@ export class FightRoom extends Room<FightState> {
 		if (player.hpRegen) {
 			player.regenTimer = this.clock.setInterval(() => {
 				player.hp += player.hpRegen;
-        const isMinusRegen = player.hpRegen < 0 ? true : false;
-        this.state.playerClient.send('combat_log', `${player.name} regenerates ${player.hpRegen} hp!`);
+				const isMinusRegen = player.hpRegen < 0 ? true : false;
+				this.state.playerClient.send('combat_log', `${player.name} regenerates ${player.hpRegen} hp!`);
 				this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {
 					playerId: player.playerId,
 					healing: player.hpRegen,
-          damage: player.hpRegen * -1
+					damage: player.hpRegen * -1,
 				});
 			}, 1000);
 		}
@@ -220,12 +218,12 @@ export class FightRoom extends Room<FightState> {
 		if (!defender.poisonTimer) {
 			defender.poisonTimer = this.clock.setInterval(() => {
 				const poisonDamage = defender.poisonStack * (activationRate * defender.maxHp + activationRate * 100) * 0.1;
-				
-        this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
-          defender: defender,
-          damage: poisonDamage,
-          attacker: this.state.player,
-        });
+
+				this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
+					defender: defender,
+					damage: poisonDamage,
+					attacker: this.state.player,
+				});
 
 				defender.takeDamage(poisonDamage, this.state.playerClient);
 				this.state.playerClient.send('combat_log', `${defender.name} takes ${poisonDamage} poison damage!`);
@@ -234,17 +232,12 @@ export class FightRoom extends Room<FightState> {
 	}
 
 	tryAttack(attacker: Player, defender: Player) {
-
-    const attackRoll = Math.floor(Math.random() * attacker.strength) + attacker.accuracy;
-
+		const attackRoll = Math.floor(Math.random() * attacker.strength) + attacker.accuracy;
 
 		const damage = defender.getDamageAfterDefense(attackRoll);
 
-    
-
 		if (defender.dodgeRate > 0) {
-
-			const dodgeChance = 1 - (100 / (100 + defender.dodgeRate));
+			const dodgeChance = 1 - 100 / (100 + defender.dodgeRate);
 
 			if (Math.random() < dodgeChance) {
 				this.state.playerClient.send('combat_log', `${defender.name} dodged the attack!`);
@@ -262,7 +255,7 @@ export class FightRoom extends Room<FightState> {
 			defender: defender,
 			damage: damage,
 		});
-    this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
+		this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
 			defender: defender,
 			damage: damage,
 			attacker: this.state.player,
@@ -306,8 +299,16 @@ export class FightRoom extends Room<FightState> {
 		if (!newPlayer.flatDmgReduction) newPlayer.flatDmgReduction = 0;
 		if (!isEnemy) {
 			this.state.player.assign(newPlayer);
+      setStats(this.state.player.initialStats, this.state.player);
+      setStats(this.state.player.baseStats, this.state.player);
+      this.state.player.maxHp = this.state.player.hp;
 		} else {
 			this.state.enemy.assign(newPlayer);
+      setStats(this.state.enemy.initialStats, this.state.enemy);
+      setStats(this.state.enemy.baseStats, this.state.enemy);
+  
+      //player init stats
+      this.state.enemy.maxHp = this.state.enemy.hp;
 		}
 
 		if (player.talents.length > 0) {

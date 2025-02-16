@@ -1,4 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
+import { ItemTier } from '../types/ItemTypes';
 
 const ItemSchema = new Schema({
   itemId: Number,
@@ -52,4 +53,12 @@ export async function getItemsById(itemIds: number[]): Promise<{}[]> {
     .lean()
     .select({ _id: 0, __v: 0 });
   return itemCollection;
+}
+
+export async function getQuestItems(): Promise<{}[]> {
+  const questItems = await itemModel
+    .find({ tier: ItemTier.QUEST_TIER_1 })
+    .lean()
+    .select({ _id: 0, __v: 0 });
+  return questItems;
 }

@@ -254,7 +254,6 @@ export class Player extends Schema implements IStats {
 		this.gold -= item.price;
 		item.sold = true;
 		this.inventory.push(item);
-		await this.updateActiveItemCollections();
 	}
 
 	async removeItem(item: Item) {
@@ -277,7 +276,7 @@ export class Player extends Schema implements IStats {
 		if (unequippedItem) {
 			unequippedItem.equipped = false;
 			increaseStats(this, unequippedItem.affectedStats, -1);
-      increaseStats(this.initialStats, item.affectedStats, -1);
+      increaseStats(this.initialStats, unequippedItem.affectedStats, -1);
 			this.equippedItems.splice(sameItemTypeIndex, 1);
 			this.inventory.push(unequippedItem);
 		}

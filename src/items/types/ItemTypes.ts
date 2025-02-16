@@ -4,3 +4,7 @@ export enum ItemType {
   HELMET = 'helmet',
   SHIELD = 'shield',
 }
+
+export enum ItemTier {
+  QUEST_TIER_1 = 91,
+}

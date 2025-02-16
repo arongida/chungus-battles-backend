@@ -14,5 +14,6 @@ export class DraftState extends Schema {
 	@type('number') shopRefreshCost: number = 2;
 	@type('number') remainingTalentPoints: number = 0;
   @type([ItemCollection]) availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
+  @type([Item])questItems: ArraySchema<Item> = new ArraySchema<Item>();
   playerClient: Client;
 }
