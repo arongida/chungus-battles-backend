@@ -13,7 +13,6 @@ export class FightState extends Schema {
 	skillsTimers: Delayed[] = [];
 	fightResult: FightResultType;
 	endBurnTimer: Delayed;
-  auraTimer: Delayed;
 	endBurnDamage: number = 10;
 	playerClient: Client;
   questItems: ArraySchema<Item> = new ArraySchema<Item>();

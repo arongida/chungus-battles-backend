@@ -87,7 +87,7 @@ export const TalentBehaviors = {
 
 	[TalentType.SNITCH]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client } = context;
-		if (attacker.strength > 1) {
+		if (defender.strength > 1) {
 			defender.strength -= 1;
 			attacker.strength += 1;
 			client.send('combat_log', `${attacker.name} snitches 1 strength from ${defender.name}!`);
@@ -201,7 +201,7 @@ export const TalentBehaviors = {
 	},
 
 	[TalentType.WEAPON_WHISPERER]: (context: TalentBehaviorContext) => {
-		const { attacker, talent, client } = context;
+		const { attacker, client } = context;
 
 		//get equipped weapon
 		const weapon = attacker.equippedItems.find((item) => item.type === 'weapon');
@@ -245,13 +245,15 @@ export const TalentBehaviors = {
 	},
 
 	[TalentType.INTIMIDATING_WEALTH]: (context: TalentBehaviorContext) => {
-		const { attacker, defender, client, talent } = context;
+		const { attacker, defender, client } = context;
 		if (!defender) return;
-		const attackSpeedBonus = Math.min(0.2 + attacker.gold * 0.003, 0.5) * defender.attackSpeed;
-		const previousSavedValue = talent.savedValues ?? { attackSpeed: 0 };
-		talent.savedValues = { attackSpeed: attackSpeedBonus };
-		attacker.attackSpeed += attackSpeedBonus - previousSavedValue.attackSpeed;
-		defender.attackSpeed -= attackSpeedBonus - previousSavedValue.attackSpeed;
+		const attackSpeedBonus = Math.min(0.01 + (attacker.income * 0.01)) * defender.attackSpeed;
+
+    if (defender.attackSpeed <= 0.1) return;
+
+		attacker.attackSpeed += attackSpeedBonus;
+		defender.attackSpeed -= attackSpeedBonus;
+
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.INTIMIDATING_WEALTH,
@@ -527,7 +529,7 @@ export const TalentBehaviors = {
 		});
 	},
 
-	[TalentType.RING_WEAPON]: (context: TalentBehaviorContext) => {
+	[TalentType.MAGIC_RING_WEAPON]: (context: TalentBehaviorContext) => {
 		const { attacker, defender, client, talent, commandDispatcher, questItems } = context;
 
 		if (
@@ -540,7 +542,7 @@ export const TalentBehaviors = {
 				client.send('combat_log', `${attacker.name} found a ring weapon!`);
 				client.send('trigger_talent', {
 					playerId: attacker.playerId,
-					talentId: TalentType.RING_WEAPON,
+					talentId: TalentType.MAGIC_RING_WEAPON,
 				});
 			}
 		}
@@ -550,9 +552,16 @@ export const TalentBehaviors = {
 			const newDamage = previousDamage + 1;
 			talent.savedValues = { damage: newDamage };
 			const getDamageAfterDefense = defender.getDamageAfterDefense(newDamage);
+
+      commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+        defender: defender,
+        damage: getDamageAfterDefense,
+        attacker: attacker,
+      });
+
 			defender.takeDamage(getDamageAfterDefense, client);
 			client.send('combat_log', `${attacker.name} deals ${getDamageAfterDefense} damage with the magic ring!`);
-			client.send('trigger_talent', { playerId: attacker.playerId, talentId: TalentType.RING_WEAPON });
+			client.send('trigger_talent', { playerId: attacker.playerId, talentId: TalentType.MAGIC_RING_WEAPON });
 		}
 	},
 };

@@ -3,7 +3,7 @@ import { Player } from '../../players/schema/PlayerSchema';
 import { Item } from '../../items/schema/ItemSchema';
 import { Talent } from '../../talents/schema/TalentSchema';
 import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
-import { Client } from 'colyseus';
+import { Client, Delayed } from 'colyseus';
 
 export class DraftState extends Schema {
 	@type(Player) player: Player = new Player();
@@ -16,4 +16,5 @@ export class DraftState extends Schema {
   @type([ItemCollection]) availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
   @type([Item])questItems: ArraySchema<Item> = new ArraySchema<Item>();
   playerClient: Client;
+  skillsTimers: Delayed[] = [];
 }

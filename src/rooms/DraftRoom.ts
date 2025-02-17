@@ -12,8 +12,8 @@ import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCo
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
 import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
-import { AuraTriggerCommand } from '../commands/triggers/AuraTriggerCommand';
 import { SetUpQuestItemsCommand } from '../commands/SetUpQuestItemsCommand';
+import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCommand';
 export class DraftRoom extends Room<DraftState> {
 	maxClients = 1;
 
@@ -50,12 +50,15 @@ export class DraftRoom extends Room<DraftState> {
 			this.handleRefreshTalentSelection(client);
 		});
 
+		//start clock for timings
+		//this.clock.start();
+
 		this.setSimulationInterval((deltaTime) => this.update(deltaTime), 1000);
 		this.autoDispose = false;
 	}
 
 	update(deltaTime: number) {
-		this.dispatcher.dispatch(new AuraTriggerCommand());
+		this.dispatcher.dispatch(new DraftAuraTriggerCommand());
 	}
 
 	async onJoin(client: Client, options: any) {
@@ -108,15 +111,15 @@ export class DraftRoom extends Room<DraftState> {
 		} catch (e) {
 			//save player state to db
 			this.state.player.sessionId = '';
-      console.log('player aspeed', this.state.player.attackSpeed);
-      console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
+			console.log('player aspeed', this.state.player.attackSpeed);
+			console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
 			setStats(this.state.player, this.state.player.initialStats);
-      console.log('player aspeed', this.state.player.attackSpeed);
-      console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
+			console.log('player aspeed', this.state.player.attackSpeed);
+			console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
 			const copiedPlayer = await copyPlayer(this.state.player);
 			const updatedPlayer = await updatePlayer(this.state.player);
-      console.log('player aspeed', this.state.player.attackSpeed);
-      console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
+			console.log('player aspeed', this.state.player.attackSpeed);
+			console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
 			console.log(client.sessionId, 'left!');
 			this.clock.setTimeout(() => {
 				this.disconnect();
