@@ -14,12 +14,12 @@ import { OnDamageTriggerCommand } from '../commands/triggers/OnDamageTriggerComm
 import { OnAttackedTriggerCommand } from '../commands/triggers/OnAttackedTriggerCommand';
 import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerCommand';
 import { SetUpInventoryStateCommand } from '../commands/SetUpInventoryStateCommand';
-import { AuraTriggerCommand } from '../commands/triggers/AuraTriggerCommand';
 import { TalentType } from '../talents/types/TalentTypes';
 import { ItemCollectionType } from '../item-collections/types/ItemCollectionTypes';
 import { getQuestItems } from '../items/db/Item';
 import { Item } from '../items/schema/ItemSchema';
 import { SetUpQuestItemsCommand } from '../commands/SetUpQuestItemsCommand';
+import { FightAuraTriggerCommand } from '../commands/triggers/FightAuraTriggerCommand';
 
 export class FightRoom extends Room<FightState> {
 	maxClients = 1;
@@ -151,7 +151,6 @@ export class FightRoom extends Room<FightState> {
 				this.state.enemy.attackTimer.clear();
 				this.state.player.poisonTimer?.clear();
 				this.state.enemy.poisonTimer?.clear();
-				this.state.auraTimer?.clear();
 				this.state.endBurnTimer?.clear();
 				this.state.skillsTimers.forEach((timer) => timer.clear());
 				this.state.player.regenTimer?.clear();
@@ -281,13 +280,8 @@ export class FightRoom extends Room<FightState> {
 
 		//start active skill loops
 		this.dispatcher.dispatch(new ActiveTriggerCommand());
+    this.dispatcher.dispatch(new FightAuraTriggerCommand());
 
-		//start aura trigger interval
-		this.state.auraTimer = this.clock.setInterval(() => {
-			if (this.state.battleStarted) {
-				this.dispatcher.dispatch(new AuraTriggerCommand());
-			}
-		}, 1000);
 	}
 
 	//get player, enemy and talents from db and map them to the room state
