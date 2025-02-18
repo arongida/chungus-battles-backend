@@ -489,6 +489,14 @@ export const TalentBehaviors = {
 			shop[i].price = 0;
 		}
 
+		attacker.inventory.forEach(item => {
+			item.price = 0;
+		});
+
+		attacker.equippedItems.forEach(item => {
+			item.price = 0;
+		});
+
 		client.send('trigger_talent', {
 			playerId: attacker.playerId,
 			talentId: TalentType.COMRADE,
