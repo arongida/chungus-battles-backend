@@ -11,18 +11,18 @@ import { getAllItemCollections, getItemCollectionsById } from '../../item-collec
 import { ItemCollectionType } from '../../item-collections/types/ItemCollectionTypes';
 
 export class Player extends Schema implements IStats {
-  @type('number') playerId: number;
+  	@type('number') playerId: number;
 	@type('number') originalPlayerId: number;
 	@type('string') name: string;
 	@type('number') private _hp: number;
-  @type('number') private _accuracy: number;
+  	@type('number') private _accuracy: number;
 	@type('number') private _strength: number;
 	@type('number') private _gold: number;
 	@type('number') xp: number;
 	@type('number') private _level: number;
 	@type('string') sessionId: string;
 	@type('number') private _defense: number;
-  @type('number') flatDmgReduction: number;
+  	@type('number') flatDmgReduction: number;
 	@type('number') private _attackSpeed: number;
 	@type('number') baseAttackSpeed: number = 0.8;
 	@type('number') maxXp: number;
@@ -35,10 +35,10 @@ export class Player extends Schema implements IStats {
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) equippedItems: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
-  @type(Item) helmet: Item;
-  @type(Item) armor: Item;
-  @type(Item) mainHand: Item;
-  @type(Item) offHand: Item;
+  	@type(Item) helmet: Item;
+  	// @type(Item) armor: Item;
+  	// @type(Item) mainHand: Item;
+  	// @type(Item) offHand: Item;
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
 	@type([ItemCollection])
 	availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
