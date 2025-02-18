@@ -35,6 +35,10 @@ export class Player extends Schema implements IStats {
 	@type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
 	@type([Item]) equippedItems: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
+  @type(Item) helmet: Item;
+  @type(Item) armor: Item;
+  @type(Item) mainHand: Item;
+  @type(Item) offHand: Item;
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
 	@type([ItemCollection])
 	availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
@@ -63,7 +67,6 @@ export class Player extends Schema implements IStats {
     flatDmgReduction: 0,
     accuracy: 0,
   };
-	initialInventory: Item[] = [];
 	private _poisonStack: number = 0;
 	attackTimer: Delayed;
 	poisonTimer: Delayed;
@@ -190,10 +193,6 @@ export class Player extends Schema implements IStats {
 		return this.equippedItems.filter((item) => item.itemCollections.includes(collectionId));
 	}
 
-	resetInventory() {
-		this.inventory.splice(0, this.inventory.length, ...this.initialInventory);
-	}
-
 	addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1, activationRate: number = 0.015) {
 		this.poisonStack += stack;
 		playerClient.send('combat_log', `${this.name} is poisoned! ${this.poisonStack} stacks!`);
@@ -254,6 +253,7 @@ export class Player extends Schema implements IStats {
 		this.gold -= item.price;
 		item.sold = true;
 		this.inventory.push(item);
+    console.log(item.toJSON());
 	}
 
 	async removeItem(item: Item) {
@@ -288,6 +288,9 @@ export class Player extends Schema implements IStats {
 		const indexOfEquipedItem = this.inventory.indexOf(item);
 		this.inventory.splice(indexOfEquipedItem, 1);
 		await this.updateActiveItemCollections();
+
+
+    this.helmet = item;
 	}
 
 	async setItemUnequiped(item: Item){

@@ -54,7 +54,6 @@ export class FightRoom extends Room<FightState> {
 		let player = await getPlayer(options.playerId);
 		if (!player) throw new Error('Player not found!');
 
-    console.log('player aspeed', player.attackSpeed);  
 
 		//set up player state
 		await this.setUpState(player);
@@ -116,7 +115,6 @@ export class FightRoom extends Room<FightState> {
 			this.state.player.sessionId = '';
 			//set player for next round
 			setStats(this.state.player, this.state.player.initialStats);
-			//this.state.player.resetInventory();
 			this.state.player.round++;
 			await updatePlayer(this.state.player);
 			console.log(client.sessionId, 'left!');
@@ -292,7 +290,14 @@ export class FightRoom extends Room<FightState> {
 		if (!newPlayer.hpRegen) newPlayer.hpRegen = 0;
 		if (!newPlayer.flatDmgReduction) newPlayer.flatDmgReduction = 0;
 		if (!isEnemy) {
+      console.log(`assigning ${isEnemy ? 'enemy' : 'player'} to state`);;
+
+
+      player.helmet = new Item().assign(player.helmet);
+
 			this.state.player.assign(newPlayer);
+      console.log('assigned player to state');
+
       setStats(this.state.player.initialStats, this.state.player);
       setStats(this.state.player.baseStats, this.state.player);
       this.state.player.maxHp = this.state.player.hp;

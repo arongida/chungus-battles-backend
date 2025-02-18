@@ -111,11 +111,7 @@ export class DraftRoom extends Room<DraftState> {
 		} catch (e) {
 			//save player state to db
 			this.state.player.sessionId = '';
-			console.log('player aspeed', this.state.player.attackSpeed);
-			console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
 			setStats(this.state.player, this.state.player.initialStats);
-			console.log('player aspeed', this.state.player.attackSpeed);
-			console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
 			const copiedPlayer = await copyPlayer(this.state.player);
 			const updatedPlayer = await updatePlayer(this.state.player);
 			console.log('player aspeed', this.state.player.attackSpeed);

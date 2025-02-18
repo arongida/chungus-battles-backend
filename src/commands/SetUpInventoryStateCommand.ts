@@ -38,7 +38,6 @@ export class SetUpInventoryStateCommand extends Command<
 				itemFromDb.affectedStats = new AffectedStats().assign(affectedStatsData);
 				const newItem = new Item().assign(itemFromDb);
 				playerToSetUp.inventory.push(newItem);
-				playerToSetUp.initialInventory.push(newItem);
 			});
 		}
 

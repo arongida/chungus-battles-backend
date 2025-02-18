@@ -10,8 +10,6 @@ const ItemSchema = new Schema({
   affectedStats: {
     strength: Number,
     accuracy: Number,
-    minDmg: Number,
-    maxDmg: Number,
     hp: Number,
     defense: Number,
     attackSpeed: Number,
@@ -19,7 +17,6 @@ const ItemSchema = new Schema({
     dodgeRate: Number,
     income: Number,
     hpRegen: Number,
-
   },
   image: String,
   tags: [String],
