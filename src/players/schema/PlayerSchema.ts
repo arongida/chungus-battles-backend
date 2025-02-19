@@ -1,6 +1,6 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { Talent } from '../../talents/schema/TalentSchema';
-import { Item } from '../../items/schema/ItemSchema';
+import {AffectedStats, Item} from '../../items/schema/ItemSchema';
 import { IStats } from '../../common/types';
 import { TalentType } from '../../talents/types/TalentTypes';
 import { Client, Delayed } from 'colyseus';
@@ -36,9 +36,9 @@ export class Player extends Schema implements IStats {
 	@type([Item]) equippedItems: ArraySchema<Item> = new ArraySchema<Item>();
 	@type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
   	@type(Item) helmet: Item;
-  	// @type(Item) armor: Item;
-  	// @type(Item) mainHand: Item;
-  	// @type(Item) offHand: Item;
+  	@type(Item) armor: Item;
+  	@type(Item) mainHand: Item;
+  	@type(Item) offHand: Item;
 	@type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
 	@type([ItemCollection])
 	availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
@@ -75,6 +75,8 @@ export class Player extends Schema implements IStats {
 	talentsOnCooldown: TalentType[] = [];
 	invincible: boolean = false;
 	rewardRound: number;
+
+
 
 	get gold(): number {
 		return this._gold;

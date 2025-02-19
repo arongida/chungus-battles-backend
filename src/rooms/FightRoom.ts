@@ -54,7 +54,6 @@ export class FightRoom extends Room<FightState> {
         let player = await getPlayer(options.playerId);
         if (!player) throw new Error('Player not found!');
 
-
         //set up player state
         await this.setUpState(player);
 
@@ -284,41 +283,19 @@ export class FightRoom extends Room<FightState> {
 
     //get player, enemy and talents from db and map them to the room state
     async setUpState(player: Player, isEnemy = false) {
-        const newPlayer = new Player(player);
-        newPlayer.helmet = new Item().assign(player.helmet);
-        newPlayer.helmet.affectedStats = new AffectedStats().assign(player.helmet.affectedStats);
-
 
         if (!isEnemy) {
-            this.state.player.assign(newPlayer);
+            this.state.player.assign(player);
             setStats(this.state.player.initialStats, this.state.player);
             setStats(this.state.player.baseStats, this.state.player);
             this.state.player.maxHp = this.state.player.hp;
         } else {
-            this.state.enemy.assign(newPlayer);
+            this.state.enemy.assign(player);
             setStats(this.state.enemy.initialStats, this.state.enemy);
             setStats(this.state.enemy.baseStats, this.state.enemy);
-
             //player init stats
             this.state.enemy.maxHp = this.state.enemy.hp;
         }
-
-        if (player.talents.length > 0) {
-            const talents = (await getTalentsById(player.talents as unknown as number[])) as Talent[];
-            player.talents.forEach((talentId) => {
-                const newTalent = new Talent(talents.find((talent) => talent.talentId === (talentId as unknown as number)));
-                if (!isEnemy) {
-                    this.state.player.talents.push(newTalent);
-                } else {
-                    this.state.enemy.talents.push(newTalent);
-                }
-            });
-        }
-
-        await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
-            playerObjectFromDb: player,
-            isEnemy: isEnemy,
-        });
     }
 
     private async handleFightEnd() {

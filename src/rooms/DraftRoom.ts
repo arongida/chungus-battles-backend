@@ -6,12 +6,11 @@ import {copyPlayer, getPlayer, updatePlayer, createNewPlayer} from '../players/d
 import {getNumberOfItems, getQuestItems} from '../items/db/Item';
 import {Player} from '../players/schema/PlayerSchema';
 import {delay, setStats} from '../common/utils';
-import {getRandomTalents, getTalentsById} from '../talents/db/Talent';
+import {getRandomTalents} from '../talents/db/Talent';
 import {Dispatcher} from '@colyseus/command';
 import {ShopStartTriggerCommand} from '../commands/triggers/ShopStartTriggerCommand';
 import {LevelUpTriggerCommand} from '../commands/triggers/LevelUpTriggerCommand';
 import {AfterShopRefreshTriggerCommand} from '../commands/triggers/AfterShopRefreshTriggerCommand';
-import {SetUpInventoryStateCommand} from '../commands/SetUpInventoryStateCommand';
 import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {DraftAuraTriggerCommand} from '../commands/triggers/DraftAuraTriggerCommand';
 
@@ -84,7 +83,6 @@ export class DraftRoom extends Room<DraftState> {
             this.checkLevelUp();
         } else {
             const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId, options.avatarUrl);
-            this.state.player.assign(newPlayer);
             this.state.remainingTalentPoints = 1;
             await this.setUpState(newPlayer, client);
         }
@@ -176,18 +174,7 @@ export class DraftRoom extends Room<DraftState> {
 
     //get player, enemy, items and talents from db and map them to the room state
     private async setUpState(player: Player, client: Client) {
-        //get player item, talent info
-        const talents = (await getTalentsById(player.talents as unknown as number[])) as Talent[];
-
-        const newPlayer = new Player(player);
-        newPlayer.helmet = new Item().assign(newPlayer.helmet);
-        newPlayer.helmet.affectedStats = new AffectedStats().assign(newPlayer.helmet.affectedStats);
-        this.state.player.assign(newPlayer);
-
-        player.talents.forEach((talentId) => {
-            const newTalent = new Talent(talents.find((talent) => talent.talentId === (talentId as unknown as number)));
-            this.state.player.talents.push(newTalent);
-        });
+        this.state.player.assign(player);
 
         let highestTalentTier;
         if (this.state.player.talents.length > 0) {
@@ -198,10 +185,7 @@ export class DraftRoom extends Room<DraftState> {
 
         this.state.remainingTalentPoints = player.level - highestTalentTier;
 
-        await this.dispatcher.dispatch(new SetUpInventoryStateCommand(), {
-            playerObjectFromDb: player,
-            isEnemy: false,
-        });
+
         await this.updateTalentSelection();
 
         setStats(this.state.player.initialStats, this.state.player);

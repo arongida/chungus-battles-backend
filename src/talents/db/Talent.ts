@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 
-export const talentMongooseSchema = new Schema({
+export const TalentSchema = new Schema({
   talentId: Number,
   name: String,
   description: String,
@@ -11,7 +11,7 @@ export const talentMongooseSchema = new Schema({
   triggerType: String,
 });
 
-export const talentModel = mongoose.model('Talent', talentMongooseSchema);
+export const talentModel = mongoose.model('Talent', TalentSchema);
 
 export async function getRandomTalents(
   selectionSize: number,

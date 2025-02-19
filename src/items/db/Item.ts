@@ -1,7 +1,7 @@
 import mongoose, { Schema } from 'mongoose';
 import { ItemTier } from '../types/ItemTypes';
 
-const ItemSchema = new Schema({
+export const ItemSchema = new Schema({
   itemId: Number,
   name: String,
   description: String,

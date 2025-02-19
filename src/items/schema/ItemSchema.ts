@@ -16,7 +16,7 @@ export class Item extends Schema {
   @type('number') itemId: number;
   @type('string') name: string;
   @type('string') description: string;
-  @type('number') price: number = 100;
+  @type('number') price: number;
   @type(AffectedStats) affectedStats: AffectedStats;
   @type('number') tier: number;
   @type('string') image: string;
