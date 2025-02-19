@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 
-const ItemCollectionSchema = new Schema({
+export const ItemCollectionSchema = new Schema({
 	itemCollectionId: Number,
 	name: String,
 	requirements: String,

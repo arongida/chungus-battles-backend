@@ -1,4 +1,4 @@
-import { Schema, type, ArraySchema } from '@colyseus/schema';
+import { Schema, type, ArraySchema, SetSchema } from '@colyseus/schema';
 import { IStats } from '../../common/types';
 
 export class AffectedStats extends Schema implements IStats {
@@ -25,4 +25,5 @@ export class Item extends Schema {
   @type('boolean') equipped: boolean = false;
   @type(['number']) itemCollections: number[];
   @type('string') type: string;
+  @type(['string']) equipOptions: SetSchema<string>;
 }

@@ -4,7 +4,9 @@ import {AffectedStats, Item} from '../../items/schema/ItemSchema';
 import {ItemSchema} from "../../items/db/Item";
 import {TalentSchema} from "../../talents/db/Talent";
 import {Talent} from "../../talents/schema/TalentSchema";
-import {ArraySchema} from "@colyseus/schema";
+import {ArraySchema, MapSchema} from "@colyseus/schema";
+import {ItemCollectionSchema} from "../../item-collections/db/ItemCollection";
+import {ItemCollection} from "../../item-collections/schema/ItemCollectionSchema";
 
 const PlayerSchema = new Schema({
 	playerId: Number,
@@ -26,10 +28,12 @@ const PlayerSchema = new Schema({
 	avatarUrl: String,
 	talents: [TalentSchema],
 	inventory: [ItemSchema],
-	helmet: ItemSchema,
-	armor: ItemSchema,
-	mainHand: ItemSchema,
-	offHand: ItemSchema,
+	activeItemCollections: [ItemCollectionSchema],
+	// helmet: ItemSchema,
+	// armor: ItemSchema,
+	// mainHand: ItemSchema,
+	// offHand: ItemSchema,
+	equippedItems: {type: Map, of: ItemSchema},
 	income: Number,
 	hpRegen: Number,
 	dodgeRate: Number,
@@ -45,21 +49,27 @@ export async function getPlayer(playerId: number): Promise<Player> {
 }
 
 function getPlayerSchemaObject(playerFromDb: Object): Player {
-	const newPlayerSchemaObject = new Player().assign(playerFromDb)
-	newPlayerSchemaObject.helmet = new Item().assign(newPlayerSchemaObject.helmet);
-	newPlayerSchemaObject.helmet.affectedStats = new AffectedStats().assign(newPlayerSchemaObject.helmet.affectedStats);
-	newPlayerSchemaObject.armor = new Item().assign(newPlayerSchemaObject.armor);
-	newPlayerSchemaObject.armor.affectedStats = new AffectedStats().assign(newPlayerSchemaObject.armor.affectedStats);
-	newPlayerSchemaObject.mainHand = new Item().assign(newPlayerSchemaObject.mainHand);
-	newPlayerSchemaObject.mainHand.affectedStats = new AffectedStats().assign(newPlayerSchemaObject.mainHand.affectedStats);
-	newPlayerSchemaObject.offHand = new Item().assign(newPlayerSchemaObject.offHand);
-	newPlayerSchemaObject.offHand.affectedStats = new AffectedStats().assign(newPlayerSchemaObject.offHand.affectedStats);
+	const newPlayerSchemaObject = new Player().assign(playerFromDb);
+
+	const newPlayerEquippedItemsMapSchema = new MapSchema();
+	newPlayerSchemaObject.equippedItems.forEach((item, key) => {
+		const itemSchemaObject = new Item().assign(item);
+		itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
+		newPlayerEquippedItemsMapSchema.set(key, itemSchemaObject);
+	})
+	newPlayerSchemaObject.equippedItems = newPlayerEquippedItemsMapSchema;
 
 	const newPlayerTalentArraySchema = new ArraySchema();
 	newPlayerSchemaObject.talents.map((talent) => {
 		newPlayerTalentArraySchema.push(new Talent().assign(talent));
 	})
 	newPlayerSchemaObject.talents = newPlayerTalentArraySchema;
+
+	const newPlayerItemCollectionArraySchema = new ArraySchema();
+	newPlayerSchemaObject.activeItemCollections.map((itemCollection) => {
+		newPlayerItemCollectionArraySchema.push(new ItemCollection().assign(itemCollection));
+	})
+	newPlayerSchemaObject.activeItemCollections = newPlayerItemCollectionArraySchema;
 
 	const newPlayerInventoryArraySchema = new ArraySchema();
 	newPlayerSchemaObject.inventory.map((item) => {
@@ -99,10 +109,8 @@ export async function createNewPlayer(
 		avatarUrl: avatarUrl,
 		talents: [],
 		inventory: [],
-		mainHand: {},
-		offHand: {},
-		armor: {},
-		helmet: {},
+		activeItemCollections: [],
+		equippedItems: {},
 		income: 0,
 		hpRegen: 0,
 		dodgeRate: 0,

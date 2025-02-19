@@ -13,6 +13,7 @@ import {LevelUpTriggerCommand} from '../commands/triggers/LevelUpTriggerCommand'
 import {AfterShopRefreshTriggerCommand} from '../commands/triggers/AfterShopRefreshTriggerCommand';
 import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {DraftAuraTriggerCommand} from '../commands/triggers/DraftAuraTriggerCommand';
+import {EquipSlot} from "../items/types/ItemTypes";
 
 export class DraftRoom extends Room<DraftState> {
     maxClients = 1;
@@ -29,10 +30,10 @@ export class DraftRoom extends Room<DraftState> {
             await this.sellItem(message.itemId);
         });
         this.onMessage('equip', async (client, message) => {
-            await this.equipItem(message.itemId);
+            await this.equipItem(message.itemId, message.slot);
         });
         this.onMessage('unequip', async (client, message) => {
-            await this.unequipItem(message.itemId);
+            await this.unequipItem(message.itemId, message.slot);
         });
         this.onMessage('refresh_shop', (client) => {
             this.refreshShop(client);
@@ -113,8 +114,6 @@ export class DraftRoom extends Room<DraftState> {
             setStats(this.state.player, this.state.player.initialStats);
             await copyPlayer(this.state.player);
             await updatePlayer(this.state.player);
-            console.log('player aspeed', this.state.player.attackSpeed);
-            console.log('player initial aspeed', this.state.player.initialStats.attackSpeed);
             console.log(client.sessionId, 'left!');
             this.clock.setTimeout(() => {
                 this.disconnect();
@@ -215,15 +214,15 @@ export class DraftRoom extends Room<DraftState> {
         await this.state.player.removeItem(item);
     }
 
-    private async equipItem(itemId: number) {
+    private async equipItem(itemId: number, slot: EquipSlot) {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
-        await this.state.player.setItemEquiped(item);
+        await this.state.player.setItemEquipped(item, slot);
     }
 
-    private async unequipItem(itemId: number) {
-        const item = this.state.player.equippedItems.find((item) => item.itemId === itemId);
-        if (!item) return;
+    private async unequipItem(itemId: number, slot: EquipSlot) {
+        const item = this.state.player.equippedItems.get(slot);
+        if (!item || item.itemId !== itemId) return;
         await this.state.player.setItemUnequiped(item);
     }
 
