@@ -1,4 +1,4 @@
-import mongoose, { Schema } from 'mongoose';
+import mongoose, {Schema} from 'mongoose';
 
 export const ItemCollectionSchema = new Schema({
 	itemCollectionId: Number,
@@ -19,16 +19,14 @@ export const itemcollectionModel = mongoose.model(
 );
 
 export async function getAllItemCollections(): Promise<{}[]> {
-	const itemCollectionSchemaArray = await itemcollectionModel.find().lean();
-	return itemCollectionSchemaArray;
+	return itemcollectionModel.find().lean();
 }
 
 export async function getItemCollectionsById(
 	itemCollectionIds: number[]
 ): Promise<{}[]> {
-	const itemCollections = await itemcollectionModel
-		.find({ itemCollectionId: { $in: itemCollectionIds } })
+	return itemcollectionModel
+		.find({itemCollectionId: {$in: itemCollectionIds}})
 		.lean()
-		.select({ _id: 0, __v: 0 });
-	return itemCollections;
+		.select({_id: 0, __v: 0});
 }

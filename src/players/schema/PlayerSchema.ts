@@ -8,7 +8,6 @@ import ClockTimer from '@gamestdio/timer';
 import {increaseStats} from '../../common/utils';
 import {ItemCollection} from '../../item-collections/schema/ItemCollectionSchema';
 import {getAllItemCollections, getItemCollectionsById} from '../../item-collections/db/ItemCollection';
-import {ItemCollectionType} from '../../item-collections/types/ItemCollectionTypes';
 import {EquipSlot} from "../../items/types/ItemTypes";
 
 export class Player extends Schema implements IStats {
