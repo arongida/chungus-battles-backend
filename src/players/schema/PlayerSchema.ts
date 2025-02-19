@@ -1,6 +1,6 @@
 import { Schema, type, ArraySchema } from '@colyseus/schema';
 import { Talent } from '../../talents/schema/TalentSchema';
-import {AffectedStats, Item} from '../../items/schema/ItemSchema';
+import {Item} from '../../items/schema/ItemSchema';
 import { IStats } from '../../common/types';
 import { TalentType } from '../../talents/types/TalentTypes';
 import { Client, Delayed } from 'colyseus';
@@ -186,11 +186,6 @@ export class Player extends Schema implements IStats {
 			return count;
 		}, 0);
 	}
-
-	getItemsForTags(tags: string[]): Item[] {
-		return this.inventory.filter((item) => tags.some((tag) => item.tags.includes(tag)));
-	}
-
 	getItemsForCollection(collectionId: number): Item[] {
 		return this.equippedItems.filter((item) => item.itemCollections.includes(collectionId));
 	}
