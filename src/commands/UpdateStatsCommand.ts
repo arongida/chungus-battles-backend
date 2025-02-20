@@ -23,13 +23,13 @@ export class UpdateStatsCommand extends Command<
         const damageTaken = previousMaxHp - previousHp; // Calculate exact damage
 
         this.setStats(player, player.baseStats);
-        this.state.player.equippedItems.forEach((value) => {
+        player.equippedItems.forEach((value) => {
             this.increaseStats(player, value.affectedStats);
         });
-        this.state.player.talents.forEach((talent) => {
+        player.talents.forEach((talent) => {
             this.increaseStats(player, talent.affectedStats);
         });
-        this.state.player.activeItemCollections.forEach((collection) => {
+        player.activeItemCollections.forEach((collection) => {
             this.increaseStats(player, collection.affectedStats);
         });
 
