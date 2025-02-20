@@ -1,8 +1,8 @@
-import {Room, Client} from '@colyseus/core';
+import {Client, Room} from '@colyseus/core';
 import {FightState} from './schema/FightState';
 import {getHighestWin, getPlayer, getSameRoundPlayer, updatePlayer} from '../players/db/Player';
 import {Player} from '../players/schema/PlayerSchema';
-import {delay, setStats} from '../common/utils';
+import {delay} from '../common/utils';
 import {FightResultType} from '../common/types';
 import {getAllTalents} from '../talents/db/Talent';
 import {Talent} from '../talents/schema/TalentSchema';
@@ -19,6 +19,7 @@ import {getQuestItems} from '../items/db/Item';
 import {Item} from '../items/schema/ItemSchema';
 import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerCommand';
+import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 
 export class FightRoom extends Room<FightState> {
     maxClients = 1;
@@ -112,7 +113,6 @@ export class FightRoom extends Room<FightState> {
             //save player state to db
             this.state.player.sessionId = '';
             //set player for next round
-            setStats(this.state.player, this.state.player.initialStats);
             this.state.player.round++;
             await updatePlayer(this.state.player);
             console.log(client.sessionId, 'left!');
@@ -128,6 +128,12 @@ export class FightRoom extends Room<FightState> {
 
     //this is running all the time
     update() {
+
+        //update stats
+        if (this.state.player && this.state.enemy) {
+            this.dispatcher.dispatch(new UpdateStatsCommand());
+        }
+
         //check for battle end
         if (this.state.battleStarted) {
             this.checkPoison(this.state.player, this.state.enemy);
@@ -285,15 +291,8 @@ export class FightRoom extends Room<FightState> {
 
         if (!isEnemy) {
             this.state.player.assign(player);
-            setStats(this.state.player.initialStats, this.state.player);
-            setStats(this.state.player.baseStats, this.state.player);
-            this.state.player.maxHp = this.state.player.hp;
         } else {
             this.state.enemy.assign(player);
-            setStats(this.state.enemy.initialStats, this.state.enemy);
-            setStats(this.state.enemy.baseStats, this.state.enemy);
-            //player init stats
-            this.state.enemy.maxHp = this.state.enemy.hp;
         }
     }
 

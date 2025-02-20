@@ -16,5 +16,4 @@ export class DraftState extends Schema {
     @type([ItemCollection]) availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
     @type([Item]) questItems: ArraySchema<Item> = new ArraySchema<Item>();
     playerClient: Client;
-    skillsTimers: Delayed[] = [];
 }

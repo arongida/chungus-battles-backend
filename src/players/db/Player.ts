@@ -1,26 +1,24 @@
 import mongoose, { Schema } from 'mongoose';
 import { Player } from '../schema/PlayerSchema';
-import {AffectedStats, Item} from '../../items/schema/ItemSchema';
+import {Item} from '../../items/schema/ItemSchema';
 import {ItemSchema} from "../../items/db/Item";
 import {TalentSchema} from "../../talents/db/Talent";
 import {Talent} from "../../talents/schema/TalentSchema";
 import {ArraySchema, MapSchema} from "@colyseus/schema";
 import {ItemCollectionSchema} from "../../item-collections/db/ItemCollection";
 import {ItemCollection} from "../../item-collections/schema/ItemCollectionSchema";
+import {StatsSchema} from "../../common/db/Stats";
+import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
+
 
 const PlayerSchema = new Schema({
 	playerId: Number,
 	originalPlayerId: Number,
 	name: String,
-	hp: { type: Number, alias: '_hp' },
-	strength: { type: Number, alias: '_strength' },
-	accuracy: { type: Number, alias: '_accuracy' },
 	gold: { type: Number, alias: '_gold' },
 	xp: Number,
 	level: { type: Number, alias: '_level' },
 	sessionId: String,
-	defense: { type: Number, alias: '_defense' },
-	attackSpeed: { type: Number, alias: '_attackSpeed' },
 	maxXp: Number,
 	round: Number,
 	lives: Number,
@@ -29,15 +27,8 @@ const PlayerSchema = new Schema({
 	talents: [TalentSchema],
 	inventory: [ItemSchema],
 	activeItemCollections: [ItemCollectionSchema],
-	// helmet: ItemSchema,
-	// armor: ItemSchema,
-	// mainHand: ItemSchema,
-	// offHand: ItemSchema,
+	baseStats: StatsSchema,
 	equippedItems: {type: Map, of: ItemSchema},
-	income: Number,
-	hpRegen: Number,
-	dodgeRate: Number,
-	flatDmgReduction: Number,
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
@@ -50,6 +41,7 @@ export async function getPlayer(playerId: number): Promise<Player> {
 
 function getPlayerSchemaObject(playerFromDb: Object): Player {
 	const newPlayerSchemaObject = new Player().assign(playerFromDb);
+	newPlayerSchemaObject.baseStats = new AffectedStats().assign(newPlayerSchemaObject.baseStats);
 
 	const newPlayerEquippedItemsMapSchema = new MapSchema();
 	newPlayerSchemaObject.equippedItems.forEach((item, key) => {
@@ -61,13 +53,17 @@ function getPlayerSchemaObject(playerFromDb: Object): Player {
 
 	const newPlayerTalentArraySchema = new ArraySchema();
 	newPlayerSchemaObject.talents.map((talent) => {
-		newPlayerTalentArraySchema.push(new Talent().assign(talent));
+		const talentSchemaObject = new Talent().assign(talent);
+		talentSchemaObject.affectedStats = new AffectedStats();
+		newPlayerTalentArraySchema.push(talentSchemaObject);
 	})
 	newPlayerSchemaObject.talents = newPlayerTalentArraySchema;
 
 	const newPlayerItemCollectionArraySchema = new ArraySchema();
 	newPlayerSchemaObject.activeItemCollections.map((itemCollection) => {
-		newPlayerItemCollectionArraySchema.push(new ItemCollection().assign(itemCollection));
+		const itemCollectionSchemaObject = new ItemCollection().assign(itemCollection);
+		itemCollectionSchemaObject.affectedStats = new AffectedStats();
+		newPlayerItemCollectionArraySchema.push(itemCollectionSchemaObject);
 	})
 	newPlayerSchemaObject.activeItemCollections = newPlayerItemCollectionArraySchema;
 
@@ -93,15 +89,10 @@ export async function createNewPlayer(
 		playerId: playerId,
 		originalPlayerId: playerId,
 		name: name,
-		hp: 100,
-		strength: 3,
-		accuracy: 0,
 		gold: startingGold,
 		xp: 0,
 		level: 1,
 		sessionId: sessionId,
-		defense: 10,
-		attackSpeed: 0.8,
 		maxXp: 12,
 		round: 1,
 		lives: 3,
@@ -111,10 +102,17 @@ export async function createNewPlayer(
 		inventory: [],
 		activeItemCollections: [],
 		equippedItems: {},
-		income: 0,
-		hpRegen: 0,
-		dodgeRate: 0,
-		flatDmgReduction: 0,
+		baseStats: {
+			strength: 3,
+			accuracy: 1,
+			maxHp: 100,
+			defense: 10,
+			attackSpeed: 0.8,
+			flatDmgReduction: 0,
+			dodgeRate: 0,
+			income: 0,
+			hpRegen: 0,
+		}
 	});
 	await newPlayer.save().catch((err) => console.error(err));
 	return getPlayerSchemaObject(newPlayer.toObject());

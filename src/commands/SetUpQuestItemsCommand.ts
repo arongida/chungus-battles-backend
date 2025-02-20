@@ -1,7 +1,8 @@
 import { Command } from '@colyseus/command';
 import { FightRoom } from '../rooms/FightRoom';
 import { DraftRoom } from '../rooms/DraftRoom';
-import { AffectedStats, Item } from '../items/schema/ItemSchema';
+import {  Item } from '../items/schema/ItemSchema';
+import {AffectedStats} from "../common/schema/AffectedStatsSchema";
 
 export class SetUpQuestItemsCommand extends Command<
 	FightRoom | DraftRoom,

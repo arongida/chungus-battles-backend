@@ -1,46 +1,46 @@
-import { Command } from '@colyseus/command';
-import { TriggerType } from '../../common/types';
-import { FightRoom } from '../../rooms/FightRoom';
-import { ItemCollection } from '../../item-collections/schema/ItemCollectionSchema';
-import { Talent } from '../../talents/schema/TalentSchema';
-import { BehaviorContext } from '../../common/BehaviorContext';
-import { Player } from '../../players/schema/PlayerSchema';
+import {Command} from '@colyseus/command';
+import {TriggerType} from '../../common/types';
+import {FightRoom} from '../../rooms/FightRoom';
+import {ItemCollection} from '../../item-collections/schema/ItemCollectionSchema';
+import {Talent} from '../../talents/schema/TalentSchema';
+import {BehaviorContext} from '../../common/BehaviorContext';
+import {Player} from '../../players/schema/PlayerSchema';
 
 export class FightAuraTriggerCommand extends Command<FightRoom> {
-	execute() {
-			this.startAuraEffectsLoop(this.state.player, this.state.enemy);
-			this.startAuraEffectsLoop(this.state.enemy, this.state.player);
-	}
+    execute() {
+        this.startAuraEffectsLoop(this.state.player, this.state.enemy);
+        this.startAuraEffectsLoop(this.state.enemy, this.state.player);
+    }
 
-	startAuraEffectsLoop(player: Player, enemy?: Player) {
-		const auraItemCollections: ItemCollection[] = player.activeItemCollections.filter(
-			(itemCollection) => itemCollection.triggerType === TriggerType.AURA
-		);
+    startAuraEffectsLoop(player: Player, enemy?: Player) {
+        const auraItemCollections: ItemCollection[] = player.activeItemCollections.filter(
+            (itemCollection) => itemCollection.triggerType === TriggerType.AURA
+        );
 
-		const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerType === TriggerType.AURA);
+        const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerType === TriggerType.AURA);
 
-		let behaviorContext: BehaviorContext = {
-			client: this.state.playerClient,
-			attacker: player,
-      defender: enemy,
-			questItems: this.state.questItems,
-      commandDispatcher: this.room.dispatcher,
-		};
+        let behaviorContext: BehaviorContext = {
+            client: this.state.playerClient,
+            attacker: player,
+            defender: enemy,
+            questItems: this.state.questItems,
+            commandDispatcher: this.room.dispatcher,
+        };
 
-		auraItemCollections.forEach((itemCollection) => {
-			this.state.skillsTimers.push(
-				this.clock.setInterval(() => {
-					itemCollection.executeBehavior(behaviorContext);
-				}, 1000)
-			);
-		});
+        auraItemCollections.forEach((itemCollection) => {
+            this.state.skillsTimers.push(
+                this.clock.setInterval(() => {
+                    itemCollection.executeBehavior(behaviorContext);
+                }, 1000)
+            );
+        });
 
-		auraTalents.forEach((talent) => {
-			this.state.skillsTimers.push(
-				this.clock.setInterval(() => {
-					talent.executeBehavior(behaviorContext);
-				}, 1000)
-			);
-		});
-	}
+        auraTalents.forEach((talent) => {
+            this.state.skillsTimers.push(
+                this.clock.setInterval(() => {
+                    talent.executeBehavior(behaviorContext);
+                }, 1000)
+            );
+        });
+    }
 }

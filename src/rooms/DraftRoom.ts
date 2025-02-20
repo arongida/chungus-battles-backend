@@ -1,11 +1,11 @@
-import {Room, Client} from '@colyseus/core';
+import {Client, Room} from '@colyseus/core';
 import {DraftState} from './schema/DraftState';
-import {AffectedStats, Item} from '../items/schema/ItemSchema';
+import { Item} from '../items/schema/ItemSchema';
 import {Talent} from '../talents/schema/TalentSchema';
-import {copyPlayer, getPlayer, updatePlayer, createNewPlayer} from '../players/db/Player';
+import {copyPlayer, createNewPlayer, getPlayer, updatePlayer} from '../players/db/Player';
 import {getNumberOfItems, getQuestItems} from '../items/db/Item';
 import {Player} from '../players/schema/PlayerSchema';
-import {delay, setStats} from '../common/utils';
+import {delay} from '../common/utils';
 import {getRandomTalents} from '../talents/db/Talent';
 import {Dispatcher} from '@colyseus/command';
 import {ShopStartTriggerCommand} from '../commands/triggers/ShopStartTriggerCommand';
@@ -14,6 +14,9 @@ import {AfterShopRefreshTriggerCommand} from '../commands/triggers/AfterShopRefr
 import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {DraftAuraTriggerCommand} from '../commands/triggers/DraftAuraTriggerCommand';
 import {EquipSlot} from "../items/types/ItemTypes";
+import {getAllItemCollections} from "../item-collections/db/ItemCollection";
+import {AffectedStats} from "../common/schema/AffectedStatsSchema";
+import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 
 export class DraftRoom extends Room<DraftState> {
     maxClients = 1;
@@ -52,14 +55,16 @@ export class DraftRoom extends Room<DraftState> {
         });
 
         //start clock for timings
-        //this.clock.start();
+        this.clock.start();
 
-        this.setSimulationInterval(() => this.update(), 1000);
+        this.setSimulationInterval(() => this.update(), 100);
         this.autoDispose = false;
     }
 
     update() {
-        this.dispatcher.dispatch(new DraftAuraTriggerCommand());
+        if (this.state.player) {
+            this.dispatcher.dispatch(new UpdateStatsCommand());
+        }
     }
 
     async onJoin(client: Client, options: any) {
@@ -81,7 +86,7 @@ export class DraftRoom extends Room<DraftState> {
             await this.setUpState(foundPlayer, client);
 
             //check levelup after battle
-            this.checkLevelUp();
+            await this.checkLevelUp();
         } else {
             const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId, options.avatarUrl);
             this.state.remainingTalentPoints = 1;
@@ -91,12 +96,20 @@ export class DraftRoom extends Room<DraftState> {
         //set room state
         if (this.state.player.round === 1) await this.updateTalentSelection();
         if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
+        this.state.availableItemCollections = await getAllItemCollections();
 
         //set quest items
         this.dispatcher.dispatch(new SetUpQuestItemsCommand(), {questItemsFromDb: (await getQuestItems()) as Item[]});
 
         //shop start trigger
         this.dispatcher.dispatch(new ShopStartTriggerCommand());
+
+        //start auras
+        this.clock.setInterval(() => {
+            this.dispatcher.dispatch(new DraftAuraTriggerCommand());
+        }, 1000)
+
+        console.log('set up room finished!');
     }
 
     async onLeave(client: Client, consented: boolean) {
@@ -111,7 +124,6 @@ export class DraftRoom extends Room<DraftState> {
         } catch (e) {
             //save player state to db
             this.state.player.sessionId = '';
-            setStats(this.state.player, this.state.player.initialStats);
             await copyPlayer(this.state.player);
             await updatePlayer(this.state.player);
             console.log(client.sessionId, 'left!');
@@ -136,7 +148,7 @@ export class DraftRoom extends Room<DraftState> {
             newItem.assign(newItemObject);
             if (this.state.shop.length < 6) this.state.shop.push(newItem);
         });
-        await this.state.player.updateAvailableItemCollections();
+
         this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
     }
 
@@ -165,9 +177,7 @@ export class DraftRoom extends Room<DraftState> {
         //assign talents from db to state
         const talents = await getRandomTalents(2, nextTalentLevel, exceptions);
         talents.forEach((talent) => {
-            const newTalent = new Talent();
-            newTalent.assign(talent);
-            if (this.state.availableTalents.length < 2) this.state.availableTalents.push(newTalent);
+            if (this.state.availableTalents.length < 2) this.state.availableTalents.push(talent);
         });
     }
 
@@ -187,10 +197,6 @@ export class DraftRoom extends Room<DraftState> {
 
         await this.updateTalentSelection();
 
-        setStats(this.state.player.initialStats, this.state.player);
-        setStats(this.state.player.baseStats, this.state.player);
-        this.state.player.maxHp = this.state.player.hp;
-
         this.state.player.sessionId = client.sessionId;
         this.state.playerClient = client;
 
@@ -204,26 +210,26 @@ export class DraftRoom extends Room<DraftState> {
             return;
         }
         if (item) {
-            await this.state.player.getItem(item);
+            this.state.player.getItem(item);
         }
     }
 
     private async sellItem(itemId: number) {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
-        await this.state.player.removeItem(item);
+        await this.state.player.sellItem(item);
     }
 
     private async equipItem(itemId: number, slot: EquipSlot) {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
-        await this.state.player.setItemEquipped(item, slot);
+        this.state.player.setItemEquipped(item, slot);
     }
 
     private async unequipItem(itemId: number, slot: EquipSlot) {
         const item = this.state.player.equippedItems.get(slot);
         if (!item || item.itemId !== itemId) return;
-        await this.state.player.setItemUnequiped(item);
+        this.state.player.setItemUnequipped(item, slot);
     }
 
     private async refreshShop(client: Client) {

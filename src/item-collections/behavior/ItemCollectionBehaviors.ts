@@ -112,7 +112,7 @@ export const ItemCollectionBehaviors = {
 	[ItemCollectionType.ROGUE_2]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
 		attacker.attackSpeed += attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed;
-		attacker.initialStats.attackSpeed += attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed;
+		// attacker.initialStats.attackSpeed += attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed;
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.ROGUE_2,
@@ -152,7 +152,7 @@ export const ItemCollectionBehaviors = {
 	[ItemCollectionType.MERCHANT_4]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client } = context;
 		attacker.income += 1;
-    attacker.initialStats.income += 1;
+    // attacker.initialStats.income += 1;
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.MERCHANT_4,
@@ -163,9 +163,9 @@ export const ItemCollectionBehaviors = {
 		const { attacker, client, itemCollection } = context;
 		const missingHPPercentage = (attacker.maxHp - attacker.hp) / attacker.maxHp;
 		const bonusAttack = attacker.strength * missingHPPercentage;
-		const previousSavedValue = itemCollection.savedValue ?? { strength: 0 };
-    itemCollection.savedValue = {strength: bonusAttack};
-		attacker.strength += bonusAttack - previousSavedValue.strength;
+		// const previousSavedValue = itemCollection.savedValue ?? { strength: 0 };
+    // itemCollection.savedValue = {strength: bonusAttack};
+		// attacker.strength += bonusAttack - previousSavedValue.strength;
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
 			collectionId: ItemCollectionType.WARRIOR_4,
@@ -189,24 +189,24 @@ export const ItemCollectionBehaviors = {
 
 		const attackBonus = Math.round(attacker.strength * bonusCoefficent);
 		attacker.strength += attackBonus;
-		attacker.initialStats.strength += attackBonus;
+		// attacker.initialStats.strength += attackBonus;
 
 		const accuracyBonus = Math.round(attacker.accuracy * bonusCoefficent);
 		attacker.accuracy += attackBonus;
-		attacker.initialStats.accuracy += attackBonus;
+		// attacker.initialStats.accuracy += attackBonus;
 
 		const defenseBonus = Math.round(attacker.defense * bonusCoefficent);
 		attacker.defense += defenseBonus;
-		attacker.initialStats.defense += defenseBonus;
+		// attacker.initialStats.defense += defenseBonus;
 
 		const hpBonus = Math.round(attacker.hp * bonusCoefficent);
 		attacker.maxHp += hpBonus;
 		attacker.hp += hpBonus;
-		attacker.initialStats.hp += hpBonus;
+		// attacker.initialStats.hp += hpBonus;
 
 		const attackSpeedBonus = attacker.baseAttackSpeed * bonusCoefficent;
 		attacker.attackSpeed += attackSpeedBonus;
-		attacker.initialStats.attackSpeed += attackSpeedBonus;
+		// attacker.initialStats.attackSpeed += attackSpeedBonus;
 
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,

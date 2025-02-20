@@ -1,5 +1,6 @@
 import mongoose, {Schema} from 'mongoose';
 import {ItemTier} from '../types/ItemTypes';
+import {StatsSchema} from "../../common/db/Stats";
 
 export const ItemSchema = new Schema({
   itemId: Number,
@@ -7,17 +8,7 @@ export const ItemSchema = new Schema({
   description: String,
   price: Number,
   tier: { type: Number, alias: 'levelRequirement' },
-  affectedStats: {
-    strength: Number,
-    accuracy: Number,
-    hp: Number,
-    defense: Number,
-    attackSpeed: Number,
-    flatDmgReduction: Number,
-    dodgeRate: Number,
-    income: Number,
-    hpRegen: Number,
-  },
+  affectedStats: StatsSchema,
   image: String,
   tags: [String],
   itemCollections: [Number],
