@@ -1,7 +1,6 @@
 import {Client, Room} from '@colyseus/core';
 import {DraftState} from './schema/DraftState';
 import { Item} from '../items/schema/ItemSchema';
-import {Talent} from '../talents/schema/TalentSchema';
 import {copyPlayer, createNewPlayer, getPlayer, updatePlayer} from '../players/db/Player';
 import {getNumberOfItems, getQuestItems} from '../items/db/Item';
 import {Player} from '../players/schema/PlayerSchema';

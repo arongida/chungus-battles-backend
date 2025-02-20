@@ -156,7 +156,7 @@ export class Player extends Schema implements IStats {
         return (initialDamage * (100 / (100 + this.defense))) - this.flatDmgReduction;
     }
 
-    addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1, activationRate: number = 0.015) {
+    addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {
         this.poisonStack += stack;
         playerClient.send('combat_log', `${this.name} is poisoned! ${this.poisonStack} stacks!`);
 
@@ -185,7 +185,7 @@ export class Player extends Schema implements IStats {
     //todo: call this only in update loop
     async updateActiveItemCollections() {
         const equippedItemIds: number[] = [];
-        this.equippedItems.forEach((value, key) => {
+        this.equippedItems.forEach((value) => {
             equippedItemIds.push(value.itemId)
         })
         this.activeItemCollections.clear();
@@ -193,7 +193,7 @@ export class Player extends Schema implements IStats {
 
         equippedItemIds.forEach((collectionId) => {
             const sameCollectionItems: Item[] = [];
-            this.equippedItems.forEach((value, key) => {
+            this.equippedItems.forEach((value) => {
                 if (collectionId === value.itemId) {
                     sameCollectionItems.push(value);
                 }

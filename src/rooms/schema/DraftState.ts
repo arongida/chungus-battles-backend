@@ -3,7 +3,7 @@ import {Player} from '../../players/schema/PlayerSchema';
 import {Item} from '../../items/schema/ItemSchema';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {ItemCollection} from '../../item-collections/schema/ItemCollectionSchema';
-import {Client, Delayed} from 'colyseus';
+import {Client} from 'colyseus';
 
 export class DraftState extends Schema {
     @type(Player) player: Player = new Player();

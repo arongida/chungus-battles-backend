@@ -1,6 +1,5 @@
 import {TalentType} from '../types/TalentTypes';
 import {TalentBehaviorContext} from './TalentBehaviorContext';
-import {increaseStats} from '../../common/utils';
 import {Item} from '../../items/schema/ItemSchema';
 import {Talent} from '../schema/TalentSchema';
 import {OnDamageTriggerCommand} from '../../commands/triggers/OnDamageTriggerCommand';

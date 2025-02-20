@@ -111,7 +111,7 @@ export const ItemCollectionBehaviors = {
 
 	[ItemCollectionType.ROGUE_2]: (context: ItemCollectionBehaviorContext) => {
 		const { attacker, client, itemCollection } = context;
-		attacker.attackSpeed += attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed;
+		// attacker.attackSpeed += attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed;
 		// attacker.initialStats.attackSpeed += attacker.baseAttackSpeed * itemCollection.base - attacker.baseAttackSpeed;
 		client.send('trigger_collection', {
 			playerId: attacker.playerId,
@@ -204,8 +204,8 @@ export const ItemCollectionBehaviors = {
 		attacker.hp += hpBonus;
 		// attacker.initialStats.hp += hpBonus;
 
-		const attackSpeedBonus = attacker.baseAttackSpeed * bonusCoefficent;
-		attacker.attackSpeed += attackSpeedBonus;
+		// const attackSpeedBonus = attacker.baseAttackSpeed * bonusCoefficent;
+		// attacker.attackSpeed += attackSpeedBonus;
 		// attacker.initialStats.attackSpeed += attackSpeedBonus;
 
 		client.send('trigger_collection', {

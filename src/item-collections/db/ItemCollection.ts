@@ -1,11 +1,8 @@
 import mongoose, {Schema} from 'mongoose';
 import {ItemCollection} from "../schema/ItemCollectionSchema";
-import {ArraySchema, MapSchema} from "@colyseus/schema";
+import {ArraySchema} from "@colyseus/schema";
 import {StatsSchema} from "../../common/db/Stats";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
-import {Player} from "../../players/schema/PlayerSchema";
-import {Item} from "../../items/schema/ItemSchema";
-import {Talent} from "../../talents/schema/TalentSchema";
 
 export const ItemCollectionSchema = new Schema({
     itemCollectionId: Number,
@@ -31,17 +28,17 @@ export async function getAllItemCollections(): Promise<ArraySchema<ItemCollectio
     const itemCollectionsArraySchema = new ArraySchema<ItemCollection>();
 
     itemCollectionsFromDb.forEach((itemCollection) => {
-        const newItemCollection = new ItemCollection().assign(itemCollectionsFromDb as Object);
+        const newItemCollection = new ItemCollection().assign(itemCollection as Object);
         newItemCollection.affectedStats = new AffectedStats();
     });
     return itemCollectionsArraySchema;
 }
 
-export async function getItemCollectionsById(
-    itemCollectionIds: number[]
-): Promise<{}[]> {
-    return itemcollectionModel
-        .find({itemCollectionId: {$in: itemCollectionIds}})
-        .lean()
-        .select({_id: 0, __v: 0});
-}
+// export async function getItemCollectionsById(
+//     itemCollectionIds: number[]
+// ): Promise<{}[]> {
+//     return itemcollectionModel
+//         .find({itemCollectionId: {$in: itemCollectionIds}})
+//         .lean()
+//         .select({_id: 0, __v: 0});
+// }
