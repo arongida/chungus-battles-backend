@@ -171,17 +171,19 @@ export class Player extends Schema implements IStats {
     }
 
     updateActiveItemCollections() {
-        const equippedItemIds: number[] = [];
-        this.equippedItems.forEach((value) => {
-            equippedItemIds.push(value.itemId)
+        const equippedItemCollectionIds: number[] = [];
+        this.equippedItems.forEach((equippedItem) => {
+            equippedItem.itemCollections.forEach((equippedItemCollectionId) => {
+                equippedItemCollectionIds.push(equippedItemCollectionId)
+            })
         })
         this.activeItemCollections.clear();
         let collectionIdsToActivate: number[] = [];
 
-        equippedItemIds.forEach((collectionId) => {
+        equippedItemCollectionIds.forEach((collectionId) => {
             const sameCollectionItems: Item[] = [];
             this.equippedItems.forEach((value) => {
-                if (collectionId === value.itemId) {
+                if (value.itemCollections.includes(collectionId)) {
                     sameCollectionItems.push(value);
                 }
             })
@@ -226,7 +228,7 @@ export class Player extends Schema implements IStats {
         this.equippedItems.set(slot, item);
         this.inventory = this.inventory.filter((filterItem) => filterItem !== item)
 
-        // this.updateActiveItemCollections();
+        this.updateActiveItemCollections();
     }
 
     setItemUnequipped(item: Item, slot: EquipSlot) {
@@ -237,6 +239,6 @@ export class Player extends Schema implements IStats {
         this.equippedItems.delete(slot);
 
 
-        // this.updateActiveItemCollections();
+        this.updateActiveItemCollections();
     }
 }
