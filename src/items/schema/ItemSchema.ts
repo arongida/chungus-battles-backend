@@ -3,10 +3,10 @@ import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 
 
 export class Item extends Schema {
-  @type('number') itemId: number;
-  @type('string') name: string;
+  @type('number') itemId: number = 0;
+  @type('string') name: string = 'Missing';
   @type('string') description: string;
-  @type('number') price: number;
+  @type('number') price: number = 0;
   @type(AffectedStats) affectedStats: AffectedStats;
   @type('number') tier: number;
   @type('string') image: string;

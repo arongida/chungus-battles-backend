@@ -466,6 +466,7 @@ export const TalentBehaviors = {
         talent.affectedStats.attackSpeed = attacker.level * 0.5;
 
 
+
         // client.send(
         // 	'combat_log',
         // 	`${attacker.name} trained hard and gets: ${attacker.accuracy} accuracy, ${attacker.strength} strength and ${attacker.attackSpeed} attack speed!`

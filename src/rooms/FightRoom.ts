@@ -20,6 +20,7 @@ import {Item} from '../items/schema/ItemSchema';
 import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerCommand';
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
+import {getAllItemCollections} from "../item-collections/db/ItemCollection";
 
 export class FightRoom extends Room<FightState> {
     maxClients = 1;
@@ -70,11 +71,10 @@ export class FightRoom extends Room<FightState> {
         this.state.playerClient = client;
         this.state.player.sessionId = client.sessionId;
 
-        //load talents from db
+        //set up initial room state
         this.state.availableTalents = (await getAllTalents()) as Talent[];
-
-        //set quest items
         this.dispatcher.dispatch(new SetUpQuestItemsCommand(), {questItemsFromDb: (await getQuestItems()) as Item[]});
+        // this.state.availableItemCollections = await getAllItemCollections();
 
         //start battle after 5 seconds
         let countdown = 5;
@@ -270,7 +270,7 @@ export class FightRoom extends Room<FightState> {
     }
 
     //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
-    async startBattle() {
+    startBattle() {
         //start attack timers
         this.startAttackTimer(this.state.player, this.state.enemy);
         this.startAttackTimer(this.state.enemy, this.state.player);

@@ -2,7 +2,6 @@ import {Schema, type, ArraySchema} from '@colyseus/schema';
 import {Player} from '../../players/schema/PlayerSchema';
 import {Item} from '../../items/schema/ItemSchema';
 import {Talent} from '../../talents/schema/TalentSchema';
-import {ItemCollection} from '../../item-collections/schema/ItemCollectionSchema';
 import {Client} from 'colyseus';
 
 export class DraftState extends Schema {
@@ -13,7 +12,6 @@ export class DraftState extends Schema {
     @type('number') shopSize: number = 6;
     @type('number') shopRefreshCost: number = 2;
     @type('number') remainingTalentPoints: number = 0;
-    @type([ItemCollection]) availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
     @type([Item]) questItems: ArraySchema<Item> = new ArraySchema<Item>();
     playerClient: Client;
 }

@@ -17,12 +17,13 @@ export class UpdateStatsCommand extends Command<
     }
 
     updatePlayer(player: Player) {
-        const previousMaxHp = player.maxHp ?? player.hp; // Store previous max HP (fallback to current HP if undefined)
-        const previousHp = player.hp ?? player.maxHp; // Store previous HP (fallback to full HP if undefined)
+        const previousMaxHp = player.maxHp ?? player.hp;
+        const previousHp = player.hp ?? player.maxHp;
 
-        const damageTaken = previousMaxHp - previousHp; // Calculate exact damage
+        const damageTaken = previousMaxHp - previousHp;
 
         this.setStats(player, player.baseStats);
+
         player.equippedItems.forEach((value) => {
             this.increaseStats(player, value.affectedStats);
         });
@@ -42,28 +43,33 @@ export class UpdateStatsCommand extends Command<
             player.strength += affectedStats.strength;
             player.accuracy += affectedStats.accuracy;
             player.defense += affectedStats.defense;
-            player.attackSpeed += affectedStats.attackSpeed;
+            if (affectedStats.attackSpeed !== 0) {
+                player.attackSpeed += ((player.baseStats.attackSpeed * (affectedStats.attackSpeed) - player.baseStats.attackSpeed));
+            }
             player.dodgeRate += affectedStats.dodgeRate;
             player.flatDmgReduction += affectedStats.flatDmgReduction;
             player.income += affectedStats.income;
             player.hpRegen += affectedStats.hpRegen;
             player.maxHp += affectedStats.maxHp;
         } catch (e) {
-            console.error('Failed to increase stats!')
+            console.error('Failed to increase stats for player: ', player?.name)
         }
     }
 
 
     setStats(player: Player, affectedStats: AffectedStats) {
-        player.strength = affectedStats.strength;
-        player.accuracy = affectedStats.accuracy;
-        player.maxHp = affectedStats.maxHp;
-
-        player.defense = affectedStats.defense;
-        player.attackSpeed = affectedStats.attackSpeed;
-        player.dodgeRate = affectedStats.dodgeRate;
-        player.flatDmgReduction = affectedStats.flatDmgReduction;
-        player.income = affectedStats.income;
-        player.hpRegen = affectedStats.hpRegen;
+        try {
+            player.strength = affectedStats.strength;
+            player.accuracy = affectedStats.accuracy;
+            player.maxHp = affectedStats.maxHp;
+            player.defense = affectedStats.defense;
+            player.attackSpeed = affectedStats.attackSpeed;
+            player.dodgeRate = affectedStats.dodgeRate;
+            player.flatDmgReduction = affectedStats.flatDmgReduction;
+            player.income = affectedStats.income;
+            player.hpRegen = affectedStats.hpRegen;
+        } catch (e) {
+            console.error('Failed to set stats for player: ', player?.name);
+        }
     }
 }

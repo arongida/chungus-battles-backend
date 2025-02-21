@@ -95,7 +95,6 @@ export class DraftRoom extends Room<DraftState> {
         //set room state
         if (this.state.player.round === 1) await this.updateTalentSelection();
         if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
-        this.state.availableItemCollections = await getAllItemCollections();
 
         //set quest items
         this.dispatcher.dispatch(new SetUpQuestItemsCommand(), {questItemsFromDb: (await getQuestItems()) as Item[]});
@@ -183,6 +182,7 @@ export class DraftRoom extends Room<DraftState> {
     //get player, enemy, items and talents from db and map them to the room state
     private async setUpState(player: Player, client: Client) {
         this.state.player.assign(player);
+        this.state.player.availableItemCollections = await getAllItemCollections();
 
         let highestTalentTier;
         if (this.state.player.talents.length > 0) {
@@ -192,13 +192,9 @@ export class DraftRoom extends Room<DraftState> {
         }
 
         this.state.remainingTalentPoints = player.level - highestTalentTier;
-
-
         await this.updateTalentSelection();
 
         this.state.player.sessionId = client.sessionId;
-        this.state.playerClient = client;
-
         this.state.playerClient = client;
     }
 
@@ -273,7 +269,6 @@ export class DraftRoom extends Room<DraftState> {
         this.state.player.level++;
         this.state.player.maxXp += this.state.player.level * 4;
         this.state.player.xp = leftoverXp;
-        await this.state.player.updateAvailableItemCollections();
 
         this.dispatcher.dispatch(new LevelUpTriggerCommand());
     }

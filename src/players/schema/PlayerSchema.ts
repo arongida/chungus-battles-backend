@@ -32,6 +32,7 @@ export class Player extends Schema implements IStats {
     @type('number') maxHp: number = 0;
     @type('number') private _hp: number = 0;
     @type(AffectedStats) baseStats: AffectedStats = new AffectedStats();
+    @type([ItemCollection]) availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
     damage: number = 0;
     attackTimer: Delayed;
     poisonTimer: Delayed;
@@ -169,21 +170,7 @@ export class Player extends Schema implements IStats {
         }, 10000);
     }
 
-    async updateAvailableItemCollections() {
-        // const availableItemCollectionsFromDb = (await getAllItemCollections()) as ItemCollection[];
-
-        // this.availableItemCollections = new ArraySchema<ItemCollection>();
-        //
-        // availableItemCollectionsFromDb.forEach((itemCollection) => {
-        //     const newItemCollection = new ItemCollection();
-        //     newItemCollection.assign(itemCollection);
-        //     this.availableItemCollections.push(newItemCollection);
-        // });
-    }
-
-
-    //todo: call this only in update loop
-    async updateActiveItemCollections() {
+    updateActiveItemCollections() {
         const equippedItemIds: number[] = [];
         this.equippedItems.forEach((value) => {
             equippedItemIds.push(value.itemId)
@@ -204,25 +191,19 @@ export class Player extends Schema implements IStats {
             }
         });
         collectionIdsToActivate = [...new Set(collectionIdsToActivate)];
-
-        // const activeItemCollectionsFromDb = (await getItemCollectionsById(collectionIdsToActivate)) as ItemCollection[];
-
-        this.activeItemCollections = new ArraySchema<ItemCollection>();
-
-        // activeItemCollectionsFromDb.forEach((itemCollection) => {
-        //     const newItemCollection = new ItemCollection();
-        //     newItemCollection.assign(itemCollection);
-        //     this.activeItemCollections.push(newItemCollection);
-        // });
-
-        await this.updateAvailableItemCollections();
+        this.availableItemCollections.forEach((set) => {
+            if (collectionIdsToActivate.includes(set.itemCollectionId)) {
+                const itemCollection = new ItemCollection().assign(set);
+                itemCollection.affectedStats = new AffectedStats();
+                this.activeItemCollections.push(itemCollection);
+            }
+        })
     }
 
     getItem(item: Item) {
         this.gold -= item.price;
         item.sold = true;
         this.inventory.push(item);
-        console.log(item.toJSON());
     }
 
     async sellItem(item: Item) {
@@ -230,7 +211,7 @@ export class Player extends Schema implements IStats {
         this.gold += Math.floor(item.price * 0.7);
         const indexOfDeletedItem = this.inventory.indexOf(item);
         this.inventory.splice(indexOfDeletedItem, 1);
-        await this.updateActiveItemCollections();
+        this.updateActiveItemCollections();
     }
 
     setItemEquipped(item: Item, slot: EquipSlot) {
@@ -242,17 +223,24 @@ export class Player extends Schema implements IStats {
         }
 
         this.equippedItems.set(slot, item);
+        const indexOfItem = this.inventory.indexOf(item);
+        this.inventory.splice(indexOfItem, 1);
+
         item.equipped = true;
-        // await this.updateActiveItemCollections();
+        this.updateActiveItemCollections();
     }
 
     setItemUnequipped(item: Item, slot: EquipSlot) {
 
         const itemToUnequip = this.equippedItems.get(slot);
         if (itemToUnequip && itemToUnequip.itemId === item.itemId) {
-            this.equippedItems.set(slot, null);
-            itemToUnequip.equipped = false;
-            this.inventory.push(item);
+            const itemClone = new Item().assign(item);
+            itemClone.affectedStats = new AffectedStats().assign(item.affectedStats);
+            itemClone.equipped = false;
+            this.inventory.push(itemClone);
+            this.equippedItems.delete(slot);
         }
+
+        this.updateActiveItemCollections();
     }
 }

@@ -30,6 +30,7 @@ export async function getAllItemCollections(): Promise<ArraySchema<ItemCollectio
     itemCollectionsFromDb.forEach((itemCollection) => {
         const newItemCollection = new ItemCollection().assign(itemCollection as Object);
         newItemCollection.affectedStats = new AffectedStats();
+        itemCollectionsArraySchema.push(newItemCollection);
     });
     return itemCollectionsArraySchema;
 }
