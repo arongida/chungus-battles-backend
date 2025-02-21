@@ -222,25 +222,21 @@ export class Player extends Schema implements IStats {
             this.inventory.push(itemToUnequip);
         }
 
-        this.equippedItems.set(slot, item);
-        const indexOfItem = this.inventory.indexOf(item);
-        this.inventory.splice(indexOfItem, 1);
-
         item.equipped = true;
-        this.updateActiveItemCollections();
+        this.equippedItems.set(slot, item);
+        this.inventory = this.inventory.filter((filterItem) => filterItem !== item)
+
+        // this.updateActiveItemCollections();
     }
 
     setItemUnequipped(item: Item, slot: EquipSlot) {
 
-        const itemToUnequip = this.equippedItems.get(slot);
-        if (itemToUnequip && itemToUnequip.itemId === item.itemId) {
-            const itemClone = new Item().assign(item);
-            itemClone.affectedStats = new AffectedStats().assign(item.affectedStats);
-            itemClone.equipped = false;
-            this.inventory.push(itemClone);
-            this.equippedItems.delete(slot);
-        }
 
-        this.updateActiveItemCollections();
+        item.equipped = false;
+        this.inventory.push(item);
+        this.equippedItems.delete(slot);
+
+
+        // this.updateActiveItemCollections();
     }
 }
