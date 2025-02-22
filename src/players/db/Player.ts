@@ -1,31 +1,34 @@
 import mongoose, { Schema } from 'mongoose';
-import { Player } from '../../players/schema/PlayerSchema';
+import { Player } from '../schema/PlayerSchema';
+import {Item} from '../../items/schema/ItemSchema';
+import {ItemSchema} from "../../items/db/Item";
+import {TalentSchema} from "../../talents/db/Talent";
+import {Talent} from "../../talents/schema/TalentSchema";
+import {ArraySchema, MapSchema} from "@colyseus/schema";
+import {ItemCollectionSchema} from "../../item-collections/db/ItemCollection";
+import {ItemCollection} from "../../item-collections/schema/ItemCollectionSchema";
+import {StatsSchema} from "../../common/db/Stats";
+import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
+
 
 const PlayerSchema = new Schema({
 	playerId: Number,
-  originalPlayerId: Number,
+	originalPlayerId: Number,
 	name: String,
-	hp: { type: Number, alias: '_hp' },
-	strength: { type: Number, alias: '_strength' },
-	accuracy: { type: Number, alias: '_accuracy' },
 	gold: { type: Number, alias: '_gold' },
 	xp: Number,
 	level: { type: Number, alias: '_level' },
 	sessionId: String,
-	defense: { type: Number, alias: '_defense' },
-	attackSpeed: { type: Number, alias: '_attackSpeed' },
 	maxXp: Number,
 	round: Number,
 	lives: Number,
 	wins: Number,
 	avatarUrl: String,
-	talents: [Number],
-	equippedItems: [Number],
-	inventory: [Number],
-	income: Number,
-	hpRegen: Number,
-  dodgeRate: Number,
-  flatDmgReduction: Number
+	talents: [TalentSchema],
+	inventory: [ItemSchema],
+	activeItemCollections: [ItemCollectionSchema],
+	baseStats: StatsSchema,
+	equippedItems: {type: Map, of: ItemSchema},
 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
@@ -33,7 +36,47 @@ export const playerModel = mongoose.model('Player', PlayerSchema);
 export async function getPlayer(playerId: number): Promise<Player> {
 	const playerSchema = await playerModel.findOne({ playerId: playerId }).lean().select({ _id: 0, __v: 0 });
 
-	return playerSchema as unknown as Player;
+	return playerSchema ? getPlayerSchemaObject(playerSchema) : null;
+}
+
+function getPlayerSchemaObject(playerFromDb: Object): Player {
+	const newPlayerSchemaObject = new Player().assign(playerFromDb);
+	newPlayerSchemaObject.baseStats = new AffectedStats().assign(newPlayerSchemaObject.baseStats);
+
+	const newPlayerEquippedItemsMapSchema = new MapSchema();
+	newPlayerSchemaObject.equippedItems.forEach((item, key) => {
+		const itemSchemaObject = new Item().assign(item);
+		itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
+		newPlayerEquippedItemsMapSchema.set(key, itemSchemaObject);
+	})
+	newPlayerSchemaObject.equippedItems = newPlayerEquippedItemsMapSchema;
+
+	const newPlayerTalentArraySchema = new ArraySchema();
+	newPlayerSchemaObject.talents.map((talent) => {
+		const talentSchemaObject = new Talent().assign(talent);
+		talentSchemaObject.affectedStats = new AffectedStats().assign(talent.affectedStats);
+		talentSchemaObject.affectedEnemyStats = new AffectedStats().assign(talent.affectedEnemyStats);
+		newPlayerTalentArraySchema.push(talentSchemaObject);
+	})
+	newPlayerSchemaObject.talents = newPlayerTalentArraySchema;
+
+	const newPlayerItemCollectionArraySchema = new ArraySchema();
+	newPlayerSchemaObject.activeItemCollections.map((itemCollection) => {
+		const itemCollectionSchemaObject = new ItemCollection().assign(itemCollection);
+		itemCollectionSchemaObject.affectedStats = new AffectedStats();
+		newPlayerItemCollectionArraySchema.push(itemCollectionSchemaObject);
+	})
+	newPlayerSchemaObject.activeItemCollections = newPlayerItemCollectionArraySchema;
+
+	const newPlayerInventoryArraySchema = new ArraySchema();
+	newPlayerSchemaObject.inventory.map((item) => {
+		const itemSchemaObject = new Item().assign(item);
+		itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
+		newPlayerInventoryArraySchema.push(itemSchemaObject);
+	})
+	newPlayerSchemaObject.inventory = newPlayerInventoryArraySchema;
+
+	return newPlayerSchemaObject;
 }
 
 export async function createNewPlayer(
@@ -45,17 +88,12 @@ export async function createNewPlayer(
 	const startingGold = process.env.NODE_ENV === 'production' ? 6 : 1000;
 	const newPlayer = new playerModel({
 		playerId: playerId,
-    originalPlayerId: playerId,
+		originalPlayerId: playerId,
 		name: name,
-		hp: 100,
-		strength: 3,
-    accuracy: 0,
 		gold: startingGold,
 		xp: 0,
 		level: 1,
 		sessionId: sessionId,
-		defense: 10,
-		attackSpeed: 0.8,
 		maxXp: 12,
 		round: 1,
 		lives: 3,
@@ -63,70 +101,48 @@ export async function createNewPlayer(
 		avatarUrl: avatarUrl,
 		talents: [],
 		inventory: [],
-    equippedItems: [],
-		income: 0,
-		hpRegen: 0,
-    dodgeRate: 0,
-    flatDmgReduction: 0
+		activeItemCollections: [],
+		equippedItems: {},
+		baseStats: {
+			strength: 3,
+			accuracy: 1,
+			maxHp: 100,
+			defense: 10,
+			attackSpeed: 0.8,
+			flatDmgReduction: 0,
+			dodgeRate: 0,
+			income: 0,
+			hpRegen: 0,
+		}
 	});
 	await newPlayer.save().catch((err) => console.error(err));
-	return newPlayer.toObject() as unknown as Player;
+	return getPlayerSchemaObject(newPlayer.toObject());
 }
 
 export async function copyPlayer(player: Player): Promise<Player> {
 	let playerObject = player.toJSON();
-	let newPlayerObject = {
+
+	const newPlayerObject = {
 		...playerObject,
-		talents: [0],
-		inventory: [0],
-    equippedItems: [0],
-	};
-	newPlayerObject = {
-		...playerObject,
-		talents: [],
-		inventory: [],
-    equippedItems: [],
 		playerId: await getNextPlayerId(),
 	};
 
 	const newPlayer = new playerModel(newPlayerObject);
 
-	playerObject.talents.forEach((talent) => {
-		newPlayer.talents.push(talent.talentId);
-	});
-
-	playerObject.inventory.forEach((item) => {
-		newPlayer.inventory.push(item.itemId);
-	});
-
-  playerObject.equippedItems.forEach((item) => {
-		newPlayer.equippedItems.push(item.itemId);
-	});
 
 	await newPlayer.save().catch((err) => console.error(err));
-	return newPlayer.toObject() as unknown as Player;
+	return getPlayerSchemaObject(newPlayer.toObject());
 }
 
 export async function updatePlayer(player: Player): Promise<Player> {
 	let playerObject = player.toJSON();
-	let newPlayerObject = { ...playerObject, talents: [0], inventory: [0], equippedItems: [0] };
-	newPlayerObject = { ...playerObject, talents: [], inventory: [], equippedItems: [] };
+
 
 	const foundPlayerModel = await playerModel.findOne({
 		playerId: player.playerId,
 	});
 
-	foundPlayerModel.set(newPlayerObject);
-
-	playerObject.talents.forEach((talent) => {
-		foundPlayerModel.talents.push(talent.talentId);
-	});
-	playerObject.equippedItems.forEach((item) => {
-		foundPlayerModel.equippedItems.push(item.itemId);
-	});
-	playerObject.inventory.forEach((item) => {
-		foundPlayerModel.inventory.push(item.itemId);
-	});
+	foundPlayerModel.set(playerObject);
 
 	await foundPlayerModel.save().catch((err) => console.error(err));
 	return player;
@@ -138,31 +154,31 @@ export async function getNextPlayerId(): Promise<number> {
 }
 
 export async function getTopPlayers(number: number): Promise<Player[]> {
-	const topPlayers = await playerModel.aggregate([
-		{
-			$sort: { wins: -1, originalPlayerId: -1, playerId: 1 } // Sort by wins (descending) and then by _id (ascending) for stability
-		},
-		{
-			$group: {
-				_id: "$originalPlayerId", 
-				doc: { $first: "$$ROOT" } // Keep the first (highest win) document per player
-			}
-		},
-		{
-			$replaceRoot: { newRoot: "$doc" } // Replace root with selected document
-		},
-		{
-			$sort: { wins: -1, originalPlayerId: -1, playerId: 1 } // Re-sort to maintain order after grouping
-		},
-		{
-			$limit: number // Limit the number of results
-		}
-	]).exec();
+	const topPlayers = await playerModel
+		.aggregate([
+			{
+				$sort: { wins: -1, originalPlayerId: -1, playerId: 1 }, // Sort by wins (descending) and then by _id (ascending) for stability
+			},
+			{
+				$group: {
+					_id: '$originalPlayerId',
+					doc: { $first: '$$ROOT' }, // Keep the first (highest win) document per player
+				},
+			},
+			{
+				$replaceRoot: { newRoot: '$doc' }, // Replace root with selected document
+			},
+			{
+				$sort: { wins: -1, originalPlayerId: -1, playerId: 1 }, // Re-sort to maintain order after grouping
+			},
+			{
+				$limit: number, // Limit the number of results
+			},
+		])
+		.exec();
 
 	return topPlayers as unknown as Player[];
 }
-
-
 
 export async function getPlayerRank(playerId: number): Promise<number> {
 	const player = await playerModel.findOne({ playerId: playerId }).lean();
@@ -177,8 +193,10 @@ export async function getHighestWin(): Promise<number> {
 
 export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
 	if (round <= 0) {
-    const defaultPlayerClone = await playerModel.findOne({ originalPlayerId: playerId, playerId: {$ne: playerId} }).lean();
-		return defaultPlayerClone as unknown as Player;
+		const defaultPlayerClone = await playerModel
+			.findOne({ originalPlayerId: playerId, playerId: { $ne: playerId } })
+			.lean();
+		return defaultPlayerClone ? getPlayerSchemaObject(defaultPlayerClone) : null;
 	}
 
 	const randomPlayerWithSameTurn = await playerModel.aggregate([
@@ -188,8 +206,8 @@ export async function getSameRoundPlayer(round: number, playerId: number): Promi
 	const [enemyPlayerObject] = randomPlayerWithSameTurn;
 
 	if (!enemyPlayerObject) {
-    console.log('No player found for round', round);
+		console.log('No player found for round', round);
 		return await getSameRoundPlayer(round - 1, playerId);
 	}
-	return enemyPlayerObject as unknown as Player;
+	return getPlayerSchemaObject(enemyPlayerObject);
 }

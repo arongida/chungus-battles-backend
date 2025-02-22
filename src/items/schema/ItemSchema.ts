@@ -1,24 +1,12 @@
-import { Schema, type, ArraySchema } from '@colyseus/schema';
-import { IStats } from '../../common/types';
+import { Schema, type, ArraySchema, SetSchema } from '@colyseus/schema';
+import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 
-export class AffectedStats extends Schema implements IStats {
-  @type('number') strength: number = 0;
-  @type('number') accuracy: number = 0;
-  @type('number') minDmg: number = 0;
-  @type('number') maxDmg: number = 0;
-  @type('number') attackSpeed: number = 0;
-  @type('number') hp: number = 0;
-  @type('number') defense: number = 0;
-  @type('number') dodgeRate: number = 0;
-  @type('number') flatDmgReduction: number = 0;
-  @type('number') income: number = 0;
-  @type('number') hpRegen: number = 0;
-}
+
 export class Item extends Schema {
-  @type('number') itemId: number;
-  @type('string') name: string;
+  @type('number') itemId: number = 0;
+  @type('string') name: string = 'Missing';
   @type('string') description: string;
-  @type('number') price: number = 100;
+  @type('number') price: number = 0;
   @type(AffectedStats) affectedStats: AffectedStats;
   @type('number') tier: number;
   @type('string') image: string;
@@ -27,4 +15,6 @@ export class Item extends Schema {
   @type('boolean') equipped: boolean = false;
   @type(['number']) itemCollections: number[];
   @type('string') type: string;
+  @type(['string']) equipOptions: SetSchema<string>;
+  @type('boolean') showDetails: boolean;
 }

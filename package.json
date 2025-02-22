@@ -8,6 +8,7 @@
     "node": ">= 16.13.0"
   },
   "scripts": {
+    "debug": "tsx watch src/index.ts --inspect",
     "start": "tsx watch src/index.ts",
     "start-prod": "node build/index.js",
     "loadtest": "tsx loadtest/example.ts --room my_room --numClients 2",
@@ -30,7 +31,7 @@
     "mocha": "^10.2.0",
     "rimraf": "^5.0.0",
     "tsx": "^3.12.6",
-    "typescript": "^5.0.4"
+    "typescript": "^5.7.3"
   },
   "dependencies": {
     "@colyseus/command": "^0.3.1",
