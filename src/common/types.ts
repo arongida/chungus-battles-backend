@@ -7,13 +7,13 @@ export enum FightResultType {
 export interface IStats {
 	hp: number;
 	strength: number;
-  accuracy: number;
+  	accuracy: number;
 	defense: number;
 	dodgeRate: number;
 	attackSpeed: number;
 	income: number;
 	hpRegen: number;
-  flatDmgReduction: number;
+  	flatDmgReduction: number;
 	maxHp?: number;
 	baseAttackSpeed?: number;
 }
@@ -30,6 +30,6 @@ export enum TriggerType {
 	ON_DAMAGE = 'on-damage',
 	BEFORE_REFRESH = 'before-refresh',
 	AFTER_REFRESH = 'after-refresh',
-	SHOP_PASSIVE = 'shop-passive',
 	AURA = 'aura',
+	ON_DODGE = 'on-dodge'
 }

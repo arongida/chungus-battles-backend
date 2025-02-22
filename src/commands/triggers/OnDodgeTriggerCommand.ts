@@ -6,23 +6,19 @@ import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
 import {ItemCollection} from '../../item-collections/schema/ItemCollectionSchema';
 
-export class OnAttackedTriggerCommand extends Command<
+export class OnDodgeTriggerCommand extends Command<
     FightRoom,
-    { damage: number; attacker: Player; defender: Player }
+    { attacker: Player; defender: Player }
 > {
-    execute({damage, attacker, defender} = this.payload) {
+    execute({ attacker, defender} = this.payload) {
         const attackContext: BehaviorContext = {
             client: this.state.playerClient,
             attacker: attacker,
             defender: defender,
-            damage: damage,
-            clock: this.clock,
-            commandDispatcher: this.room.dispatcher,
-            trigger: TriggerType.ON_ATTACKED
+            trigger: TriggerType.ON_DODGE
         };
-        //handle on attacked talents
         const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
-            (talent) => talent.triggerTypes.includes(TriggerType.ON_ATTACKED)
+            (talent) => talent.triggerTypes.includes(TriggerType.ON_DODGE)
         );
         talentsToTriggerOnDefender.forEach((talent) => {
             talent.executeBehavior(attackContext);
@@ -30,7 +26,7 @@ export class OnAttackedTriggerCommand extends Command<
 
         const itemCollectionsToTriggerOnDefender: ItemCollection[] =
             defender.activeItemCollections.filter((itemCollection) =>
-                itemCollection.triggerTypes.includes(TriggerType.ON_ATTACKED)
+                itemCollection.triggerTypes.includes(TriggerType.ON_DODGE)
             );
         itemCollectionsToTriggerOnDefender.forEach((itemCollection) => {
             itemCollection.executeBehavior(attackContext);
