@@ -35,3 +35,7 @@ export function setStats(entity: IStats, stats: IStats) {
 	entity.hpRegen = stats.hpRegen;
   entity.flatDmgReduction = stats.flatDmgReduction;
 }
+
+export function rollTheDice(min: number, max: number) {
+	return Math.floor(Math.random() * (max - min + 1)) + min;
+}
