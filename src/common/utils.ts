@@ -15,7 +15,7 @@ export function increaseStats(entity: IStats, stats: IStats, multiplier = 1) {
   
 	if (entity.attackSpeed && stats.attackSpeed)
 		entity.attackSpeed +=
-  multiplier * (stats.attackSpeed * (entity.baseAttackSpeed || 0.8) - entity.baseAttackSpeed || 0.8);
+  multiplier * (stats.attackSpeed * (entity.baseAttackSpeed || 0.8) - (entity.baseAttackSpeed || 0.8));
   
   entity.dodgeRate += multiplier * stats.dodgeRate;
 	entity.income += multiplier * stats.income;
@@ -34,4 +34,8 @@ export function setStats(entity: IStats, stats: IStats) {
 	entity.income = stats.income;
 	entity.hpRegen = stats.hpRegen;
   entity.flatDmgReduction = stats.flatDmgReduction;
+}
+
+export function rollTheDice(min: number, max: number) {
+	return Math.floor(Math.random() * (max - min + 1)) + min;
 }
