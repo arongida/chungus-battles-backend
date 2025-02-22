@@ -3,9 +3,9 @@ import {TalentBehaviorContext} from './TalentBehaviorContext';
 import {Item} from '../../items/schema/ItemSchema';
 import {Talent} from '../schema/TalentSchema';
 import {OnDamageTriggerCommand} from '../../commands/triggers/OnDamageTriggerCommand';
-import { increaseStats } from '../../common/utils';
 import {TriggerType} from "../../common/types";
 import {EquipSlot} from "../../items/types/ItemTypes";
+import {rollTheDice} from "../../common/utils";
 
 export const TalentBehaviors = {
     [TalentType.RAGE]: (context: TalentBehaviorContext) => {
@@ -213,13 +213,23 @@ export const TalentBehaviors = {
     },
 
     [TalentType.WEAPON_WHISPERER]: (context: TalentBehaviorContext) => {
-        const {attacker, client} = context;
+        const {attacker, client, talent} = context;
 
         //get equipped weapon
         const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
         if (weapon) {
-            attacker.equippedItems.set(EquipSlot.MAIN_HAND, null);
-            //TODO: increase base stats
+            attacker.equippedItems.delete(EquipSlot.MAIN_HAND)
+
+            talent.affectedStats.strength += weapon.affectedStats.strength;
+            talent.affectedStats.accuracy += weapon.affectedStats.accuracy;
+            talent.affectedStats.maxHp += weapon.affectedStats.maxHp;
+            talent.affectedStats.income += weapon.affectedStats.income;
+            talent.affectedStats.attackSpeed += weapon.affectedStats.attackSpeed !== 1 ? (weapon.affectedStats.attackSpeed - 1) : 1;
+            talent.affectedStats.hpRegen += weapon.affectedStats.hpRegen;
+            talent.affectedStats.defense += weapon.affectedStats.defense;
+            talent.affectedStats.dodgeRate += weapon.affectedStats.dodgeRate;
+            talent.affectedStats.flatDmgReduction += weapon.affectedStats.flatDmgReduction;
+
             client.send('combat_log', `${attacker.name} consumed ${weapon.name}!`);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -528,7 +538,7 @@ export const TalentBehaviors = {
     },
 
     [TalentType.MAGIC_RING_WEAPON]: (context: TalentBehaviorContext) => {
-        const {attacker, defender, client, questItems, talent, commandDispatcher} = context;
+        const {attacker, defender, client, questItems, commandDispatcher} = context;
 
         if (
             !attacker.inventory.find((item) => item.itemId === 702) &&
@@ -545,7 +555,7 @@ export const TalentBehaviors = {
             }
         }
 
-        if ( defender && attacker.equippedItems.get(EquipSlot.MAIN_HAND)?.itemId === 702) {
+        if (defender && attacker.equippedItems.get(EquipSlot.MAIN_HAND)?.itemId === 702) {
             const ringWeapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
             const damage = rollTheDice(attacker.accuracy, attacker.strength);
             const getDamageAfterDefense = defender.getDamageAfterDefense(damage);
@@ -557,85 +567,70 @@ export const TalentBehaviors = {
                 damage: getDamageAfterDefense,
                 attacker: attacker,
             });
-			commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-				defender: defender,
-				damage: getDamageAfterDefense,
-				attacker: attacker,
-			});
+            commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+                defender: defender,
+                damage: getDamageAfterDefense,
+                attacker: attacker,
+            });
 
             defender.takeDamage(getDamageAfterDefense, client);
             client.send('combat_log', `${attacker.name} deals ${getDamageAfterDefense} damage with the magic ring!`);
             client.send('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.MAGIC_RING_WEAPON});
         }
     },
-			defender.takeDamage(getDamageAfterDefense, client);
-			client.send('combat_log', `${attacker.name} deals ${getDamageAfterDefense} damage with the magic ring!`);
-			client.send('trigger_talent', { playerId: attacker.playerId, talentId: TalentType.MAGIC_RING_WEAPON });
-		}
-	},
-	[TalentType.JOKER]: (context: TalentBehaviorContext) => {
-		const { attacker, client } = context;
 
-		let stat = "";
-		let amount = 0;
 
-		const randomBonus = rollTheDice(1, 9);
-		if (randomBonus === 1) {
-			amount = 5 + attacker.level;
-			attacker.initialStats.hp += amount;
-			attacker.hp += amount;
-			stat = "hp";
-		} else if (randomBonus === 2) {
-			amount = attacker.level;
-			attacker.initialStats.accuracy += amount;
-			attacker.accuracy += amount;
-			stat = "accuracy";
-		} else if (randomBonus === 3) {
-			amount = 1 + attacker.level;
-			attacker.initialStats.strength += amount;
-			attacker.strength += amount;
-			stat = "strength";
-		} else if (randomBonus === 4) {
-			amount = 9 + attacker.level;
-			attacker.initialStats.defense += amount;
-			attacker.defense += amount;
-			stat = "defense";
-		} else if (randomBonus === 5) {
-			amount = attacker.level * 0.1;
-			attacker.initialStats.flatDmgReduction += amount;
-			attacker.flatDmgReduction += amount;
-			stat = "flat damage reduction";
-		} else if (randomBonus === 6) {
-			amount = 10 + attacker.level;
-			attacker.initialStats.dodgeRate += amount;
-			attacker.dodgeRate += amount;
-			stat = "dodge rate";
-		} else if (randomBonus === 7) {
-			amount = attacker.level * 0.05;
-			attacker.initialStats.attackSpeed += amount;
-			attacker.attackSpeed += amount;
-			stat = "attack speed";
-		} else if (randomBonus === 8) {
-			amount = 0 + attacker.level;
-			attacker.initialStats.income += amount;
-			attacker.income += amount;
-			stat = "income";
-		} else if (randomBonus === 9) {
-			amount = attacker.level * 0.1;
-			attacker.initialStats.hpRegen += amount;
-			attacker.hpRegen += amount;
-			stat = "hp regeneration";
-		}
+    [TalentType.JOKER]: (context: TalentBehaviorContext) => {
+        const {attacker, client, talent} = context;
 
-		client.send('combat_log', `${attacker.name} gets ${amount} bonus ${stat} from Joker talent.`);
-		client.send('trigger_talent', {
-			playerId: attacker.playerId,
-			talentId: TalentType.JOKER,
-		});
-	},
+        let stat = "";
+        let amount = 0;
+
+        const randomBonus = rollTheDice(1, 9);
+        if (randomBonus === 1) {
+            amount = 5 + attacker.level;
+            talent.affectedStats.maxHp += amount;
+            stat = "hp";
+        } else if (randomBonus === 2) {
+            amount = attacker.level;
+            talent.affectedStats.accuracy += amount;
+            stat = "accuracy";
+        } else if (randomBonus === 3) {
+            amount = 1 + attacker.level;
+            talent.affectedStats.strength += amount;
+            stat = "strength";
+        } else if (randomBonus === 4) {
+            amount = 9 + attacker.level;
+            talent.affectedStats.defense += amount;
+            stat = "defense";
+        } else if (randomBonus === 5) {
+            amount = attacker.level * 0.1;
+            talent.affectedStats.flatDmgReduction += amount;
+            stat = "flat damage reduction";
+        } else if (randomBonus === 6) {
+            amount = 10 + attacker.level;
+            talent.affectedStats.dodgeRate += amount;
+            stat = "dodge rate";
+        } else if (randomBonus === 7) {
+            amount = attacker.level * 0.05;
+            talent.affectedStats.attackSpeed += amount;
+            stat = "attack speed";
+        } else if (randomBonus === 8) {
+            amount = attacker.level;
+            talent.affectedStats.income += amount;
+            stat = "income";
+        } else if (randomBonus === 9) {
+            amount = attacker.level * 0.1;
+            talent.affectedStats.hpRegen += amount;
+            stat = "hp regeneration";
+        }
+
+        client.send('combat_log', `${attacker.name} gets ${amount} bonus ${stat} from Joker talent.`);
+        client.send('trigger_talent', {
+            playerId: attacker.playerId,
+            talentId: TalentType.JOKER,
+        });
+    },
 };
 
-function rollTheDice(min: number, max: number) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
 
