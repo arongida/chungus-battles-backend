@@ -133,7 +133,9 @@ export async function updatePlayer(player: Player): Promise<Player> {
 }
 
 export async function getNextPlayerId(): Promise<number> {
-	const lastPlayer = await playerModel.findOne().sort({ playerId: -1 }).limit(1).lean();
+	const lastPlayer = await playerModel.findOne().sort({ playerId: -1 }).limit(1).lean().catch((e) => {
+		console.error(e);
+	});
 	return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
 
