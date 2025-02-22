@@ -14,7 +14,6 @@ export const ItemSchema = new Schema({
   itemCollections: [Number],
   type: String,
   equipOptions: [String],
-  showDetails: Boolean
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);

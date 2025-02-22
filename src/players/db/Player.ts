@@ -54,7 +54,8 @@ function getPlayerSchemaObject(playerFromDb: Object): Player {
 	const newPlayerTalentArraySchema = new ArraySchema();
 	newPlayerSchemaObject.talents.map((talent) => {
 		const talentSchemaObject = new Talent().assign(talent);
-		talentSchemaObject.affectedStats = new AffectedStats();
+		talentSchemaObject.affectedStats = new AffectedStats().assign(talent.affectedStats);
+		talentSchemaObject.affectedEnemyStats = new AffectedStats().assign(talent.affectedEnemyStats);
 		newPlayerTalentArraySchema.push(talentSchemaObject);
 	})
 	newPlayerSchemaObject.talents = newPlayerTalentArraySchema;

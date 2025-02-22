@@ -10,17 +10,19 @@ export class UpdateStatsCommand extends Command<
 > {
     async execute() {
         if (!(this.state instanceof DraftState) && this.state.enemy) {
-            this.updatePlayer(this.state.enemy);
+            this.updatePlayer(this.state.enemy, this.state.player);
+            this.updatePlayer(this.state.player, this.state.enemy);
+        } else {
+            this.updatePlayer(this.state.player);
         }
 
-        this.updatePlayer(this.state.player);
     }
 
-    updatePlayer(player: Player) {
+    updatePlayer(player: Player, enemy?: Player) {
         const previousMaxHp = player.maxHp ?? player.hp;
         const previousHp = player.hp ?? player.maxHp;
-
         const damageTaken = previousMaxHp - previousHp;
+
 
         this.setStats(player, player.baseStats);
 
@@ -30,6 +32,11 @@ export class UpdateStatsCommand extends Command<
         player.talents.forEach((talent) => {
             this.increaseStats(player, talent.affectedStats);
         });
+        if (enemy) {
+            enemy.talents.forEach((talent) => {
+                this.increaseStats(player, talent.affectedEnemyStats);
+            })
+        }
         player.activeItemCollections.forEach((collection) => {
             this.increaseStats(player, collection.affectedStats);
         });

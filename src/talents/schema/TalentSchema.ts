@@ -13,7 +13,9 @@ export class Talent extends Schema {
     @type('string') image: string;
     @type(['string']) tags: ArraySchema<string>;
     @type('string') triggerType: string;
+    @type(['string']) triggerTypes: ArraySchema<string>;
     @type(AffectedStats) affectedStats: AffectedStats;
+    @type(AffectedStats) affectedEnemyStats: AffectedStats;
 
     executeBehavior(context: BehaviorContext) {
         const behaviorKey = this.talentId as keyof typeof TalentBehaviors;

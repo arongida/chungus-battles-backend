@@ -14,7 +14,8 @@ export const ItemCollectionSchema = new Schema({
     base: Number,
     scaling: Number,
     tier: Number,
-    triggerType: String,
+    triggerTypes: [String],
+    activationRate: Number,
     affectedStats: StatsSchema
 });
 

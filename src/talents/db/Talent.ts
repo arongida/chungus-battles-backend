@@ -11,8 +11,9 @@ export const TalentSchema = new Schema({
   activationRate: Number,
   image: String,
   tags: [String],
-  triggerType: String,
-  affectedStats: StatsSchema
+  triggerTypes: [String],
+  affectedStats: StatsSchema,
+  affectedEnemyStats: StatsSchema
 });
 
 export const talentModel = mongoose.model('Talent', TalentSchema);
@@ -34,6 +35,7 @@ export async function getRandomTalents(
 function getTalentSchemaObject(talentObjectFromDb: Object): Talent {
   const newTalent = new Talent().assign(talentObjectFromDb);
   newTalent.affectedStats = new AffectedStats();
+  newTalent.affectedEnemyStats = new AffectedStats();
   return newTalent;
 }
 

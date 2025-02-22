@@ -20,7 +20,7 @@ import {Item} from '../items/schema/ItemSchema';
 import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerCommand';
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
-import {getAllItemCollections} from "../item-collections/db/ItemCollection";
+import {OnDodgeTriggerCommand} from "../commands/triggers/OnDodgeTriggerCommand";
 
 export class FightRoom extends Room<FightState> {
     maxClients = 1;
@@ -242,6 +242,10 @@ export class FightRoom extends Room<FightState> {
 
             if (Math.random() < dodgeChance) {
                 this.state.playerClient.send('combat_log', `${defender.name} dodged the attack!`);
+                this.dispatcher.dispatch(new OnDodgeTriggerCommand(), {
+                    attacker: attacker,
+                    defender: defender,
+                });
                 return;
             }
         }

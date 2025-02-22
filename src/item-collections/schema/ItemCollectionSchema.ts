@@ -11,12 +11,12 @@ export class ItemCollection extends Schema {
     @type('string') effect: string;
     @type('string') image: string;
     @type(['string']) tags: ArraySchema<string>;
-    @type('string') triggerType: string;
+    @type(['string']) triggerTypes: ArraySchema<string>;
     @type('number') tier: number;
     @type(AffectedStats) affectedStats: AffectedStats;
-    base: number;
-    scaling: number;
-    activationRate: number;
+    @type('number') base: number;
+    @type('number') scaling: number;
+    @type('number') activationRate: number;
 
     executeBehavior(context: BehaviorContext) {
         const behaviorKey = this

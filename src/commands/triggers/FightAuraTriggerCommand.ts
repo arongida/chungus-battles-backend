@@ -14,10 +14,10 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
 
     startAuraEffectsLoop(player: Player, enemy?: Player) {
         const auraItemCollections: ItemCollection[] = player.activeItemCollections.filter(
-            (itemCollection) => itemCollection.triggerType === TriggerType.AURA
+            (itemCollection) => itemCollection.triggerTypes.includes(TriggerType.AURA)
         );
 
-        const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerType === TriggerType.AURA);
+        const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes.includes(TriggerType.AURA));
 
         let behaviorContext: BehaviorContext = {
             client: this.state.playerClient,
@@ -25,6 +25,7 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
             defender: enemy,
             questItems: this.state.questItems,
             commandDispatcher: this.room.dispatcher,
+            trigger: TriggerType.AURA
         };
 
         auraItemCollections.forEach((itemCollection) => {
