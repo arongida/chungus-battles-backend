@@ -14,6 +14,7 @@ export const ItemSchema = new Schema({
   itemCollections: [Number],
   type: String,
   equipOptions: [String],
+  rarity: Number
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);

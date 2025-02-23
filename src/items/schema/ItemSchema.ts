@@ -9,6 +9,7 @@ export class Item extends Schema {
   @type('number') price: number = 0;
   @type(AffectedStats) affectedStats: AffectedStats;
   @type('number') tier: number;
+  @type('number') rarity: number = 1;
   @type('string') image: string;
   @type(['string']) tags: ArraySchema<string>;
   @type('boolean') sold: boolean = false;
