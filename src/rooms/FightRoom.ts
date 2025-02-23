@@ -21,6 +21,7 @@ import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerCommand';
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 import {OnDodgeTriggerCommand} from "../commands/triggers/OnDodgeTriggerCommand";
+import {getAllItemCollections} from "../item-collections/db/ItemCollection";
 
 export class FightRoom extends Room<FightState> {
     maxClients = 1;
@@ -295,6 +296,7 @@ export class FightRoom extends Room<FightState> {
 
         if (!isEnemy) {
             this.state.player.assign(player);
+            this.state.player.availableItemCollections = await getAllItemCollections();
         } else {
             this.state.enemy.assign(player);
         }
