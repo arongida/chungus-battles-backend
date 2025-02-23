@@ -466,7 +466,7 @@ export const TalentBehaviors = {
 
         talent.affectedStats.accuracy = attacker.level;
         talent.affectedStats.strength = attacker.level;
-        talent.affectedStats.attackSpeed = 1 + attacker.level * 0.5;
+        talent.affectedStats.attackSpeed = 1 + attacker.level * 0.4;
 
 
         // client.send(
@@ -552,7 +552,7 @@ export const TalentBehaviors = {
             const damage = rollTheDice(attacker.accuracy, attacker.strength);
             const getDamageAfterDefense = defender.getDamageAfterDefense(damage);
 
-            ringWeapon.affectedStats.strength += 0.1;
+            ringWeapon.affectedStats.strength += 0.01;
 
             commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
                 defender: defender,
