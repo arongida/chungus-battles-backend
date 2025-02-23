@@ -16,6 +16,7 @@ import {EquipSlot} from "../items/types/ItemTypes";
 import {getAllItemCollections} from "../item-collections/db/ItemCollection";
 import {AffectedStats} from "../common/schema/AffectedStatsSchema";
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
+import {UpdateItemRarityCommand} from "../commands/UpdateItemRarityCommand";
 
 export class DraftRoom extends Room<DraftState> {
     maxClients = 1;
@@ -63,6 +64,7 @@ export class DraftRoom extends Room<DraftState> {
     update() {
         if (this.state.player) {
             this.dispatcher.dispatch(new UpdateStatsCommand());
+            this.dispatcher.dispatch(new UpdateItemRarityCommand());
         }
     }
 

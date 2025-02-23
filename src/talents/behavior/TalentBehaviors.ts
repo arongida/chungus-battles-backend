@@ -220,15 +220,7 @@ export const TalentBehaviors = {
         if (weapon) {
             attacker.equippedItems.delete(EquipSlot.MAIN_HAND)
 
-            talent.affectedStats.strength += weapon.affectedStats.strength;
-            talent.affectedStats.accuracy += weapon.affectedStats.accuracy;
-            talent.affectedStats.maxHp += weapon.affectedStats.maxHp;
-            talent.affectedStats.income += weapon.affectedStats.income;
-            talent.affectedStats.attackSpeed += weapon.affectedStats.attackSpeed !== 1 ? (weapon.affectedStats.attackSpeed - 1) : 1;
-            talent.affectedStats.hpRegen += weapon.affectedStats.hpRegen;
-            talent.affectedStats.defense += weapon.affectedStats.defense;
-            talent.affectedStats.dodgeRate += weapon.affectedStats.dodgeRate;
-            talent.affectedStats.flatDmgReduction += weapon.affectedStats.flatDmgReduction;
+            talent.affectedStats.mergeInto(weapon.affectedStats);
 
             client.send('combat_log', `${attacker.name} consumed ${weapon.name}!`);
             client.send('trigger_talent', {
