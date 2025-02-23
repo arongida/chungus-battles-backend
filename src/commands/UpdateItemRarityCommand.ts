@@ -2,7 +2,6 @@ import {Command} from '@colyseus/command';
 import {DraftRoom} from '../rooms/DraftRoom';
 import {Player} from "../players/schema/PlayerSchema";
 import {ItemRarity} from "../items/types/ItemTypes";
-import {Item} from "../items/schema/ItemSchema";
 
 export class UpdateItemRarityCommand extends Command<
     DraftRoom
