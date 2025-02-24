@@ -1,6 +1,5 @@
 import { Schema, type, ArraySchema, SetSchema } from '@colyseus/schema';
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
-import {ItemSet} from "../types/ItemTypes";
 
 
 export class Item extends Schema {
