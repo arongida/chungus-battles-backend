@@ -5,7 +5,6 @@ import {IStats} from '../../common/types';
 import {TalentType} from '../../talents/types/TalentTypes';
 import {Client, Delayed} from 'colyseus';
 import ClockTimer from '@gamestdio/timer';
-import {ItemCollection} from '../../item-collections/schema/ItemCollectionSchema';
 import {EquipSlot} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 
@@ -26,13 +25,11 @@ export class Player extends Schema implements IStats {
     @type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
     @type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
     @type({map: Item}) equippedItems = new MapSchema<Item>();
-    @type([ItemCollection]) activeItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
     @type('number') dodgeRate: number = 0;
     @type('number') refreshShopCost: number = 2;
     @type('number') maxHp: number = 0;
     @type('number') private _hp: number = 0;
     @type(AffectedStats) baseStats: AffectedStats = new AffectedStats();
-    @type([ItemCollection]) availableItemCollections: ArraySchema<ItemCollection> = new ArraySchema<ItemCollection>();
     damage: number = 0;
     attackTimer: Delayed;
     poisonTimer: Delayed;
@@ -170,38 +167,6 @@ export class Player extends Schema implements IStats {
         }, 10000);
     }
 
-    updateActiveItemCollections() {
-        const equippedItemCollectionIds: number[] = [];
-        this.equippedItems.forEach((equippedItem) => {
-            equippedItem.itemCollections.forEach((equippedItemCollectionId) => {
-                equippedItemCollectionIds.push(equippedItemCollectionId)
-            })
-        })
-        this.activeItemCollections.clear();
-        let collectionIdsToActivate: number[] = [];
-
-        equippedItemCollectionIds.forEach((collectionId) => {
-            const sameCollectionItems: Item[] = [];
-            this.equippedItems.forEach((value) => {
-                if (value.itemCollections.includes(collectionId)) {
-                    sameCollectionItems.push(value);
-                }
-            })
-
-            if (sameCollectionItems.length === 3) {
-                collectionIdsToActivate.push(collectionId);
-            }
-        });
-        collectionIdsToActivate = [...new Set(collectionIdsToActivate)];
-        this.availableItemCollections.forEach((set) => {
-            if (collectionIdsToActivate.includes(set.itemCollectionId)) {
-                const itemCollection = new ItemCollection().assign(set);
-                itemCollection.affectedStats = new AffectedStats();
-                this.activeItemCollections.push(itemCollection);
-            }
-        })
-    }
-
     getItem(item: Item) {
         this.gold -= item.price;
         item.sold = true;
@@ -213,7 +178,6 @@ export class Player extends Schema implements IStats {
         this.gold += Math.floor(item.price * 0.7);
         const indexOfDeletedItem = this.inventory.indexOf(item);
         this.inventory.splice(indexOfDeletedItem, 1);
-        this.updateActiveItemCollections();
     }
 
     setItemEquipped(item: Item, slot: EquipSlot) {
@@ -228,17 +192,12 @@ export class Player extends Schema implements IStats {
         this.equippedItems.set(slot, item);
         this.inventory = this.inventory.filter((filterItem) => filterItem !== item)
 
-        this.updateActiveItemCollections();
     }
 
     setItemUnequipped(item: Item, slot: EquipSlot) {
-
-
         item.equipped = false;
+        item.setActive = false;
         this.inventory.push(item);
         this.equippedItems.delete(slot);
-
-
-        this.updateActiveItemCollections();
     }
 }

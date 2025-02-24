@@ -5,8 +5,6 @@ import {ItemSchema} from "../../items/db/Item";
 import {TalentSchema} from "../../talents/db/Talent";
 import {Talent} from "../../talents/schema/TalentSchema";
 import {ArraySchema, MapSchema} from "@colyseus/schema";
-import {ItemCollectionSchema} from "../../item-collections/db/ItemCollection";
-import {ItemCollection} from "../../item-collections/schema/ItemCollectionSchema";
 import {StatsSchema} from "../../common/db/Stats";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 
@@ -26,7 +24,6 @@ const PlayerSchema = new Schema({
 	avatarUrl: String,
 	talents: [TalentSchema],
 	inventory: [ItemSchema],
-	activeItemCollections: [ItemCollectionSchema],
 	baseStats: StatsSchema,
 	equippedItems: {type: Map, of: ItemSchema},
 });
@@ -47,6 +44,7 @@ function getPlayerSchemaObject(playerFromDb: Object): Player {
 	newPlayerSchemaObject.equippedItems.forEach((item, key) => {
 		const itemSchemaObject = new Item().assign(item);
 		itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
+		itemSchemaObject.setBonusStats = new AffectedStats().assign(item.setBonusStats);
 		newPlayerEquippedItemsMapSchema.set(key, itemSchemaObject);
 	})
 	newPlayerSchemaObject.equippedItems = newPlayerEquippedItemsMapSchema;
@@ -60,18 +58,12 @@ function getPlayerSchemaObject(playerFromDb: Object): Player {
 	})
 	newPlayerSchemaObject.talents = newPlayerTalentArraySchema;
 
-	const newPlayerItemCollectionArraySchema = new ArraySchema();
-	newPlayerSchemaObject.activeItemCollections.map((itemCollection) => {
-		const itemCollectionSchemaObject = new ItemCollection().assign(itemCollection);
-		itemCollectionSchemaObject.affectedStats = new AffectedStats();
-		newPlayerItemCollectionArraySchema.push(itemCollectionSchemaObject);
-	})
-	newPlayerSchemaObject.activeItemCollections = newPlayerItemCollectionArraySchema;
 
 	const newPlayerInventoryArraySchema = new ArraySchema();
 	newPlayerSchemaObject.inventory.map((item) => {
 		const itemSchemaObject = new Item().assign(item);
 		itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
+		itemSchemaObject.setBonusStats = new AffectedStats().assign(item.setBonusStats);
 		newPlayerInventoryArraySchema.push(itemSchemaObject);
 	})
 	newPlayerSchemaObject.inventory = newPlayerInventoryArraySchema;

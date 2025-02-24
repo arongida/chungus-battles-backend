@@ -28,6 +28,7 @@ export class UpdateStatsCommand extends Command<
 
         player.equippedItems.forEach((value) => {
             this.increaseStats(player, value.affectedStats);
+            if (value.setActive) this.increaseStats(player, value.setBonusStats);
         });
         player.talents.forEach((talent) => {
             this.increaseStats(player, talent.affectedStats);
@@ -37,9 +38,6 @@ export class UpdateStatsCommand extends Command<
                 this.increaseStats(player, talent.affectedEnemyStats);
             })
         }
-        player.activeItemCollections.forEach((collection) => {
-            this.increaseStats(player, collection.affectedStats);
-        });
 
         player.hp = player.maxHp - damageTaken;
     }

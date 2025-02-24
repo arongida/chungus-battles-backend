@@ -10,6 +10,8 @@ export class Talent extends Schema {
     @type('string') description: string;
     @type('number') tier: number;
     @type('number') activationRate: number;
+    @type('number') base: number = 0;
+    @type('number') scaling: number = 0;
     @type('string') image: string;
     @type(['string']) tags: ArraySchema<string>;
     @type('string') triggerType: string;

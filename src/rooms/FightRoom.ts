@@ -4,8 +4,6 @@ import {getHighestWin, getPlayer, getSameRoundPlayer, updatePlayer} from '../pla
 import {Player} from '../players/schema/PlayerSchema';
 import {delay} from '../common/utils';
 import {FightResultType} from '../common/types';
-import {getAllTalents} from '../talents/db/Talent';
-import {Talent} from '../talents/schema/TalentSchema';
 import {Dispatcher} from '@colyseus/command';
 import {ActiveTriggerCommand} from '../commands/triggers/ActiveTriggerCommand';
 import {FightStartTriggerCommand} from '../commands/triggers/FightStartTriggerCommand';
@@ -14,14 +12,12 @@ import {OnDamageTriggerCommand} from '../commands/triggers/OnDamageTriggerComman
 import {OnAttackedTriggerCommand} from '../commands/triggers/OnAttackedTriggerCommand';
 import {OnAttackTriggerCommand} from '../commands/triggers/OnAttackTriggerCommand';
 import {TalentType} from '../talents/types/TalentTypes';
-import {ItemCollectionType} from '../item-collections/types/ItemCollectionTypes';
 import {getQuestItems} from '../items/db/Item';
 import {Item} from '../items/schema/ItemSchema';
 import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerCommand';
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 import {OnDodgeTriggerCommand} from "../commands/triggers/OnDodgeTriggerCommand";
-import {getAllItemCollections} from "../item-collections/db/ItemCollection";
 
 export class FightRoom extends Room<FightState> {
     maxClients = 1;
@@ -73,7 +69,6 @@ export class FightRoom extends Room<FightState> {
         this.state.player.sessionId = client.sessionId;
 
         //set up initial room state
-        this.state.availableTalents = (await getAllTalents()) as Talent[];
         this.dispatcher.dispatch(new SetUpQuestItemsCommand(), {questItemsFromDb: (await getQuestItems()) as Item[]});
         // this.state.availableItemCollections = await getAllItemCollections();
 
@@ -209,14 +204,8 @@ export class FightRoom extends Room<FightState> {
     checkPoison(attacker: Player, defender: Player) {
         if (defender.poisonStack <= 0) return;
         const poisonTalent = attacker.talents.find((talent) => talent.talentId === TalentType.POISON);
-        const poisonItemCollection = attacker.activeItemCollections.find(
-            (itemCollection) => itemCollection.itemCollectionId === ItemCollectionType.ROGUE_3
-        );
-        const activationRate = poisonTalent
-            ? poisonTalent.activationRate
-            : poisonItemCollection
-                ? poisonItemCollection.base
-                : 0.015;
+
+        const activationRate = poisonTalent ? poisonTalent.activationRate : 0.015;
         if (!defender.poisonTimer) {
             defender.poisonTimer = this.clock.setInterval(() => {
                 const poisonDamage = defender.poisonStack * (activationRate * defender.maxHp + activationRate * 100) * 0.1;
@@ -296,10 +285,8 @@ export class FightRoom extends Room<FightState> {
 
         if (!isEnemy) {
             this.state.player.assign(player);
-            this.state.player.availableItemCollections = await getAllItemCollections();
         } else {
             this.state.enemy.assign(player);
-            this.state.enemy.availableItemCollections = this.state.player.availableItemCollections;
         }
     }
 

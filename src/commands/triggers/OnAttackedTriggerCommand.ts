@@ -4,7 +4,6 @@ import {TalentBehaviorContext as BehaviorContext} from '../../talents/behavior/T
 import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
-import {ItemCollection} from '../../item-collections/schema/ItemCollectionSchema';
 
 export class OnAttackedTriggerCommand extends Command<
     FightRoom,
@@ -28,12 +27,5 @@ export class OnAttackedTriggerCommand extends Command<
             talent.executeBehavior(attackContext);
         });
 
-        const itemCollectionsToTriggerOnDefender: ItemCollection[] =
-            defender.activeItemCollections.filter((itemCollection) =>
-                itemCollection.triggerTypes.includes(TriggerType.ON_ATTACKED)
-            );
-        itemCollectionsToTriggerOnDefender.forEach((itemCollection) => {
-            itemCollection.executeBehavior(attackContext);
-        });
     }
 }

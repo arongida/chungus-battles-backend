@@ -1,6 +1,6 @@
 import {Client, Room} from '@colyseus/core';
 import {DraftState} from './schema/DraftState';
-import { Item} from '../items/schema/ItemSchema';
+import {Item} from '../items/schema/ItemSchema';
 import {copyPlayer, createNewPlayer, getPlayer, updatePlayer} from '../players/db/Player';
 import {getNumberOfItems, getQuestItems} from '../items/db/Item';
 import {Player} from '../players/schema/PlayerSchema';
@@ -13,10 +13,9 @@ import {AfterShopRefreshTriggerCommand} from '../commands/triggers/AfterShopRefr
 import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {DraftAuraTriggerCommand} from '../commands/triggers/DraftAuraTriggerCommand';
 import {EquipSlot} from "../items/types/ItemTypes";
-import {getAllItemCollections} from "../item-collections/db/ItemCollection";
-import {AffectedStats} from "../common/schema/AffectedStatsSchema";
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 import {UpdateItemRarityCommand} from "../commands/UpdateItemRarityCommand";
+import {UpdateActiveSets} from "../commands/UpdateActiveSets";
 
 export class DraftRoom extends Room<DraftState> {
     maxClients = 1;
@@ -57,7 +56,7 @@ export class DraftRoom extends Room<DraftState> {
         //start clock for timings
         this.clock.start();
 
-        this.setSimulationInterval(() => this.update(), 100);
+        this.setSimulationInterval(() => this.update(), 500);
         this.autoDispose = false;
     }
 
@@ -65,6 +64,7 @@ export class DraftRoom extends Room<DraftState> {
         if (this.state.player) {
             this.dispatcher.dispatch(new UpdateStatsCommand());
             this.dispatcher.dispatch(new UpdateItemRarityCommand());
+            this.dispatcher.dispatch(new UpdateActiveSets());
         }
     }
 
@@ -138,16 +138,11 @@ export class DraftRoom extends Room<DraftState> {
     }
 
     private async updateShop(newShopSize: number) {
-        const itemQueryResults = await getNumberOfItems(newShopSize, this.state.player.level);
-        itemQueryResults.forEach((item) => {
-            let newItemObject = item as Item;
-            const newAffectedStats = new AffectedStats();
-            newAffectedStats.assign(newItemObject.affectedStats);
-            newItemObject.affectedStats = newAffectedStats;
-            const newItem = new Item();
-            newItem.assign(newItemObject);
-            if (this.state.shop.length < 6) this.state.shop.push(newItem);
-        });
+        const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level);
+
+        if (this.state.shop.length < 6) {
+            this.state.shop = shopFromDb;
+        }
 
         this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
     }
@@ -184,7 +179,6 @@ export class DraftRoom extends Room<DraftState> {
     //get player, enemy, items and talents from db and map them to the room state
     private async setUpState(player: Player, client: Client) {
         this.state.player.assign(player);
-        this.state.player.availableItemCollections = await getAllItemCollections();
 
         let highestTalentTier;
         if (this.state.player.talents.length > 0) {
