@@ -17,7 +17,6 @@ export class FightStartTriggerCommand extends Command<FightRoom> {
             attacker: player,
             defender: enemy,
             clock: this.clock,
-            availableTalents: this.state.availableTalents,
             trigger: TriggerType.FIGHT_START
         };
 
