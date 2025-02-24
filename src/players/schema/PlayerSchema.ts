@@ -58,7 +58,7 @@ export class Player extends Schema implements IStats {
     }
 
     set accuracy(value: number) {
-        this._accuracy = value < 1 ? 1 : value > this._strength ? this._strength : value;
+        this._accuracy = value < 1 ? 1 : value >= this._strength ? this._strength : value;
     }
 
     @type('number') private _strength: number = 0;
@@ -68,7 +68,7 @@ export class Player extends Schema implements IStats {
     }
 
     set strength(value: number) {
-        this._strength = value < 1 ? 1 : value < this._accuracy ? this._accuracy : value;
+        this._strength = value < 1 ? 1 : value <= this._accuracy ? this._accuracy : value;
     }
 
     @type('number') private _gold: number;

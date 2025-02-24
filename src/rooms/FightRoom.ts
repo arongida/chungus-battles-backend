@@ -299,6 +299,7 @@ export class FightRoom extends Room<FightState> {
             this.state.player.availableItemCollections = await getAllItemCollections();
         } else {
             this.state.enemy.assign(player);
+            this.state.enemy.availableItemCollections = this.state.player.availableItemCollections;
         }
     }
 
@@ -330,7 +331,7 @@ export class FightRoom extends Room<FightState> {
         //trigger fight-end effects
         this.dispatcher.dispatch(new FightEndTriggerCommand());
 
-        const goldToGet = this.state.player.rewardRound * 2 + this.state.player.income;
+        const goldToGet = this.state.player.rewardRound + 3 + this.state.player.income;
 
         this.state.player.gold += goldToGet;
         this.state.player.xp += this.state.player.rewardRound * 2;

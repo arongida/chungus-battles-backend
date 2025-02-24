@@ -24,7 +24,7 @@ export const TalentBehaviors = {
 
     [TalentType.STAB]: (context: TalentBehaviorContext) => {
         const {talent, attacker, defender, client, commandDispatcher} = context;
-        const stabDamage = talent.activationRate * 100 + (defender.maxHp - defender.hp) * talent.activationRate;
+        const stabDamage = 1 + (defender.maxHp - defender.hp) * talent.activationRate;
         const calculatedStabDamage = defender.getDamageAfterDefense(stabDamage);
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
             defender: defender,
@@ -41,7 +41,7 @@ export const TalentBehaviors = {
 
     [TalentType.BEAR]: (context: TalentBehaviorContext) => {
         const {talent, attacker, defender, client, commandDispatcher} = context;
-        const bearDamage = talent.activationRate * 100 + attacker.maxHp * talent.activationRate;
+        const bearDamage = attacker.maxHp * talent.activationRate;
         const calculatedBearDamage = defender.getDamageAfterDefense(bearDamage);
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
             defender: defender,
@@ -81,7 +81,7 @@ export const TalentBehaviors = {
 
     [TalentType.INVIGORATE]: (context: TalentBehaviorContext) => {
         const {attacker, damage, client} = context;
-        const leechAmount = damage * 0.15 + 2;
+        const leechAmount = damage * 0.15 + 1;
         attacker.hp += leechAmount;
         client.send('combat_log', `${attacker.name} leeches ${leechAmount} health!`);
         client.send('trigger_talent', {
@@ -177,7 +177,7 @@ export const TalentBehaviors = {
 
     [TalentType.THROW_MONEY]: (context: TalentBehaviorContext) => {
         const {attacker, defender, client, commandDispatcher} = context;
-        const initialDamage = 5 + attacker.gold * 0.5;
+        const initialDamage = 1 + attacker.gold * 0.5;
         const damage = defender.getDamageAfterDefense(initialDamage);
 
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
@@ -297,7 +297,7 @@ export const TalentBehaviors = {
 
     [TalentType.RESILIENCE]: (context: TalentBehaviorContext) => {
         const {defender, client, talent} = context;
-        const healingAmount = 1 + talent.activationRate * defender.maxHp;
+        const healingAmount = talent.activationRate * defender.maxHp;
         defender.hp += healingAmount;
         client.send('combat_log', `${defender.name} recovers ${healingAmount} health!`);
         client.send('trigger_talent', {
@@ -312,7 +312,7 @@ export const TalentBehaviors = {
 
     [TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {
         const {attacker, defender, client, talent, commandDispatcher} = context;
-        const reflectDamage = talent.activationRate * 100 + talent.activationRate * defender.defense;
+        const reflectDamage = talent.activationRate * defender.defense;
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
             defender: attacker,
             damage: reflectDamage,
@@ -466,7 +466,7 @@ export const TalentBehaviors = {
 
         talent.affectedStats.accuracy = attacker.level;
         talent.affectedStats.strength = attacker.level;
-        talent.affectedStats.attackSpeed = 1 + attacker.level * 0.4;
+        talent.affectedStats.attackSpeed = 1 + attacker.level * 0.2;
 
 
         // client.send(
