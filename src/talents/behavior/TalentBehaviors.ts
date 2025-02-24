@@ -755,17 +755,14 @@ export const TalentBehaviors = {
         const {attacker, client, talent} = context;
         const bonusCoefficent = (attacker.income * talent.scaling + talent.base) / 100;
 
-        const attackBonus = Math.round(attacker.strength * bonusCoefficent);
-        talent.affectedStats.strength += attackBonus;
-
-        const accuracyBonus = Math.round(attacker.accuracy * bonusCoefficent);
-        talent.affectedStats.accuracy += accuracyBonus;
-
-        const defenseBonus = Math.round(attacker.defense * bonusCoefficent);
-        talent.affectedStats.defense += defenseBonus;
-
-        const hpBonus = Math.round(attacker.maxHp * bonusCoefficent);
-        talent.affectedStats.maxHp += hpBonus;
+        talent.affectedStats.strength = Math.round(attacker.strength * bonusCoefficent);
+        talent.affectedStats.accuracy = Math.round(attacker.accuracy * bonusCoefficent);
+        talent.affectedStats.attackSpeed = 1 + Math.round(attacker.attackSpeed * bonusCoefficent);
+        talent.affectedStats.defense = Math.round(attacker.defense * bonusCoefficent);
+        talent.affectedStats.maxHp = Math.round(attacker.maxHp * bonusCoefficent);
+        talent.affectedStats.dodgeRate = Math.round(attacker.dodgeRate * bonusCoefficent);
+        talent.affectedStats.hpRegen = Math.round(attacker.hpRegen * bonusCoefficent);
+        talent.affectedStats.flatDmgReduction = Math.round(attacker.flatDmgReduction * bonusCoefficent);
 
 
         client.send('trigger_collection', {
