@@ -4,7 +4,6 @@ import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
 import {BehaviorContext} from '../../common/BehaviorContext';
-import {ItemCollection} from '../../item-collections/schema/ItemCollectionSchema';
 
 export class OnDamageTriggerCommand extends Command<
     FightRoom,
@@ -28,13 +27,5 @@ export class OnDamageTriggerCommand extends Command<
             talent.executeBehavior(onDamageTalentBehaviorContext);
         });
 
-        const onDamageItemCollections: ItemCollection[] =
-            defender.activeItemCollections.filter((itemCollection) =>
-                itemCollection.triggerTypes.includes(TriggerType.ON_DAMAGE)
-            );
-
-        onDamageItemCollections.forEach((itemCollection) => {
-            itemCollection.executeBehavior(onDamageTalentBehaviorContext);
-        });
     }
 }

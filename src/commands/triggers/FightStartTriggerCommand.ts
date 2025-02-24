@@ -4,7 +4,6 @@ import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
 import {BehaviorContext} from '../../common/BehaviorContext';
-import {ItemCollection} from '../../item-collections/schema/ItemCollectionSchema';
 
 export class FightStartTriggerCommand extends Command<FightRoom> {
     execute() {
@@ -30,12 +29,5 @@ export class FightStartTriggerCommand extends Command<FightRoom> {
             talent.executeBehavior(fightStartContext);
         });
 
-        //handle on fight start item collections
-        const onFightStartItemCollections: ItemCollection[] = player.activeItemCollections.filter((itemCollection) =>
-            itemCollection.triggerTypes.includes(TriggerType.FIGHT_START)
-        );
-        onFightStartItemCollections.forEach((itemCollection) => {
-            itemCollection.executeBehavior(fightStartContext);
-        });
     }
 }

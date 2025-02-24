@@ -1,5 +1,6 @@
 import { Schema, type, ArraySchema, SetSchema } from '@colyseus/schema';
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
+import {ItemSet} from "../types/ItemTypes";
 
 
 export class Item extends Schema {
@@ -8,6 +9,8 @@ export class Item extends Schema {
   @type('string') description: string;
   @type('number') price: number = 0;
   @type(AffectedStats) affectedStats: AffectedStats;
+  @type(AffectedStats) setBonusStats: AffectedStats;
+  @type('boolean') setActive: boolean = false;
   @type('number') tier: number;
   @type('number') rarity: number = 1;
   @type('string') image: string;
@@ -16,6 +19,7 @@ export class Item extends Schema {
   @type('boolean') equipped: boolean = false;
   @type(['number']) itemCollections: number[];
   @type('string') type: string;
+  @type('string') set: string;
   @type(['string']) equipOptions: SetSchema<string>;
   @type('boolean') showDetails: boolean;
 }

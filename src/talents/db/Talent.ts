@@ -9,6 +9,8 @@ export const TalentSchema = new Schema({
   description: String,
   tier: { type: Number, alias: 'levelRequirement' },
   activationRate: Number,
+  base: Number,
+  scaling: Number,
   image: String,
   tags: [String],
   triggerTypes: [String],
