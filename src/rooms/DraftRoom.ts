@@ -16,6 +16,7 @@ import {EquipSlot} from "../items/types/ItemTypes";
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 import {UpdateItemRarityCommand} from "../commands/UpdateItemRarityCommand";
 import {UpdateActiveSets} from "../commands/UpdateActiveSets";
+import {ArraySchema} from "@colyseus/schema";
 
 export class DraftRoom extends Room<DraftState> {
     maxClients = 1;
@@ -147,7 +148,14 @@ export class DraftRoom extends Room<DraftState> {
         const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level);
         const lockedShop = this.state.player.lockedShop;
         if(lockedShop.length > 0){
-            this.state.shop = lockedShop;
+
+            this.state.shop = new ArraySchema<Item>();
+            lockedShop.forEach(item => {
+                this.state.shop.push(item);
+            })
+
+            this.state.player.unlockShop();
+
         }else if(this.state.shop.length < 6) {
             this.state.shop = shopFromDb;
         }
