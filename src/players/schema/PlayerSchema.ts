@@ -203,7 +203,8 @@ export class Player extends Schema implements IStats {
     }
 
     setLockedShop(itemArraySchema: ArraySchema<Item>){
-        this.lockedShop = itemArraySchema;
+        this.lockedShop = itemArraySchema.filter(item => !item.sold);
+        
     }
 
     unlockShop(){

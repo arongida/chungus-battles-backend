@@ -251,16 +251,13 @@ export class DraftRoom extends Room<DraftState> {
 
     private async handleLockShop(client: Client){
         const shop = this.state.shop;
-        console.log("SHOP: ", shop, "___________");
         this.state.player.setLockedShop(shop);
-        client.send('shop locked');
+        client.send('message', 'shop locked');
     }
 
     private async handleUnlockShop(client: Client){
-        const shop = this.state.shop;
-        console.log("SHOP IN UNEQUIP:", shop , "___________");
         this.state.player.unlockShop();
-        client.send('shop unlocked');
+        client.send('message', 'shop unlocked');
     }
 
     private async selectTalent(talentId: number) {
