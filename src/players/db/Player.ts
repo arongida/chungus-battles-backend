@@ -25,6 +25,7 @@ const PlayerSchema = new Schema({
 	avatarUrl: String,
 	talents: [TalentSchema],
 	inventory: [ItemSchema],
+	lockedShop: [ItemSchema],
 	baseStats: StatsSchema,
 	equippedItems: {type: Map, of: ItemSchema},
 });
@@ -68,6 +69,16 @@ function getPlayerSchemaObject(playerFromDb: Object): Player {
 		newPlayerInventoryArraySchema.push(itemSchemaObject);
 	})
 	newPlayerSchemaObject.inventory = newPlayerInventoryArraySchema;
+
+	const newPlayerLockedShopArraySchema = new ArraySchema();
+	newPlayerSchemaObject.lockedShop.map((item) => {
+		const itemSchemaObject = new Item().assign(item);
+		itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
+		itemSchemaObject.setBonusStats = new AffectedStats().assign(item.setBonusStats);
+		newPlayerLockedShopArraySchema.push(itemSchemaObject);
+
+	})
+	newPlayerSchemaObject.lockedShop = newPlayerLockedShopArraySchema;
 
 	return newPlayerSchemaObject;
 }
