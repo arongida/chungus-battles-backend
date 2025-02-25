@@ -97,7 +97,7 @@ export const TalentBehaviors = {
     [TalentType.SNITCH]: (context: TalentBehaviorContext) => {
         const {attacker, defender, client, trigger, talent} = context;
         if (trigger === TriggerType.ACTIVE) {
-            if (defender.strength > 1) {
+            if (defender.strength > 1 && defender.strength > defender.accuracy) {
                 talent.affectedEnemyStats.strength -= 1;
                 talent.affectedStats.strength += 1;
                 client.send('combat_log', `${attacker.name} snitches 1 strength from ${defender.name}!`);
@@ -505,7 +505,7 @@ export const TalentBehaviors = {
 
     [TalentType.GAMBLER]: (context: TalentBehaviorContext) => {
         const {attacker, defender, client, commandDispatcher} = context;
-        const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
+        const weapon = attacker.equippedItems.get(EquipSlot.OFF_HAND);
 
         if (weapon) {
             attacker.setItemUnequipped(weapon, EquipSlot.MAIN_HAND);

@@ -171,6 +171,7 @@ export class Player extends Schema implements IStats {
     getItem(item: Item) {
         this.gold -= item.price;
         item.sold = true;
+        this.lockedShop = this.lockedShop.filter(filterItem => item !== filterItem);
         this.inventory.push(item);
     }
 

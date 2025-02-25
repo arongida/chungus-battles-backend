@@ -208,6 +208,7 @@ export class DraftRoom extends Room<DraftState> {
 
         this.state.player.sessionId = client.sessionId;
         this.state.playerClient = client;
+
     }
 
     private async buyItem(itemId: number, client: Client) {
@@ -282,7 +283,7 @@ export class DraftRoom extends Room<DraftState> {
         this.checkLevelUp();
     }
 
-    private async checkLevelUp() {
+    public async checkLevelUp() {
         if (this.state.player.level >= 5) return;
         if (this.state.player.xp >= this.state.player.maxXp) {
             await this.levelUp(this.state.player.xp - this.state.player.maxXp);
