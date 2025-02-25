@@ -7,6 +7,7 @@ import {Talent} from "../../talents/schema/TalentSchema";
 import {ArraySchema, MapSchema} from "@colyseus/schema";
 import {StatsSchema} from "../../common/db/Stats";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
+import { EquipSlot } from '../../items/types/ItemTypes';
 
 
 const PlayerSchema = new Schema({
@@ -24,6 +25,7 @@ const PlayerSchema = new Schema({
 	avatarUrl: String,
 	talents: [TalentSchema],
 	inventory: [ItemSchema],
+	lockedShop: [ItemSchema],
 	baseStats: StatsSchema,
 	equippedItems: {type: Map, of: ItemSchema},
 });
@@ -67,6 +69,16 @@ function getPlayerSchemaObject(playerFromDb: Object): Player {
 		newPlayerInventoryArraySchema.push(itemSchemaObject);
 	})
 	newPlayerSchemaObject.inventory = newPlayerInventoryArraySchema;
+
+	const newPlayerLockedShopArraySchema = new ArraySchema();
+	newPlayerSchemaObject.lockedShop.map((item) => {
+		const itemSchemaObject = new Item().assign(item);
+		itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
+		itemSchemaObject.setBonusStats = new AffectedStats().assign(item.setBonusStats);
+		newPlayerLockedShopArraySchema.push(itemSchemaObject);
+
+	})
+	newPlayerSchemaObject.lockedShop = newPlayerLockedShopArraySchema;
 
 	return newPlayerSchemaObject;
 }
@@ -186,7 +198,24 @@ export async function getHighestWin(): Promise<number> {
 }
 
 export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
-	if (round <= 0) {
+	if(round === 1){
+		const roundOneBot = new Player();
+		roundOneBot.name = "Joe";
+		// roundOneBot.avatarUrl = "https://chungus-battles.b-cdn.net/chungus-battles-assets/thief_01_enemy.png";
+		roundOneBot.level = 1;
+		roundOneBot.baseStats.maxHp = 50;
+		roundOneBot.baseStats.strength = 2;
+		const weapon = new Item();
+		weapon.name = "Glass shard";
+		const swordStats = new AffectedStats();
+		swordStats.strength = 2;
+		weapon.affectedStats = swordStats;
+		roundOneBot.setItemEquipped(weapon, EquipSlot.MAIN_HAND);
+
+		return roundOneBot;
+	}
+	
+	if (round < 1) {
 		const defaultPlayerClone = await playerModel
 			.findOne({ originalPlayerId: playerId, playerId: { $ne: playerId } })
 			.lean();
