@@ -24,6 +24,7 @@ export class Player extends Schema implements IStats {
     @type('number') hpRegen: number = 0;
     @type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
     @type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();
+    @type([Item]) lockedShop: ArraySchema<Item> = new ArraySchema<Item>();
     @type({map: Item}) equippedItems = new MapSchema<Item>();
     @type('number') dodgeRate: number = 0;
     @type('number') refreshShopCost: number = 2;
@@ -170,6 +171,7 @@ export class Player extends Schema implements IStats {
     getItem(item: Item) {
         this.gold -= item.price;
         item.sold = true;
+        this.lockedShop = this.lockedShop.filter(filterItem => item !== filterItem);
         this.inventory.push(item);
     }
 
@@ -199,5 +201,13 @@ export class Player extends Schema implements IStats {
         item.setActive = false;
         this.inventory.push(item);
         this.equippedItems.delete(slot);
+    }
+
+    setLockedShop(itemArraySchema: ArraySchema<Item>){
+        this.lockedShop = itemArraySchema;
+    }
+
+    unlockShop(){
+        this.lockedShop = new ArraySchema<Item>;
     }
 }

@@ -60,11 +60,12 @@ function getItemSchemaObject(itemFromDb: Object): Item {
 
 }
 
-export async function getItemsById(itemIds: number[]): Promise<{}[]> {
-    return itemModel
-        .find({itemId: {$in: itemIds}})
+export async function getItemById(itemId: number): Promise<Item> {
+    const itemFromDb = await itemModel
+        .findOne({itemId: itemId})
         .lean()
         .select({_id: 0, __v: 0});
+    return getItemSchemaObject(itemFromDb);
 }
 
 export async function getQuestItems(): Promise<{}[]> {

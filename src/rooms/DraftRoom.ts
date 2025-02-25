@@ -16,6 +16,7 @@ import {EquipSlot} from "../items/types/ItemTypes";
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 import {UpdateItemRarityCommand} from "../commands/UpdateItemRarityCommand";
 import {UpdateActiveSets} from "../commands/UpdateActiveSets";
+import {ArraySchema} from "@colyseus/schema";
 
 export class DraftRoom extends Room<DraftState> {
     maxClients = 1;
@@ -51,6 +52,12 @@ export class DraftRoom extends Room<DraftState> {
 
         this.onMessage('refresh_talents', (client) => {
             this.handleRefreshTalentSelection(client);
+        });
+        this.onMessage('lock-shop', (client)=>{
+            this.handleLockShop(client);
+        });
+        this.onMessage('unlock-shop', (client)=>{
+            this.handleUnlockShop(client);
         });
 
         //start clock for timings
@@ -139,8 +146,17 @@ export class DraftRoom extends Room<DraftState> {
 
     private async updateShop(newShopSize: number) {
         const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level);
+        const lockedShop = this.state.player.lockedShop;
+        if(lockedShop.length > 0){
 
-        if (this.state.shop.length < 6) {
+            this.state.shop = new ArraySchema<Item>();
+            lockedShop.forEach(item => {
+                this.state.shop.push(item);
+            })
+
+            this.state.player.unlockShop();
+
+        }else if(this.state.shop.length < 6) {
             this.state.shop = shopFromDb;
         }
 
@@ -192,6 +208,7 @@ export class DraftRoom extends Room<DraftState> {
 
         this.state.player.sessionId = client.sessionId;
         this.state.playerClient = client;
+
     }
 
     private async buyItem(itemId: number, client: Client) {
@@ -233,6 +250,20 @@ export class DraftRoom extends Room<DraftState> {
         await this.updateShop(this.state.shopSize);
     }
 
+    private async handleLockShop(client: Client){
+        const shop = this.state.shop;
+        console.log("SHOP: ", shop, "___________");
+        this.state.player.setLockedShop(shop);
+        client.send('shop locked');
+    }
+
+    private async handleUnlockShop(client: Client){
+        const shop = this.state.shop;
+        console.log("SHOP IN UNEQUIP:", shop , "___________");
+        this.state.player.unlockShop();
+        client.send('shop unlocked');
+    }
+
     private async selectTalent(talentId: number) {
         const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
         if (talent) {
@@ -252,7 +283,7 @@ export class DraftRoom extends Room<DraftState> {
         this.checkLevelUp();
     }
 
-    private async checkLevelUp() {
+    public async checkLevelUp() {
         if (this.state.player.level >= 5) return;
         if (this.state.player.xp >= this.state.player.maxXp) {
             await this.levelUp(this.state.player.xp - this.state.player.maxXp);
