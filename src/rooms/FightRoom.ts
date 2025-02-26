@@ -13,8 +13,6 @@ import {OnAttackedTriggerCommand} from '../commands/triggers/OnAttackedTriggerCo
 import {OnAttackTriggerCommand} from '../commands/triggers/OnAttackTriggerCommand';
 import {TalentType} from '../talents/types/TalentTypes';
 import {getQuestItems} from '../items/db/Item';
-import {Item} from '../items/schema/ItemSchema';
-import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerCommand';
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 import {OnDodgeTriggerCommand} from "../commands/triggers/OnDodgeTriggerCommand";
@@ -69,7 +67,7 @@ export class FightRoom extends Room<FightState> {
         this.state.player.sessionId = client.sessionId;
 
         //set up initial room state
-        this.dispatcher.dispatch(new SetUpQuestItemsCommand(), {questItemsFromDb: (await getQuestItems()) as Item[]});
+        this.state.questItems = await getQuestItems();
         // this.state.availableItemCollections = await getAllItemCollections();
 
         //start battle after 5 seconds

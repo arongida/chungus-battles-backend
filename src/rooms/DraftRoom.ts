@@ -10,7 +10,6 @@ import {Dispatcher} from '@colyseus/command';
 import {ShopStartTriggerCommand} from '../commands/triggers/ShopStartTriggerCommand';
 import {LevelUpTriggerCommand} from '../commands/triggers/LevelUpTriggerCommand';
 import {AfterShopRefreshTriggerCommand} from '../commands/triggers/AfterShopRefreshTriggerCommand';
-import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {DraftAuraTriggerCommand} from '../commands/triggers/DraftAuraTriggerCommand';
 import {EquipSlot} from "../items/types/ItemTypes";
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
@@ -106,7 +105,7 @@ export class DraftRoom extends Room<DraftState> {
         if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
 
         //set quest items
-        this.dispatcher.dispatch(new SetUpQuestItemsCommand(), {questItemsFromDb: (await getQuestItems()) as Item[]});
+        this.state.questItems = await getQuestItems();
 
         //shop start trigger
         this.dispatcher.dispatch(new ShopStartTriggerCommand());
@@ -252,16 +251,13 @@ export class DraftRoom extends Room<DraftState> {
 
     private async handleLockShop(client: Client){
         const shop = this.state.shop;
-        console.log("SHOP: ", shop, "___________");
         this.state.player.setLockedShop(shop);
-        client.send('shop locked');
+        client.send('message', 'shop locked');
     }
 
     private async handleUnlockShop(client: Client){
-        const shop = this.state.shop;
-        console.log("SHOP IN UNEQUIP:", shop , "___________");
         this.state.player.unlockShop();
-        client.send('shop unlocked');
+        client.send('message', 'shop unlocked');
     }
 
     private async selectTalent(talentId: number) {
