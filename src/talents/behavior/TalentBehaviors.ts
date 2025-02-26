@@ -458,9 +458,11 @@ export const TalentBehaviors = {
         const {attacker, client, talent} = context;
 
         const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
-        if (weapon) {
+        const offHandWeapon = attacker.equippedItems.get(EquipSlot.OFF_HAND);
+        if (weapon || offHandWeapon) {
             client.send('combat_log', `${attacker.name} is a martial artist and doesn't need a weapon!`);
-            attacker.setItemUnequipped(weapon, EquipSlot.MAIN_HAND);
+            if(weapon) attacker.setItemUnequipped(weapon, EquipSlot.MAIN_HAND);
+            if(offHandWeapon && offHandWeapon.type === "weapon") attacker.setItemUnequipped(offHandWeapon, EquipSlot.OFF_HAND);
         }
 
 
@@ -505,10 +507,10 @@ export const TalentBehaviors = {
 
     [TalentType.GAMBLER]: (context: TalentBehaviorContext) => {
         const {attacker, defender, client, commandDispatcher} = context;
-        const weapon = attacker.equippedItems.get(EquipSlot.OFF_HAND);
+        const offHandItem = attacker.equippedItems.get(EquipSlot.OFF_HAND);
 
-        if (weapon) {
-            attacker.setItemUnequipped(weapon, EquipSlot.MAIN_HAND);
+        if (offHandItem) {
+            attacker.setItemUnequipped(offHandItem, EquipSlot.OFF_HAND);
         }
 
         const initialDamage = rollTheDice(1, 6) + attacker.income;

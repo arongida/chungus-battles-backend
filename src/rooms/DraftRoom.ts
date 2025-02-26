@@ -10,7 +10,6 @@ import {Dispatcher} from '@colyseus/command';
 import {ShopStartTriggerCommand} from '../commands/triggers/ShopStartTriggerCommand';
 import {LevelUpTriggerCommand} from '../commands/triggers/LevelUpTriggerCommand';
 import {AfterShopRefreshTriggerCommand} from '../commands/triggers/AfterShopRefreshTriggerCommand';
-import {SetUpQuestItemsCommand} from '../commands/SetUpQuestItemsCommand';
 import {DraftAuraTriggerCommand} from '../commands/triggers/DraftAuraTriggerCommand';
 import {EquipSlot} from "../items/types/ItemTypes";
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
@@ -106,7 +105,7 @@ export class DraftRoom extends Room<DraftState> {
         if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
 
         //set quest items
-        this.dispatcher.dispatch(new SetUpQuestItemsCommand(), {questItemsFromDb: (await getQuestItems()) as Item[]});
+        this.state.questItems = await getQuestItems();
 
         //shop start trigger
         this.dispatcher.dispatch(new ShopStartTriggerCommand());

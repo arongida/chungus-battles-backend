@@ -68,9 +68,17 @@ export async function getItemById(itemId: number): Promise<Item> {
     return getItemSchemaObject(itemFromDb);
 }
 
-export async function getQuestItems(): Promise<{}[]> {
-    return itemModel
+export async function getQuestItems(): Promise<ArraySchema<Item>> {
+    const itemArrayFromDb = await itemModel
         .find({tier: ItemTier.QUEST_TIER_1})
         .lean()
         .select({_id: 0, __v: 0});
+
+    const itemArraySchema = new ArraySchema();
+    itemArrayFromDb.forEach(item => {
+        const itemSchemaObject = getItemSchemaObject(item);
+        itemArraySchema.push(itemSchemaObject);
+    })
+
+    return itemArraySchema;
 }
