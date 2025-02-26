@@ -60,7 +60,7 @@ export const TalentBehaviors = {
         const {attacker, client, talent, trigger} = context;
         if (trigger === TriggerType.ON_ATTACK) {
             talent.affectedStats.attackSpeed += talent.activationRate;
-            client.send('combat_log', `${attacker.name} gains ${talent.activationRate * 100 - 100}% attack speed!`);
+            client.send('combat_log', `${attacker.name} gains ${talent.activationRate * 100}% attack speed!`);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ASSASSIN_AMUSEMENT,
@@ -541,7 +541,7 @@ export const TalentBehaviors = {
             const ringWeapon = questItems.find((item) => item.itemId === 702);
             if (ringWeapon) {
                 attacker.getItem(ringWeapon);
-                client.send('combat_log', `${attacker.name} found a ring weapon!`);
+                client.send('draft_log', `${attacker.name} found a ring weapon!`);
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     talentId: TalentType.MAGIC_RING_WEAPON,
@@ -556,11 +556,9 @@ export const TalentBehaviors = {
 
             ringWeapon.affectedStats.strength += 0.01;
 
-            commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-                defender: defender,
-                damage: getDamageAfterDefense,
-                attacker: attacker,
-            });
+            //ALWAYS SET MAPSCHEMA AFTER CHANGING OBJECT OT TRIGGER COLYSEUS CHANGE DETECTION
+            attacker.equippedItems.set(EquipSlot.MAIN_HAND, ringWeapon);
+
             commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
                 defender: defender,
                 damage: getDamageAfterDefense,
@@ -757,14 +755,14 @@ export const TalentBehaviors = {
         const {attacker, client, talent} = context;
         const bonusCoefficent = (attacker.income * talent.scaling + talent.base) / 100;
 
-        talent.affectedStats.strength = Math.round(attacker.strength * bonusCoefficent);
-        talent.affectedStats.accuracy = Math.round(attacker.accuracy * bonusCoefficent);
-        talent.affectedStats.attackSpeed = 1 + Math.round(attacker.attackSpeed * bonusCoefficent);
-        talent.affectedStats.defense = Math.round(attacker.defense * bonusCoefficent);
-        talent.affectedStats.maxHp = Math.round(attacker.maxHp * bonusCoefficent);
-        talent.affectedStats.dodgeRate = Math.round(attacker.dodgeRate * bonusCoefficent);
-        talent.affectedStats.hpRegen = Math.round(attacker.hpRegen * bonusCoefficent);
-        talent.affectedStats.flatDmgReduction = Math.round(attacker.flatDmgReduction * bonusCoefficent);
+        talent.affectedStats.strength = Math.ceil(attacker.strength * bonusCoefficent);
+        talent.affectedStats.accuracy = Math.ceil(attacker.accuracy * bonusCoefficent);
+        talent.affectedStats.attackSpeed = 1 + Math.ceil(attacker.attackSpeed * bonusCoefficent);
+        talent.affectedStats.defense = Math.ceil(attacker.defense * bonusCoefficent);
+        talent.affectedStats.maxHp = Math.ceil(attacker.maxHp * bonusCoefficent);
+        talent.affectedStats.dodgeRate = Math.ceil(attacker.dodgeRate * bonusCoefficent);
+        talent.affectedStats.hpRegen = Math.ceil(attacker.hpRegen * bonusCoefficent);
+        talent.affectedStats.flatDmgReduction = Math.ceil(attacker.flatDmgReduction * bonusCoefficent);
 
 
         client.send('trigger_collection', {

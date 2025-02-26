@@ -20,5 +20,5 @@ export class Item extends Schema {
   @type('string') type: string;
   @type('string') set: string;
   @type(['string']) equipOptions: SetSchema<string>;
-  @type('boolean') showDetails: boolean;
+  @type('boolean') showDetails: boolean = false;
 }
