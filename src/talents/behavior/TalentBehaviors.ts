@@ -484,7 +484,9 @@ export const TalentBehaviors = {
         const rewardCount = attacker.level + 1;
 
         for (let i = 0; i < rewardCount; i++) {
-            shop[i].price = 0;
+            if(shop[i]){
+                shop[i].price = 0;
+            }
         }
 
         attacker.inventory.forEach(item => {
