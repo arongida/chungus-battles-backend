@@ -221,10 +221,8 @@ export class FightRoom extends Room<FightState> {
     }
 
     tryAttack(attacker: Player, defender: Player) {
-        const maxFloored = Math.floor(attacker.strength);
-        const minCeiled = Math.floor(attacker.accuracy);
-        const attackRoll = Math.floor(Math.random() * (maxFloored - minCeiled + 1) + minCeiled);
 
+        const attackRoll = Math.random() * (attacker.strength - attacker.accuracy) + attacker.accuracy;
 
         const damage = defender.getDamageAfterDefense(attackRoll);
 
