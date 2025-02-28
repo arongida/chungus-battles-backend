@@ -27,7 +27,11 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
         auraTalents.forEach((talent) => {
             this.state.skillsTimers.push(
                 this.clock.setInterval(() => {
-                    talent.executeBehavior(behaviorContext);
+                    try {
+                        talent.executeBehavior(behaviorContext);
+                    } catch (e) {
+                        console.error(e);
+                    }
                 }, 1000)
             );
         });

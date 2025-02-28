@@ -20,7 +20,11 @@ export class OnDodgeTriggerCommand extends Command<
             (talent) => talent.triggerTypes.includes(TriggerType.ON_DODGE)
         );
         talentsToTriggerOnDefender.forEach((talent) => {
-            talent.executeBehavior(attackContext);
+            try {
+                talent.executeBehavior(attackContext);
+            } catch (e) {
+                console.error(e);
+            }
         });
 
     }

@@ -13,26 +13,27 @@ export class UpdateActiveSets extends Command<DraftRoom> {
     updateActiveSets(player: Player) {
 
         player.equippedItems.forEach((equippedItem, equippedSlot) => {
+            try {
+                if (equippedItem.set) {
+                    equippedItem.setActive = false;
 
-            if (equippedItem.set) {
-                equippedItem.setActive = false;
+                    const equipSlotsOptions = Object.values(EquipSlot) as EquipSlot[];
 
+                    for (const slotOption of equipSlotsOptions) {
+                        if (slotOption === equippedSlot) continue;
+                        const itemToCheck = player.equippedItems.get(slotOption);
+                        if (!itemToCheck) continue;
 
-                const equipSlotsOptions = Object.values(EquipSlot) as EquipSlot[];
-
-                for (const slotOption of equipSlotsOptions) {
-                    if (slotOption === equippedSlot) continue;
-                    const itemToCheck = player.equippedItems.get(slotOption);
-                    if (!itemToCheck) continue;
-
-                    if (equippedItem.set === itemToCheck.set) {
-                        equippedItem.setActive = true;
-                        break;
+                        if (equippedItem.set === itemToCheck.set) {
+                            equippedItem.setActive = true;
+                            break;
+                        }
                     }
+                    player.equippedItems.set(equippedSlot, equippedItem);
                 }
-                player.equippedItems.set(equippedSlot, equippedItem);
+            } catch (e) {
+                console.error(e);
             }
-
         })
     }
 }

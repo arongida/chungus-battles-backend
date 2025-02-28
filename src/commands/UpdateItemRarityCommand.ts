@@ -7,7 +7,11 @@ export class UpdateItemRarityCommand extends Command<
     DraftRoom
 > {
     async execute() {
-        this.updateItemRarity(this.state.player);
+        try {
+            this.updateItemRarity(this.state.player);
+        } catch (e) {
+            console.error(e);
+        }
 
     }
 

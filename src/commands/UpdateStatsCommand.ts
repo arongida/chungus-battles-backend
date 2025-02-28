@@ -58,6 +58,7 @@ export class UpdateStatsCommand extends Command<
             player.maxHp += affectedStats.maxHp;
         } catch (e) {
             console.error('Failed to increase stats for player: ', player?.name)
+            console.error(e)
         }
     }
 
@@ -75,6 +76,7 @@ export class UpdateStatsCommand extends Command<
             player.hpRegen = affectedStats.hpRegen;
         } catch (e) {
             console.error('Failed to set stats for player: ', player?.name);
+            console.error(e);
         }
     }
 }

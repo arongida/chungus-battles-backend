@@ -17,7 +17,11 @@ export class ShopStartTriggerCommand extends Command<DraftRoom> {
             trigger: TriggerType.SHOP_START
         };
         onShopStartTalents.forEach((talent) => {
-            talent.executeBehavior(onShopStartTalentsContext);
+            try {
+                talent.executeBehavior(onShopStartTalentsContext);
+            } catch (e) {
+                console.error(e);
+            }
         });
         this.room.checkLevelUp();
     }

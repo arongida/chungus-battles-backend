@@ -426,11 +426,7 @@ export const TalentBehaviors = {
         },
 
         [TalentType.ROBBERY]: (context: TalentBehaviorContext) => {
-            const
-                {
-                    attacker, client, shop
-                }
-                    = context;
+            const {attacker, client, shop} = context;
             const randomItem = shop[Math.floor(Math.random() * shop.length)];
             if (randomItem) {
                 attacker.gold += randomItem.price;
@@ -474,11 +470,11 @@ export const TalentBehaviors = {
                 attacker.xp += attacker.level * 2;
                 const rewardCount = attacker.level + 1;
 
-        for (let i = 0; i < rewardCount; i++) {
-            if(shop[i]){
-                shop[i].price = 0;
-            }
-        }
+                for (let i = 0; i < rewardCount; i++) {
+                    if (shop[i]) {
+                        shop[i].price = 0;
+                    }
+                }
 
                 attacker.inventory.forEach(item => {
                     item.price = 0;

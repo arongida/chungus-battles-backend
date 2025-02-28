@@ -28,7 +28,12 @@ export class OnAttackTriggerCommand extends Command<
             talent.triggerTypes.includes(TriggerType.ON_ATTACK)
         );
         talentsToTrigger.forEach((talent) => {
-            talent.executeBehavior(attackContext);
+
+            try {
+                talent.executeBehavior(attackContext);
+            } catch (e) {
+                console.error(e);
+            }
         });
     }
 }
