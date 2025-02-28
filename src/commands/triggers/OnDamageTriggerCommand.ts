@@ -24,7 +24,11 @@ export class OnDamageTriggerCommand extends Command<
         );
 
         onDamageTalents.forEach((talent) => {
-            talent.executeBehavior(onDamageTalentBehaviorContext);
+            try {
+                talent.executeBehavior(onDamageTalentBehaviorContext);
+            } catch (e) {
+                console.error(e);
+            }
         });
 
     }

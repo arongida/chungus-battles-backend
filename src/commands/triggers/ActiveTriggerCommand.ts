@@ -27,7 +27,11 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
         activeTalents.forEach((talent) => {
             this.state.skillsTimers.push(
                 this.clock.setInterval(() => {
-                    talent.executeBehavior(activeEffectBehaviorContext);
+                    try {
+                        talent.executeBehavior(activeEffectBehaviorContext);
+                    } catch (e) {
+                        console.error(e);
+                    }
                 }, (1 / talent.activationRate) * 1000)
             );
         });

@@ -25,7 +25,11 @@ export class FightStartTriggerCommand extends Command<FightRoom> {
             talent.triggerTypes.includes(TriggerType.FIGHT_START)
         );
         onFightStartTalents.forEach((talent) => {
-            talent.executeBehavior(fightStartContext);
+            try {
+                talent.executeBehavior(fightStartContext);
+            } catch (e) {
+                console.error(e);
+            }
         });
 
     }
