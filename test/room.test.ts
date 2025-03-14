@@ -21,8 +21,7 @@ describe("testing your Colyseus app", () => {
     });
 
     afterAll(async () => {
-        await colyseus.shutdown()
-        jest.clearAllMocks();
+        await colyseus.shutdown();
         mongoose.disconnect();
     });
 
@@ -30,7 +29,7 @@ describe("testing your Colyseus app", () => {
         await colyseus.cleanup();
     });
 
-    it("connecting into a room", async () => {
+    it("connecting into a room and creating a new player", async () => {
 
         const mockOptions = {
             playerId: await getNextPlayerId(), // Example player ID
