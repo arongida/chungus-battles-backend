@@ -33,7 +33,7 @@ describe("testing your Colyseus app", () => {
 
         const mockOptions = {
             playerId: await getNextPlayerId(), // Example player ID
-            name: "Mocked Player", // Example player name
+            name: null, // Example player name
             avatarUrl: "mocked_avatar_url", // Optional avatar URL
         };
 
