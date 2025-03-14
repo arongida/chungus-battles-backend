@@ -14,8 +14,8 @@ jobs:
 
       - name: create env file
         run: |
-          touch .env
-          echo DB_CONNECTION_STRING=${{ secrets.DB_CONNECTION_STRING }} >> .env
+          touch .env.test
+          echo DB_CONNECTION_STRING=${{ secrets.DB_CONNECTION_STRING }} >> .env.test
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
