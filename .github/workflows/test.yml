@@ -12,6 +12,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
+      - name: create env file
+        run: |
+          touch .env
+          echo DB_CONNECTION_STRING=${{ secrets.DB_CONNECTION_STRING }} >> .env
+
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
