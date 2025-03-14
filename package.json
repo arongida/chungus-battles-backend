@@ -12,7 +12,8 @@
     "start-prod": "node build/index.js",
     "loadtest": "tsx loadtest/example.ts --room my_room --numClients 2",
     "build": "npm run clean && tsc",
-    "clean": "rimraf build"
+    "clean": "rimraf build",
+    "test": "jest"
   },
   "author": "",
   "license": "UNLICENSED",
@@ -26,9 +27,13 @@
     "@flydotio/dockerfile": "^0.5.7",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.1",
+    "@types/jest": "^29.5.14",
     "@types/mocha": "^10.0.1",
+    "jest": "^29.7.0",
     "mocha": "^10.2.0",
     "rimraf": "^5.0.0",
+    "ts-jest": "^29.2.6",
+    "ts-node": "^10.9.2",
     "tsx": "^3.12.6",
     "typescript": "^5.0.4"
   },
