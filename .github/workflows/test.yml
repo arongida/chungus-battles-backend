@@ -8,6 +8,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      DB_CONNECTION_STRING: ${{secrets.DB_CONNECTION_STRING}}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
