@@ -96,10 +96,7 @@ export class DraftRoom extends Room<DraftState> {
             await this.checkLevelUp();
         } else {
             const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId, options.avatarUrl);
-            console.log("Setting up state for player:", newPlayer);
-            console.log("!!! currenttalentpoints:", this.state.remainingTalentPoints);
             this.state.remainingTalentPoints = 1;
-            console.log("Current Room State:", this.state);
             await this.setUpState(newPlayer, client);
         }
 
