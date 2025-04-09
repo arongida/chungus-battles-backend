@@ -143,6 +143,7 @@ export class Player extends Schema implements IStats {
     takeDamage(damage: number, playerClient: Client) {
         if (this.invincible) return;
         if (this.hp <= 0) return;
+        if (damage <= 0) return;
         if (this.hp - damage <= 0) console.log('player died from damage', damage);
         this.hp -= damage;
         playerClient.send('damage', {
@@ -152,7 +153,8 @@ export class Player extends Schema implements IStats {
     }
 
     getDamageAfterDefense(initialDamage: number): number {
-        return (initialDamage * (100 / (100 + this.defense))) - this.flatDmgReduction;
+        const damage = (initialDamage * (100 / (100 + this.defense))) - this.flatDmgReduction;
+        return damage > 0 ? damage : 0;
     }
 
     addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {
