@@ -1,7 +1,9 @@
 /.env.development
 /.env.production
+/.env.test
 /node_modules
 /build
 /config*
 /scripts/dump
 /.vscode/
+/.idea/
