@@ -25,6 +25,7 @@
     },
     "dependencies": {
         "@phaserjs/editor-scripts-base": "^1.0.0",
+        "colyseus.js": "^0.16.19",
         "phaser": "3.80.1"
     }
 }

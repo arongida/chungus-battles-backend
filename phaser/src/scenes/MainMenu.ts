@@ -6,7 +6,12 @@
 /* START-USER-IMPORTS */
 /* END-USER-IMPORTS */
 
+import { Client, Room } from 'colyseus.js';
+
 export default class MainMenu extends Phaser.Scene {
+	client = new Client(import.meta.env.VITE_BACKEND_URL);
+	room: Room;
+
 	private play_button: Phaser.GameObjects.Image;
 
 	constructor() {
@@ -14,6 +19,18 @@ export default class MainMenu extends Phaser.Scene {
 
 		/* START-USER-CTR-CODE */
 		/* END-USER-CTR-CODE */
+	}
+
+	async joinRoom() {
+		console.log("Joining room...");
+
+		try {
+			this.room = await this.client.joinOrCreate("draft_room");
+			console.log("Joined successfully!");
+
+		} catch (e) {
+			console.error(e);
+		}
 	}
 
 	editorCreate(): void {
@@ -50,6 +67,7 @@ export default class MainMenu extends Phaser.Scene {
 		this.play_button.setInteractive({useHandCursor: true});
 		this.play_button.on("pointerdown", () => {
 			this.play_button.setTexture('play-button-pressed');
+			this.joinRoom();
 		});
 		this.play_button.on("pointerup", () => {
 			this.play_button.setTexture('play-button');

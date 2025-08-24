@@ -17,6 +17,16 @@
                 "url": "assets/play-button-pressed.png",
                 "type": "image",
                 "key": "play-button-pressed"
+            },
+            {
+                "url": "assets/avatar/warrior_01.png",
+                "type": "image",
+                "key": "warrior_01"
+            },
+            {
+                "url": "assets/avatar/warrior_01_cringe.png",
+                "type": "image",
+                "key": "warrior_01_cringe"
             }
         ]
     },

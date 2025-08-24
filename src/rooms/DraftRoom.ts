@@ -1,7 +1,7 @@
 import {Client, Room} from '@colyseus/core';
 import {DraftState} from './schema/DraftState';
 import {Item} from '../items/schema/ItemSchema';
-import {copyPlayer, createNewPlayer, getPlayer, updatePlayer} from '../players/db/Player';
+import { copyPlayer, createNewPlayer, getNextPlayerId, getPlayer, updatePlayer } from '../players/db/Player';
 import {getNumberOfItems, getQuestItems} from '../items/db/Item';
 import {Player} from '../players/schema/PlayerSchema';
 import {delay} from '../common/utils';
@@ -79,8 +79,15 @@ export class DraftRoom extends Room<DraftState> {
         console.log('name: ', options.name);
         console.log('player id: ', options.playerId);
 
-        if (!options.name) throw new Error('Name is required!');
-        if (!options.playerId) throw new Error('Player ID is required!');
+        if (!options.name) {
+            options.name = 'phaser player'
+        }
+        if (!options.playerId) {
+            options.playerId = await getNextPlayerId();
+        }
+        if (!options.avatarUrl) {
+            options.avatarUrl = 'warrior_01'
+        }
 
         await delay(1000, this.clock);
         const foundPlayer = await getPlayer(options.playerId);
