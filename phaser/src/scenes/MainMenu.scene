@@ -1,0 +1,68 @@
+{
+    "id": "bb20bde4-5d02-4a84-9a13-3c2b11804fc9",
+    "sceneType": "SCENE",
+    "settings": {
+        "exportClass": true,
+        "autoImport": true,
+        "preloadPackFiles": [],
+        "createMethodName": "editorCreate",
+        "sceneKey": "MainMenu",
+        "compilerOutputLanguage": "TYPE_SCRIPT",
+        "borderWidth": 1280,
+        "borderHeight": 720
+    },
+    "displayList": [
+        {
+            "type": "Text",
+            "id": "5fef3e16-b445-4aff-9aec-3939cb50367f",
+            "label": "title",
+            "x": 644,
+            "y": 171,
+            "scaleX": 4.775803204097774,
+            "scaleY": 5.218153137548922,
+            "originX": 0.5,
+            "originY": 0.5,
+            "tintTopLeft": "#f65c5c",
+            "tintTopRight": "#f3bb35",
+            "tintBottomLeft": "#907103",
+            "tintBottomRight": "#d2083d",
+            "text": "Chungus Battles"
+        },
+        {
+            "type": "Container",
+            "id": "622573cc-49e4-40c8-9230-18eff8c86cb1",
+            "label": "container_1",
+            "list": [
+                {
+                    "type": "Image",
+                    "id": "708adcd2-4046-41d5-b7c6-d5c2ef63a83e",
+                    "label": "stoneButtonInsetHovered",
+                    "scope": "CLASS",
+                    "texture": {
+                        "key": "stoneButtonInsetHovered"
+                    },
+                    "x": 640,
+                    "y": 360
+                },
+                {
+                    "type": "Text",
+                    "id": "62afd8d9-4b82-4c30-b79f-df67e81e3ea6",
+                    "label": "buttonText",
+                    "x": 640,
+                    "y": 360,
+                    "originX": 0.5,
+                    "originY": 0.5,
+                    "text": "START",
+                    "fontSize": "50px"
+                }
+            ]
+        }
+    ],
+    "plainObjects": [],
+    "meta": {
+        "app": "Phaser Editor - Scene Editor",
+        "url": "https://phaser.io/editor",
+        "contentType": "phasereditor2d.core.scene.SceneContentType",
+        "version": 5
+    }
+}

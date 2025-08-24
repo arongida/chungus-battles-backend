@@ -1,0 +1,34 @@
+{
+    "section1": {
+        "files": [
+            {
+                "url": "assets/guapen.png",
+                "type": "image",
+                "key": "guapen"
+            },
+            {
+                "url": "assets/stoneButtonFrame.png",
+                "type": "image",
+                "key": "stoneButtonFrame"
+            },
+            {
+                "url": "assets/stoneButtonInsetHovered.png",
+                "type": "image",
+                "key": "stoneButtonInsetHovered"
+            },
+            {
+                "url": "assets/stoneButtonInsetReady.png",
+                "type": "image",
+                "key": "stoneButtonInsetReady"
+            }
+        ]
+    },
+    "meta": {
+        "app": "Phaser Editor 2D - Asset Pack Editor",
+        "contentType": "phasereditor2d.pack.core.AssetContentType",
+        "url": "https://phasereditor2d.com",
+        "version": 2,
+        "showAllFilesInBlocks": false,
+        "visible": true
+    }
+}
