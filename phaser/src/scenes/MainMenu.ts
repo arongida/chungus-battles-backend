@@ -18,23 +18,24 @@ export default class MainMenu extends Phaser.Scene {
 
 	editorCreate(): void {
 
-		// title
+		// Title
 		const title = this.add.text(644, 171, "", {});
-		title.scaleX = 4.775803204097774;
-		title.scaleY = 5.218153137548922;
+		title.scaleX = 6;
+		title.scaleY = 6;
 		title.setOrigin(0.5, 0.5);
-		title.tintTopLeft = 16145500;
-		title.tintTopRight = 15973173;
-		title.tintBottomLeft = 9466115;
-		title.tintBottomRight = 13764669;
+		title.tintFill = true;
+		title.tintTopLeft = 12322824;
+		title.tintTopRight = 16356608;
+		title.tintBottomLeft = 16106341;
+		title.tintBottomRight = 13604625;
 		title.text = "Chungus Battles";
-		title.setStyle({  });
+		title.setStyle({ "fontFamily": "alagard", "fontSize": "24px", "shadow.offsetX": 1, "shadow.offsetY": 1 });
 
 		// play_button
 		const play_button = this.add.image(640, 457, "play-button");
-		this.play_button = play_button;
 		play_button.scaleX = 4;
 		play_button.scaleY = 4;
+		this.play_button = play_button;
 
 		this.events.emit("scene-awake");
 	}

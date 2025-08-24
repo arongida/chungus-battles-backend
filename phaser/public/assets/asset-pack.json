@@ -2,9 +2,11 @@
     "section1": {
         "files": [
             {
-                "url": "assets/FufuSuperDino.png",
-                "type": "image",
-                "key": "FufuSuperDino"
+                "url": "fonts/alagard.ttf",
+                "format": "truetype",
+                "descriptors": {},
+                "type": "font",
+                "key": "alagard"
             },
             {
                 "url": "assets/play-button.png",
