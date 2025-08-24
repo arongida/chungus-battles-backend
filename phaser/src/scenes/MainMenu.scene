@@ -29,33 +29,16 @@
             "text": "Chungus Battles"
         },
         {
-            "type": "Container",
-            "id": "622573cc-49e4-40c8-9230-18eff8c86cb1",
-            "label": "container_1",
-            "list": [
-                {
-                    "type": "Image",
-                    "id": "708adcd2-4046-41d5-b7c6-d5c2ef63a83e",
-                    "label": "stoneButtonInsetHovered",
-                    "scope": "CLASS",
-                    "texture": {
-                        "key": "stoneButtonInsetHovered"
-                    },
-                    "x": 640,
-                    "y": 360
-                },
-                {
-                    "type": "Text",
-                    "id": "62afd8d9-4b82-4c30-b79f-df67e81e3ea6",
-                    "label": "buttonText",
-                    "x": 640,
-                    "y": 360,
-                    "originX": 0.5,
-                    "originY": 0.5,
-                    "text": "START",
-                    "fontSize": "50px"
-                }
-            ]
+            "type": "Image",
+            "id": "e30612b7-2814-4981-81a5-ea18a793a551",
+            "label": "play_button",
+            "texture": {
+                "key": "play-button"
+            },
+            "x": 640,
+            "y": 457,
+            "scaleX": 4,
+            "scaleY": 4
         }
     ],
     "plainObjects": [],

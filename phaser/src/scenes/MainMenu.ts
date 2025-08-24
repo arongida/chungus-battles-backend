@@ -7,12 +7,12 @@
 /* END-USER-IMPORTS */
 
 export default class MainMenu extends Phaser.Scene {
+	private play_button: Phaser.GameObjects.Image;
 
 	constructor() {
 		super("MainMenu");
 
 		/* START-USER-CTR-CODE */
-		// Write your code here.
 		/* END-USER-CTR-CODE */
 	}
 
@@ -30,26 +30,14 @@ export default class MainMenu extends Phaser.Scene {
 		title.text = "Chungus Battles";
 		title.setStyle({  });
 
-		// container_1
-		const container_1 = this.add.container(0, 0);
-
-		// stoneButtonInsetHovered
-		const stoneButtonInsetHovered = this.add.image(640, 360, "stoneButtonInsetHovered");
-		container_1.add(stoneButtonInsetHovered);
-
-		// buttonText
-		const buttonText = this.add.text(640, 360, "", {});
-		buttonText.setOrigin(0.5, 0.5);
-		buttonText.text = "START";
-		buttonText.setStyle({ "fontSize": "50px" });
-		container_1.add(buttonText);
-
-		this.stoneButtonInsetHovered = stoneButtonInsetHovered;
+		// play_button
+		const play_button = this.add.image(640, 457, "play-button");
+		this.play_button = play_button;
+		play_button.scaleX = 4;
+		play_button.scaleY = 4;
 
 		this.events.emit("scene-awake");
 	}
-
-	private stoneButtonInsetHovered!: Phaser.GameObjects.Image;
 
 	/* START-USER-CODE */
 
@@ -58,6 +46,13 @@ export default class MainMenu extends Phaser.Scene {
 	create() {
 
 		this.editorCreate();
+		this.play_button.setInteractive({useHandCursor: true});
+		this.play_button.on("pointerdown", () => {
+			this.play_button.setTexture('play-button-pressed');
+		});
+		this.play_button.on("pointerup", () => {
+			this.play_button.setTexture('play-button');
+		});
 
 	}
 

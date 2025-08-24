@@ -2,24 +2,14 @@
     "section1": {
         "files": [
             {
-                "url": "assets/guapen.png",
+                "url": "assets/play-button.png",
                 "type": "image",
-                "key": "guapen"
+                "key": "play-button"
             },
             {
-                "url": "assets/stoneButtonFrame.png",
+                "url": "assets/play-button-pressed.png",
                 "type": "image",
-                "key": "stoneButtonFrame"
-            },
-            {
-                "url": "assets/stoneButtonInsetHovered.png",
-                "type": "image",
-                "key": "stoneButtonInsetHovered"
-            },
-            {
-                "url": "assets/stoneButtonInsetReady.png",
-                "type": "image",
-                "key": "stoneButtonInsetReady"
+                "key": "play-button-pressed"
             }
         ]
     },
