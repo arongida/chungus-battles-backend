@@ -27,6 +27,7 @@ export default class MainMenu extends Phaser.Scene {
 		try {
 			this.room = await this.client.joinOrCreate("draft_room");
 			console.log("Joined successfully!");
+			this.scene.start("DraftRoom", {room: this.room});
 
 		} catch (e) {
 			console.error(e);
