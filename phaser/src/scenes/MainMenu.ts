@@ -7,30 +7,42 @@
 /* END-USER-IMPORTS */
 
 import { Client, Room } from 'colyseus.js';
+import { DraftState } from '../../../src/rooms/schema/DraftState.ts';
 
 export default class MainMenu extends Phaser.Scene {
-	client = new Client(import.meta.env.VITE_BACKEND_URL);
+	client: Client;
 	room: Room;
 
 	private play_button: Phaser.GameObjects.Image;
 
 	constructor() {
 		super("MainMenu");
+		this.client = new Client(`${import.meta.env.VITE_BACKEND_URL}`);
 
 		/* START-USER-CTR-CODE */
 		/* END-USER-CTR-CODE */
 	}
-
 	async joinRoom() {
 		console.log("Joining room...");
 
 		try {
-			this.room = await this.client.joinOrCreate("draft_room");
+			this.room = await this.client.create('draft_room');
+			console.log('room', this.room);
+			console.log('client', this.client);
 			console.log("Joined successfully!");
+			this.room.onMessage('*', (type, message) => {
+				console.log('message: ', type, message);
+			});
+			this.room.onStateChange((state: DraftState) => {
+				console.log('state: ', state);
+				console.log(state.player.name);
+			})
 			this.scene.start("DraftRoom", {room: this.room});
 
 		} catch (e) {
 			console.error(e);
+
+
 		}
 	}
 

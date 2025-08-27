@@ -16,8 +16,8 @@
             "type": "Text",
             "id": "87968bc5-24b5-4310-a553-6db7e2479fcf",
             "label": "title",
-            "x": 573,
-            "y": 343.3515625,
+            "x": 524,
+            "y": 357,
             "text": "New text",
             "fontFamily": "alagard",
             "fontSize": "32px"
