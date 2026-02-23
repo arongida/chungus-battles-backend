@@ -39,6 +39,13 @@ export default config({
             res.status(200).send(players);
         });
 
+        app.get('/playerBuild', async (req, res) => {
+            const playerId = Number(req.query.playerId);
+            const player = await getPlayer(playerId);
+            if (!player) return res.status(404).send({error: 'Player not found'});
+            res.status(200).json(player);
+        });
+
         app.get('/rank', async (req, res) => {
             const playerId = Number(req.query.playerId);
             const rank = await getPlayerRank(playerId);
