@@ -3,8 +3,7 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {Item} from '../../items/schema/ItemSchema';
 import {IStats} from '../../common/types';
 import {TalentType} from '../../talents/types/TalentTypes';
-import {Client, Delayed} from 'colyseus';
-import ClockTimer from '@gamestdio/timer';
+import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 
@@ -173,7 +172,8 @@ export class Player extends Schema implements IStats {
     getItem(item: Item) {
         this.gold -= item.price;
         item.sold = true;
-        this.lockedShop = this.lockedShop.filter(filterItem => item !== filterItem);
+        const lockedIdx = this.lockedShop.indexOf(item);
+        if (lockedIdx !== -1) this.lockedShop.splice(lockedIdx, 1);
         this.inventory.push(item);
     }
 
@@ -194,7 +194,8 @@ export class Player extends Schema implements IStats {
 
         item.equipped = true;
         this.equippedItems.set(slot, item);
-        this.inventory = this.inventory.filter((filterItem) => filterItem !== item)
+        const invIdx = this.inventory.indexOf(item);
+        if (invIdx !== -1) this.inventory.splice(invIdx, 1);
 
     }
 
@@ -205,12 +206,38 @@ export class Player extends Schema implements IStats {
         this.equippedItems.delete(slot);
     }
 
-    setLockedShop(itemArraySchema: ArraySchema<Item>){
-        this.lockedShop = itemArraySchema.filter(item => !item.sold);
-        
+    setLockedShop(itemArraySchema: ArraySchema<Item>) {
+        this.lockedShop.clear();
+        itemArraySchema.forEach(item => {
+            if (!item.sold) this.lockedShop.push(item);
+        });
     }
 
-    unlockShop(){
-        this.lockedShop = new ArraySchema<Item>;
+    unlockShop() {
+        this.lockedShop.clear();
+    }
+
+    /**
+     * Copy all fields from source into this player WITHOUT replacing ArraySchema/MapSchema instances.
+     * Use this instead of assign(source) to avoid breaking client-side refId tracking.
+     */
+    copyFrom(source: Player) {
+        // Primitive and nested Schema fields (safe to assign directly)
+        const { inventory, talents, lockedShop, equippedItems, baseStats, ...primitives } = source.toJSON() as any;
+        this.assign(primitives);
+        this.baseStats.assign(baseStats || {});
+
+        // In-place copy for collection fields
+        this.inventory.clear();
+        source.inventory.forEach(item => this.inventory.push(item));
+
+        this.talents.clear();
+        source.talents.forEach(t => this.talents.push(t));
+
+        this.lockedShop.clear();
+        source.lockedShop.forEach(item => this.lockedShop.push(item));
+
+        this.equippedItems.clear();
+        source.equippedItems.forEach((item, key) => this.equippedItems.set(key, item));
     }
 }

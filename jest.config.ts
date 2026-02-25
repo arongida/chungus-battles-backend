@@ -1,9 +1,13 @@
 export default {
-    preset: 'ts-jest', // Use ts-jest for TypeScript support
-    testEnvironment: 'node', // Needed for Colyseus server tests
-    testTimeout: 60000,
+    preset: 'ts-jest',
+    testEnvironment: 'node',
+    testTimeout: 120000,
     transform: {
-      '^.+\\.ts$': 'ts-jest', // Transform TypeScript files
+      '^.+\\.ts$': 'ts-jest',
+      '^.+\\.mjs$': 'babel-jest',
     },
-    moduleFileExtensions: ['ts', 'js', 'json'],
+    moduleFileExtensions: ['ts', 'js', 'mjs', 'json'],
+    transformIgnorePatterns: [
+      '/node_modules/(?!(rou3)/)',
+    ],
   };

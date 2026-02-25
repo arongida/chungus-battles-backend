@@ -40,46 +40,58 @@ export async function getPlayer(playerId: number): Promise<Player> {
     return playerSchema ? getPlayerSchemaObject(playerSchema) : null;
 }
 
-function getPlayerSchemaObject(playerFromDb: Object): Player {
-    const newPlayerSchemaObject = new Player().assign(playerFromDb);
-    newPlayerSchemaObject.baseStats = new AffectedStats().assign(newPlayerSchemaObject.baseStats);
+function buildItemSchema(itemFromDb: any): Item {
+    const { affectedStats, setBonusStats, tags, equipOptions, itemCollections, _id, __v, ...primitives } = itemFromDb;
+    const item = new Item().assign(primitives);
+    item.affectedStats = new AffectedStats().assign(affectedStats || {});
+    item.setBonusStats = new AffectedStats().assign(setBonusStats || {});
+    const tagsArr = new ArraySchema<string>();
+    if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
+    item.tags = tagsArr;
+    const equipOptionsArr = new ArraySchema<string>();
+    if (equipOptions?.length) (equipOptions as string[]).forEach(e => equipOptionsArr.push(e));
+    (item as any).equipOptions = equipOptionsArr;
+    const itemCollectionsArr = new ArraySchema<number>();
+    if (itemCollections?.length) (itemCollections as number[]).forEach(c => itemCollectionsArr.push(c));
+    (item as any).itemCollections = itemCollectionsArr;
+    return item;
+}
+
+function getPlayerSchemaObject(playerFromDb: any): Player {
+    const { baseStats, equippedItems, talents, inventory, lockedShop, ...primitives } = playerFromDb;
+
+    const newPlayerSchemaObject = new Player().assign(primitives);
+    newPlayerSchemaObject.baseStats = new AffectedStats().assign(baseStats || {});
 
     const newPlayerEquippedItemsMapSchema = new MapSchema();
-    newPlayerSchemaObject.equippedItems.forEach((item, key) => {
-        const itemSchemaObject = new Item().assign(item);
-        itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
-        itemSchemaObject.setBonusStats = new AffectedStats().assign(item.setBonusStats);
-        newPlayerEquippedItemsMapSchema.set(key, itemSchemaObject);
-    })
+    if (equippedItems) {
+        const entries = equippedItems instanceof Map ? equippedItems.entries() : Object.entries(equippedItems);
+        for (const [key, rawItem] of entries) {
+            newPlayerEquippedItemsMapSchema.set(key, buildItemSchema(rawItem as any));
+        }
+    }
     newPlayerSchemaObject.equippedItems = newPlayerEquippedItemsMapSchema;
 
     const newPlayerTalentArraySchema = new ArraySchema();
-    newPlayerSchemaObject.talents.map((talent) => {
-        const talentSchemaObject = new Talent().assign(talent);
-        talentSchemaObject.affectedStats = new AffectedStats().assign(talent.affectedStats);
-        talentSchemaObject.affectedEnemyStats = new AffectedStats().assign(talent.affectedEnemyStats);
+    (talents || []).forEach((talent: any) => {
+        const { affectedStats: tAs, affectedEnemyStats: tAes, ...talentPrimitives } = talent;
+        const talentSchemaObject = new Talent().assign(talentPrimitives);
+        talentSchemaObject.affectedStats = new AffectedStats().assign(tAs || {});
+        talentSchemaObject.affectedEnemyStats = new AffectedStats().assign(tAes || {});
         newPlayerTalentArraySchema.push(talentSchemaObject);
-    })
+    });
     newPlayerSchemaObject.talents = newPlayerTalentArraySchema;
 
-
     const newPlayerInventoryArraySchema = new ArraySchema();
-    newPlayerSchemaObject.inventory.map((item) => {
-        const itemSchemaObject = new Item().assign(item);
-        itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
-        itemSchemaObject.setBonusStats = new AffectedStats().assign(item.setBonusStats);
-        newPlayerInventoryArraySchema.push(itemSchemaObject);
-    })
+    (inventory || []).forEach((item: any) => {
+        newPlayerInventoryArraySchema.push(buildItemSchema(item));
+    });
     newPlayerSchemaObject.inventory = newPlayerInventoryArraySchema;
 
     const newPlayerLockedShopArraySchema = new ArraySchema();
-    newPlayerSchemaObject.lockedShop.map((item) => {
-        const itemSchemaObject = new Item().assign(item);
-        itemSchemaObject.affectedStats = new AffectedStats().assign(item.affectedStats);
-        itemSchemaObject.setBonusStats = new AffectedStats().assign(item.setBonusStats);
-        newPlayerLockedShopArraySchema.push(itemSchemaObject);
-
-    })
+    (lockedShop || []).forEach((item: any) => {
+        newPlayerLockedShopArraySchema.push(buildItemSchema(item));
+    });
     newPlayerSchemaObject.lockedShop = newPlayerLockedShopArraySchema;
 
     return newPlayerSchemaObject;
