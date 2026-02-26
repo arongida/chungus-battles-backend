@@ -1,5 +1,5 @@
 import { ColyseusTestServer, boot } from "@colyseus/testing";
-import appConfig from "../src/app.config";
+import { server } from '../src/app.config';
 import { getNextPlayerId } from "../src/players/db/Player";
 import { FightResultType } from "../src/common/types";
 import { Item } from "../src/items/schema/ItemSchema";
@@ -12,7 +12,7 @@ describe("testing your Colyseus app", () => {
         await mongoose.connect(process.env.DB_CONNECTION_STRING!, {
             autoIndex: true,
         });
-        colyseus = await boot(appConfig);
+        colyseus = await boot(server);
     });
 
     afterAll(async () => {
