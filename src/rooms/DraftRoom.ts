@@ -17,7 +17,8 @@ import {UpdateItemRarityCommand} from "../commands/UpdateItemRarityCommand";
 import {UpdateActiveSets} from "../commands/UpdateActiveSets";
 import {ArraySchema} from "@colyseus/schema";
 
-export class DraftRoom extends Room<DraftState> {
+export class DraftRoom extends Room {
+    declare state: DraftState;
     maxClients = 1;
 
     dispatcher = new Dispatcher(this);
@@ -105,7 +106,8 @@ export class DraftRoom extends Room<DraftState> {
         if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
 
         //set quest items
-        this.state.questItems = await getQuestItems();
+        this.state.questItems.clear();
+        (await getQuestItems()).forEach(item => this.state.questItems.push(item));
 
         //shop start trigger
         this.dispatcher.dispatch(new ShopStartTriggerCommand());
@@ -118,9 +120,9 @@ export class DraftRoom extends Room<DraftState> {
         console.log('set up room finished!');
     }
 
-    async onLeave(client: Client, consented: boolean) {
+    async onLeave(client: Client, code: number) {
         try {
-            if (consented) {
+            if (code === 4000) {
                 throw new Error('consented leave');
             }
 
@@ -146,17 +148,13 @@ export class DraftRoom extends Room<DraftState> {
     private async updateShop(newShopSize: number) {
         const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level);
         const lockedShop = this.state.player.lockedShop;
-        if(lockedShop.length > 0){
-
-            this.state.shop = new ArraySchema<Item>();
-            lockedShop.forEach(item => {
-                this.state.shop.push(item);
-            })
-
+        if (lockedShop.length > 0) {
+            this.state.shop.clear();
+            lockedShop.forEach(item => this.state.shop.push(item));
             this.state.player.unlockShop();
-
-        }else if(this.state.shop.length < 6) {
-            this.state.shop = shopFromDb;
+        } else if (this.state.shop.length < 6) {
+            this.state.shop.clear();
+            shopFromDb.forEach(item => this.state.shop.push(item));
         }
 
         this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
@@ -193,7 +191,7 @@ export class DraftRoom extends Room<DraftState> {
 
     //get player, enemy, items and talents from db and map them to the room state
     private async setUpState(player: Player, client: Client) {
-        this.state.player.assign(player);
+        this.state.player.copyFrom(player);
 
         let highestTalentTier;
         if (this.state.player.talents.length > 0) {

@@ -34,10 +34,11 @@ export async function getRandomTalents(
   })
 }
 
-function getTalentSchemaObject(talentObjectFromDb: Object): Talent {
-  const newTalent = new Talent().assign(talentObjectFromDb);
-  newTalent.affectedStats = new AffectedStats();
-  newTalent.affectedEnemyStats = new AffectedStats();
+function getTalentSchemaObject(talentObjectFromDb: any): Talent {
+  const { affectedStats, affectedEnemyStats, ...primitives } = talentObjectFromDb;
+  const newTalent = new Talent().assign(primitives);
+  newTalent.affectedStats = new AffectedStats().assign(affectedStats || {});
+  newTalent.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
   return newTalent;
 }
 

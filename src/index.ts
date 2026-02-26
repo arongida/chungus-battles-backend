@@ -9,6 +9,7 @@
  * See: https://docs.colyseus.io/server/api/#constructor-options
  */
 import { listen } from '@colyseus/tools';
+import { server } from './app.config';
 import mongoose from 'mongoose';
 
 /**
@@ -19,8 +20,5 @@ mongoose.connect(process.env.DB_CONNECTION_STRING, {
   autoIndex: true,
 });
 
-// Import Colyseus config
-import app from './app.config';
-
 // Create and listen on 2567 (or PORT environment variable.)
-listen(app);
+listen(server);

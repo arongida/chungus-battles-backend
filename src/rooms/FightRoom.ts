@@ -17,7 +17,8 @@ import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerComm
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 import {OnDodgeTriggerCommand} from "../commands/triggers/OnDodgeTriggerCommand";
 
-export class FightRoom extends Room<FightState> {
+export class FightRoom extends Room {
+    declare state: FightState;
     maxClients = 1;
 
     dispatcher = new Dispatcher(this);
@@ -67,7 +68,8 @@ export class FightRoom extends Room<FightState> {
         this.state.player.sessionId = client.sessionId;
 
         //set up initial room state
-        this.state.questItems = await getQuestItems();
+        this.state.questItems.clear();
+        (await getQuestItems()).forEach(item => this.state.questItems.push(item));
         // this.state.availableItemCollections = await getAllItemCollections();
 
         //start battle after 5 seconds
@@ -87,9 +89,9 @@ export class FightRoom extends Room<FightState> {
         }, 5500);
     }
 
-    async onLeave(client: Client, consented: boolean) {
+    async onLeave(client: Client, code: number) {
         try {
-            if (consented) {
+            if (code === 4000) {
                 throw new Error('consented leave');
             }
 
@@ -281,11 +283,10 @@ export class FightRoom extends Room<FightState> {
 
     //get player, enemy and talents from db and map them to the room state
     async setUpState(player: Player, isEnemy = false) {
-
         if (!isEnemy) {
-            this.state.player.assign(player);
+            this.state.player.copyFrom(player);
         } else {
-            this.state.enemy.assign(player);
+            this.state.enemy.copyFrom(player);
         }
     }
 

@@ -28,7 +28,7 @@ export const itemModel = mongoose.model('Item', ItemSchema);
 export async function getNumberOfItems(
     numberOfItems: number,
     levelRequirement: number
-): Promise<ArraySchema<Item>> {
+): Promise<Item[]> {
     const itemArrayFromDb = await itemModel.aggregate([
         {
             $match: {
@@ -41,23 +41,27 @@ export async function getNumberOfItems(
         {$sample: {size: numberOfItems}},
     ]);
 
-    const itemArraySchema = new ArraySchema();
-    itemArrayFromDb.forEach(item => {
-        const itemSchemaObject = getItemSchemaObject(item);
-        itemArraySchema.push(itemSchemaObject);
-    })
-
-    return itemArraySchema;
+    return itemArrayFromDb.map(item => getItemSchemaObject(item));
 }
 
-function getItemSchemaObject(itemFromDb: Object): Item {
+function getItemSchemaObject(itemFromDb: any): Item {
+    const { affectedStats, setBonusStats, tags, equipOptions, itemCollections, _id, __v, ...primitives } = itemFromDb;
 
-    const newItemSchemaObject = new Item().assign(itemFromDb);
-    newItemSchemaObject.affectedStats = new AffectedStats().assign(newItemSchemaObject.affectedStats);
-    newItemSchemaObject.setBonusStats = new AffectedStats().assign(newItemSchemaObject.setBonusStats);
+    const newItemSchemaObject = new Item().assign(primitives);
+    newItemSchemaObject.affectedStats = new AffectedStats().assign(affectedStats || {});
+    newItemSchemaObject.setBonusStats = new AffectedStats().assign(setBonusStats || {});
+
+    const tagsArr = new ArraySchema<string>();
+    if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
+    newItemSchemaObject.tags = tagsArr;
+    const equipOptionsArr = new ArraySchema<string>();
+    if (equipOptions?.length) (equipOptions as string[]).forEach(e => equipOptionsArr.push(e));
+    (newItemSchemaObject as any).equipOptions = equipOptionsArr;
+    const itemCollectionsArr = new ArraySchema<number>();
+    if (itemCollections?.length) (itemCollections as number[]).forEach(c => itemCollectionsArr.push(c));
+    (newItemSchemaObject as any).itemCollections = itemCollectionsArr;
 
     return newItemSchemaObject;
-
 }
 
 export async function getItemById(itemId: number): Promise<Item> {
@@ -68,17 +72,11 @@ export async function getItemById(itemId: number): Promise<Item> {
     return getItemSchemaObject(itemFromDb);
 }
 
-export async function getQuestItems(): Promise<ArraySchema<Item>> {
+export async function getQuestItems(): Promise<Item[]> {
     const itemArrayFromDb = await itemModel
         .find({tier: ItemTier.QUEST_TIER_1})
         .lean()
         .select({_id: 0, __v: 0});
 
-    const itemArraySchema = new ArraySchema();
-    itemArrayFromDb.forEach(item => {
-        const itemSchemaObject = getItemSchemaObject(item);
-        itemArraySchema.push(itemSchemaObject);
-    })
-
-    return itemArraySchema;
+    return itemArrayFromDb.map(item => getItemSchemaObject(item));
 }

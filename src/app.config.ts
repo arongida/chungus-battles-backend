@@ -1,4 +1,4 @@
-import config from '@colyseus/tools';
+import {defineServer, defineRoom} from "colyseus"
 import {monitor} from '@colyseus/monitor';
 import {playground} from '@colyseus/playground';
 import cors from 'cors';
@@ -10,16 +10,16 @@ import {FightRoom} from './rooms/FightRoom';
 import {DraftRoom} from './rooms/DraftRoom';
 import {getNextPlayerId, getPlayer, getPlayerRank, getTopPlayers} from './players/db/Player';
 
-export default config({
-    initializeGameServer: (gameServer) => {
-        /**
-         * Define your room handlers:
-         */
-        gameServer.define('fight_room', FightRoom);
-        gameServer.define('draft_room', DraftRoom);
+export const server = defineServer({
+
+    devMode: true,
+
+    rooms: {
+        draft_room: defineRoom(DraftRoom),
+        fight_room: defineRoom(FightRoom)
     },
 
-    initializeExpress: (app) => {
+    express: (app) => {
 
         app.use(cors());
 
@@ -58,7 +58,7 @@ export default config({
          * (It is not recommended to expose this route in a production environment)
          */
         if (process.env.NODE_ENV !== 'production') {
-            app.use('/', playground);
+            app.use('/', playground());
         }
 
         /**

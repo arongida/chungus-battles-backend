@@ -25,7 +25,8 @@ export class UpdateItemRarityCommand extends Command<
                 equippedItem.affectedStats.mergeInto(mergeWith.affectedStats);
                 equippedItem.setBonusStats.mergeInto(mergeWith.setBonusStats);
                 equippedItem.price += mergeWith.price;
-                player.inventory = player.inventory.filter(item => item !== mergeWith);
+                const idx1 = player.inventory.indexOf(mergeWith);
+                if (idx1 !== -1) player.inventory.splice(idx1, 1);
                 player.equippedItems.set(slot, equippedItem);
             }
         })
@@ -38,7 +39,8 @@ export class UpdateItemRarityCommand extends Command<
                 item.affectedStats.mergeInto(mergeWith.affectedStats);
                 item.setBonusStats.mergeInto(mergeWith.setBonusStats);
                 item.price += mergeWith.price;
-                player.inventory = player.inventory.filter(filterItem => filterItem !== mergeWith);
+                const idx2 = player.inventory.indexOf(mergeWith);
+                if (idx2 !== -1) player.inventory.splice(idx2, 1);
             }
         })
 
