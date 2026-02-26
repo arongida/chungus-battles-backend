@@ -20,17 +20,26 @@ describe("testing your Colyseus app", () => {
         mongoose.disconnect();
     });
 
-    beforeEach(async () => {
+    afterEach(async () => {
         await colyseus.cleanup();
     });
 
     async function createAndJoinDraftRoom(name = "Test Player") {
         const playerId = await getNextPlayerId();
-        const room = await colyseus.createRoom("draft_room", {});
+        const room :DraftRoom = await colyseus.createRoom("draft_room", {});
         const client = await colyseus.connectTo(room, { playerId, name, avatarUrl: "test_avatar" });
         // Wait for onJoin to complete (DB load, shop, state setup)
         await new Promise<void>(r => setTimeout(r, 500));
-        return { room, client, playerId };
+
+
+        async function cleanExit() {
+            await client.leave();
+            await new Promise<void>((resolve) => {
+                room.onDispose(() => resolve());
+            });
+        }
+
+        return { room, client, playerId, cleanExit };
     }
 
     // -------------------------------------------------------------------------
@@ -38,7 +47,7 @@ describe("testing your Colyseus app", () => {
     // -------------------------------------------------------------------------
 
     it("connects, creates new player, buys an item, and selects a talent", async () => {
-        const { room, client } = await createAndJoinDraftRoom("Mocked Player");
+        const { room, client, cleanExit } = await createAndJoinDraftRoom("Mocked Player");
 
         const selectedItemId = room.state.shop[0].itemId;
         const selectedTalentId = room.state.availableTalents[0].talentId;
@@ -55,7 +64,7 @@ describe("testing your Colyseus app", () => {
     });
 
     it("buying an item deducts gold and adds it to inventory", async () => {
-        const { room, client } = await createAndJoinDraftRoom();
+        const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
         const item = room.state.shop[0];
         const goldBefore = room.state.player.gold;
@@ -66,10 +75,12 @@ describe("testing your Colyseus app", () => {
         expect(room.state.player.gold).toBe(goldBefore - item.price);
         expect(room.state.player.inventory.length).toBe(1);
         expect(room.state.player.inventory[0].itemId).toBe(item.itemId);
+
+        await cleanExit();
     });
 
     it("selling an item refunds 70% of its price", async () => {
-        const { room, client } = await createAndJoinDraftRoom();
+        const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
         const item = room.state.shop[0];
         const goldBefore = room.state.player.gold;
@@ -83,10 +94,12 @@ describe("testing your Colyseus app", () => {
         const expectedGold = (goldBefore - item.price) + Math.floor(item.price * 0.7);
         expect(room.state.player.gold).toBe(expectedGold);
         expect(room.state.player.inventory.length).toBe(0);
+
+        await cleanExit();
     });
 
     it("equipping an item moves it from inventory to equipped slot", async () => {
-        const { room, client } = await createAndJoinDraftRoom();
+        const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
         // Find a shop item that has equip options
         const equippable = room.state.shop.find((i: Item) => i.equipOptions && (i.equipOptions as any).length > 0);
@@ -103,10 +116,12 @@ describe("testing your Colyseus app", () => {
         expect(room.state.player.inventory.length).toBe(0);
         expect(room.state.player.equippedItems.get(slot)).toBeDefined();
         expect(room.state.player.equippedItems.get(slot).itemId).toBe(equippable.itemId);
+
+        await cleanExit();
     });
 
     it("unequipping an item moves it back to inventory", async () => {
-        const { room, client } = await createAndJoinDraftRoom();
+        const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
         const equippable = room.state.shop.find((i: Item) => i.equipOptions && (i.equipOptions as any).length > 0);
         expect(equippable).toBeDefined();
@@ -122,10 +137,12 @@ describe("testing your Colyseus app", () => {
 
         expect(room.state.player.inventory.length).toBe(1);
         expect(room.state.player.equippedItems.get(slot)).toBeUndefined();
+
+        await cleanExit();
     });
 
     it("buying XP costs 4 gold and grants 4 XP", async () => {
-        const { room, client } = await createAndJoinDraftRoom();
+        const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
         const xpBefore = room.state.player.xp;
         const goldBefore = room.state.player.gold;
@@ -135,10 +152,12 @@ describe("testing your Colyseus app", () => {
 
         expect(room.state.player.xp).toBe(xpBefore + 4);
         expect(room.state.player.gold).toBe(goldBefore - 4);
+
+        await cleanExit();
     });
 
     it("refreshing the shop replaces items and costs gold", async () => {
-        const { room, client } = await createAndJoinDraftRoom();
+        const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
         const goldBefore = room.state.player.gold;
         const refreshCost = room.state.player.refreshShopCost;
@@ -150,10 +169,12 @@ describe("testing your Colyseus app", () => {
         expect(room.state.player.gold).toBe(goldBefore - refreshCost);
         // Shop should have been replaced (at least one item is different or same length maintained)
         expect(room.state.shop.length).toBeGreaterThan(0);
+
+        await cleanExit();
     });
 
     it("selecting a talent reduces remainingTalentPoints by 1", async () => {
-        const { room, client } = await createAndJoinDraftRoom();
+        const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
         const pointsBefore = room.state.remainingTalentPoints;
         expect(pointsBefore).toBeGreaterThan(0);
@@ -165,6 +186,8 @@ describe("testing your Colyseus app", () => {
         expect(room.state.remainingTalentPoints).toBe(pointsBefore - 1);
         expect(room.state.player.talents.length).toBe(1);
         expect(room.state.player.talents[0].talentId).toBe(talent.talentId);
+
+        await cleanExit();
     });
 
     // -------------------------------------------------------------------------
@@ -220,6 +243,8 @@ describe("testing your Colyseus app", () => {
         const expectedGoldReward = initialRound + 3 + fightRoom.state.player.income;
         expect(fightRoom.state.player.gold).toBe(goldAtFightStart + expectedGoldReward);
         expect(fightRoom.state.player.xp).toBe(xpAtFightStart + initialRound * 2);
+
+        await fightClient.leave()
     }, 90000);
 
     it("fight room: player HP decreases during combat", async () => {
@@ -229,7 +254,7 @@ describe("testing your Colyseus app", () => {
         await new Promise<void>(r => setTimeout(r, 3000));
 
         const fightRoom = await colyseus.createRoom("fight_room", {});
-        await colyseus.connectTo(fightRoom, { playerId });
+        const fightClient = await colyseus.connectTo(fightRoom, { playerId });
         await new Promise<void>(r => setTimeout(r, 500));
 
         const playerMaxHp = fightRoom.state.player.maxHp;
