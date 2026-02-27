@@ -1,6 +1,6 @@
 import {Client} from 'colyseus';
 import {Player} from '../players/schema/PlayerSchema';
-import ClockTimer from '@gamestdio/timer';
+import { ClockTimer } from '@colyseus/timer';
 import {Item} from '../items/schema/ItemSchema';
 import {ArraySchema} from '@colyseus/schema';
 import {Talent} from '../talents/schema/TalentSchema';
