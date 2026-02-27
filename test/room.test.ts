@@ -34,9 +34,6 @@ describe("testing your Colyseus app", () => {
 
         async function cleanExit() {
             await client.leave(true);
-            await new Promise<void>((resolve) => {
-                room.onDispose(() => resolve());
-            });
         }
 
         return { room, client, playerId, cleanExit };
