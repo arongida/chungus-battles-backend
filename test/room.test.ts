@@ -218,10 +218,13 @@ describe("testing your Colyseus app", () => {
         await new Promise<void>(r => setTimeout(r, 6000));
         expect(fightRoom.state.battleStarted).toBe(true);
 
-        // 6. Wait for the battle to conclude (poll for fightResult)
+        // 6. Wait for the battle to conclude AND for rewards to be applied.
+        // fightResult is set synchronously, but for WIN results handleWin() awaits
+        // a DB call (getHighestWin) before gold/XP are added — so we must poll for
+        // both fightResult and the gold increase together.
         await new Promise<void>((resolve, reject) => {
             const poll = setInterval(() => {
-                if (fightRoom.state.fightResult) {
+                if (fightRoom.state.fightResult && fightRoom.state.player.gold > goldAtFightStart) {
                     clearInterval(poll);
                     resolve();
                 }
