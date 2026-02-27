@@ -33,7 +33,7 @@ describe("testing your Colyseus app", () => {
 
 
         async function cleanExit() {
-            await client.leave();
+            await client.leave(4000);
             await new Promise<void>((resolve) => {
                 room.onDispose(() => resolve());
             });
@@ -200,7 +200,7 @@ describe("testing your Colyseus app", () => {
         const initialRound = draftRoom.state.player.round;
 
         // 2. Leave draft room — triggers copyPlayer + updatePlayer (saves to DB with sessionId='')
-        draftClient.leave();
+        draftClient.leave(4000);
         await new Promise<void>(r => setTimeout(r, 3000));
 
         // 3. Join fight room
@@ -244,13 +244,13 @@ describe("testing your Colyseus app", () => {
         expect(fightRoom.state.player.gold).toBe(goldAtFightStart + expectedGoldReward);
         expect(fightRoom.state.player.xp).toBe(xpAtFightStart + initialRound * 2);
 
-        await fightClient.leave()
+        await fightClient.leave(4000)
     }, 90000);
 
     it("fight room: player HP decreases during combat", async () => {
         const { client: draftClient, playerId } = await createAndJoinDraftRoom("HPChecker");
 
-        draftClient.leave();
+        draftClient.leave(4000);
         await new Promise<void>(r => setTimeout(r, 3000));
 
         const fightRoom = await colyseus.createRoom("fight_room", {});
@@ -273,7 +273,7 @@ describe("testing your Colyseus app", () => {
     it("fight room: win increments player wins, lose decrements player lives", async () => {
         const { client: draftClient, playerId } = await createAndJoinDraftRoom("WinLoseChecker");
 
-        draftClient.leave();
+        draftClient.leave(4000);
         await new Promise<void>(r => setTimeout(r, 3000));
 
         const fightRoom = await colyseus.createRoom("fight_room", {});
