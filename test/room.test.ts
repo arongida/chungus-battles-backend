@@ -26,17 +26,14 @@ describe("testing your Colyseus app", () => {
 
     async function createAndJoinDraftRoom(name = "Test Player") {
         const playerId = await getNextPlayerId();
-        const room :DraftRoom = await colyseus.createRoom("draft_room", {});
+        const room = await colyseus.createRoom("draft_room", {});
         const client = await colyseus.connectTo(room, { playerId, name, avatarUrl: "test_avatar" });
         // Wait for onJoin to complete (DB load, shop, state setup)
         await new Promise<void>(r => setTimeout(r, 500));
 
 
         async function cleanExit() {
-            await client.leave(4000);
-            await new Promise<void>((resolve) => {
-                room.onDispose(() => resolve());
-            });
+            await client.leave(true);
         }
 
         return { room, client, playerId, cleanExit };
@@ -200,7 +197,7 @@ describe("testing your Colyseus app", () => {
         const initialRound = draftRoom.state.player.round;
 
         // 2. Leave draft room — triggers copyPlayer + updatePlayer (saves to DB with sessionId='')
-        draftClient.leave(4000);
+        draftClient.leave(true);
         await new Promise<void>(r => setTimeout(r, 3000));
 
         // 3. Join fight room
@@ -221,10 +218,13 @@ describe("testing your Colyseus app", () => {
         await new Promise<void>(r => setTimeout(r, 6000));
         expect(fightRoom.state.battleStarted).toBe(true);
 
-        // 6. Wait for the battle to conclude (poll for fightResult)
+        // 6. Wait for the battle to conclude AND for rewards to be applied.
+        // fightResult is set synchronously, but for WIN results handleWin() awaits
+        // a DB call (getHighestWin) before gold/XP are added — so we must poll for
+        // both fightResult and the gold increase together.
         await new Promise<void>((resolve, reject) => {
             const poll = setInterval(() => {
-                if (fightRoom.state.fightResult) {
+                if (fightRoom.state.fightResult && fightRoom.state.player.gold > goldAtFightStart) {
                     clearInterval(poll);
                     resolve();
                 }
@@ -244,13 +244,13 @@ describe("testing your Colyseus app", () => {
         expect(fightRoom.state.player.gold).toBe(goldAtFightStart + expectedGoldReward);
         expect(fightRoom.state.player.xp).toBe(xpAtFightStart + initialRound * 2);
 
-        await fightClient.leave(4000)
+        await fightClient.leave(true)
     }, 90000);
 
     it("fight room: player HP decreases during combat", async () => {
         const { client: draftClient, playerId } = await createAndJoinDraftRoom("HPChecker");
 
-        draftClient.leave(4000);
+        draftClient.leave(true);
         await new Promise<void>(r => setTimeout(r, 3000));
 
         const fightRoom = await colyseus.createRoom("fight_room", {});
@@ -273,7 +273,7 @@ describe("testing your Colyseus app", () => {
     it("fight room: win increments player wins, lose decrements player lives", async () => {
         const { client: draftClient, playerId } = await createAndJoinDraftRoom("WinLoseChecker");
 
-        draftClient.leave(4000);
+        draftClient.leave(true);
         await new Promise<void>(r => setTimeout(r, 3000));
 
         const fightRoom = await colyseus.createRoom("fight_room", {});
