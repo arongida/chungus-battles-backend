@@ -4,9 +4,23 @@ on:
     branches:
       - main # change to main if needed
 jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    env:
+      DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm test
+
   deploy:
     name: Deploy app
     runs-on: ubuntu-latest
+    needs: test
     concurrency: deploy-group # optional: ensure only one action runs at a time
     steps:
       - uses: actions/checkout@v4
