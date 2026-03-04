@@ -161,15 +161,21 @@ export class DraftRoom extends Room {
     }
 
     private async handleRefreshTalentSelection(client: Client) {
-        const price = this.state.player.level * 2;
+        const price = this.state.hasFreeTalentReroll ? 0 : this.state.player.level * 2;
         if (this.state.player.gold < price) {
             client.send('error', 'Not enough gold!');
         } else if (this.state.remainingTalentPoints === 0) {
             client.send('error', 'No talent points left!');
         } else {
             this.state.player.gold -= price;
+            this.state.hasFreeTalentReroll = false;
+            this.updateTalentRerollCost();
             await this.updateTalentSelection();
         }
+    }
+
+    private updateTalentRerollCost() {
+        this.state.talentRerollCost = this.state.hasFreeTalentReroll ? 0 : this.state.player.level * 2;
     }
 
     private async updateTalentSelection() {
@@ -201,6 +207,8 @@ export class DraftRoom extends Room {
         }
 
         this.state.remainingTalentPoints = player.level - highestTalentTier;
+        this.state.hasFreeTalentReroll = this.state.remainingTalentPoints > 0;
+        this.updateTalentRerollCost();
         await this.updateTalentSelection();
 
         this.state.player.sessionId = client.sessionId;
@@ -263,6 +271,8 @@ export class DraftRoom extends Room {
         if (talent) {
             this.state.player.talents.push(talent);
             this.state.remainingTalentPoints--;
+            this.state.hasFreeTalentReroll = this.state.remainingTalentPoints > 0;
+            this.updateTalentRerollCost();
             await this.updateTalentSelection();
         }
     }
@@ -282,6 +292,8 @@ export class DraftRoom extends Room {
         if (this.state.player.xp >= this.state.player.maxXp) {
             await this.levelUp(this.state.player.xp - this.state.player.maxXp);
             this.state.remainingTalentPoints++;
+            this.state.hasFreeTalentReroll = true;
+            this.updateTalentRerollCost();
             await this.updateTalentSelection();
         }
     }
