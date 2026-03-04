@@ -12,6 +12,8 @@ export class DraftState extends Schema {
     @type('number') shopSize: number = 6;
     @type('number') shopRefreshCost: number = 2;
     @type('number') remainingTalentPoints: number = 0;
+    @type('boolean') hasFreeTalentReroll: boolean = false;
+    @type('number') talentRerollCost: number = 0;
     @type([Item]) questItems: ArraySchema<Item> = new ArraySchema<Item>();
     playerClient: Client;
 }

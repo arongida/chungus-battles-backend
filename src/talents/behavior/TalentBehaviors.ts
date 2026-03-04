@@ -231,7 +231,7 @@ export const TalentBehaviors = {
 
         [TalentType.GOLD_GENIE]: (context: TalentBehaviorContext) => {
             const {attacker, client, talent} = context;
-            talent.affectedStats.defense = attacker.gold * 2;
+            talent.affectedStats.defense = attacker.gold * talent.activationRate;
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.GOLD_GENIE,
@@ -496,29 +496,40 @@ export const TalentBehaviors = {
 
         [TalentType.GAMBLER]:
             (context: TalentBehaviorContext) => {
-                const {attacker, defender, client, commandDispatcher} = context;
-                const offHandItem = attacker.equippedItems.get(EquipSlot.OFF_HAND);
+                const {attacker, defender, client, questItems, commandDispatcher} = context;
 
-                if (offHandItem) {
-                    attacker.setItemUnequipped(offHandItem, EquipSlot.OFF_HAND);
+                if (
+                    !attacker.inventory.find((item) => item.itemId === 703) &&
+                    !(attacker.equippedItems.get(EquipSlot.OFF_HAND)?.itemId === 703)
+                ) {
+                    const diceItem = questItems?.find((item) => item.itemId === 703);
+                    if (diceItem) {
+                        attacker.getItem(diceItem);
+                        client.send('draft_log', `${attacker.name} found a gambler's dice!`);
+                        client.send('trigger_talent', {
+                            playerId: attacker.playerId,
+                            talentId: TalentType.GAMBLER,
+                        });
+                    }
                 }
 
-                const initialDamage = rollTheDice(1, 6) + attacker.income;
-                const damage = defender.getDamageAfterDefense(initialDamage);
+                if (defender && attacker.equippedItems.get(EquipSlot.OFF_HAND)?.itemId === 703) {
+                    const initialDamage = rollTheDice(1, 1 + attacker.income);
+                    const damage = defender.getDamageAfterDefense(initialDamage);
 
-                commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-                    defender: defender,
-                    damage: damage,
-                    attacker: attacker,
-                });
+                    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+                        defender: defender,
+                        damage: damage,
+                        attacker: attacker,
+                    });
 
-                defender.takeDamage(damage, client);
-
-                client.send('combat_log', `${attacker.name} rolls the dice and deals ${damage} damage!`);
-                client.send('trigger_talent', {
-                    playerId: attacker.playerId,
-                    talentId: TalentType.GAMBLER,
-                });
+                    defender.takeDamage(damage, client);
+                    client.send('combat_log', `${attacker.name} rolls the dice and deals ${damage} damage!`);
+                    client.send('trigger_talent', {
+                        playerId: attacker.playerId,
+                        talentId: TalentType.GAMBLER,
+                    });
+                }
             },
 
         [TalentType.MAGIC_RING_WEAPON]:
@@ -637,7 +648,7 @@ export const TalentBehaviors = {
         [TalentType.MERCHANT_1]:
             (context: TalentBehaviorContext) => {
                 const {attacker, client, talent, shop} = context;
-                const discount = talent.base;
+                const discount = talent.base * attacker.level;
                 shop?.forEach((item) => {
                     item.price -= discount;
                 });
