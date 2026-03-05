@@ -4,6 +4,7 @@ import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
 import {BehaviorContext} from '../../common/BehaviorContext';
+import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class FightStartTriggerCommand extends Command<FightRoom> {
     execute() {
@@ -32,5 +33,6 @@ export class FightStartTriggerCommand extends Command<FightRoom> {
             }
         });
 
+        triggerEquippedItems(player, fightStartContext, TriggerType.FIGHT_START);
     }
 }

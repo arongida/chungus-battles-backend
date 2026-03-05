@@ -3,6 +3,7 @@ import {DraftRoom} from '../../rooms/DraftRoom';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {TalentBehaviorContext} from '../../talents/behavior/TalentBehaviorContext';
 import {TriggerType} from '../../common/types';
+import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class LevelUpTriggerCommand extends Command<
     DraftRoom
@@ -25,5 +26,7 @@ export class LevelUpTriggerCommand extends Command<
                 console.error(e);
             }
         });
+
+        triggerEquippedItems(this.state.player, onLevelUpTalentsContext, TriggerType.LEVEL_UP);
     }
 }

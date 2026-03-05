@@ -3,6 +3,7 @@ import {DraftRoom} from '../../rooms/DraftRoom';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {TriggerType} from '../../common/types';
 import {BehaviorContext} from "../../common/BehaviorContext";
+import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class ShopStartTriggerCommand extends Command<DraftRoom> {
     execute() {
@@ -23,6 +24,8 @@ export class ShopStartTriggerCommand extends Command<DraftRoom> {
                 console.error(e);
             }
         });
+
+        triggerEquippedItems(this.state.player, onShopStartTalentsContext, TriggerType.SHOP_START);
         this.room.checkLevelUp();
     }
 }

@@ -23,6 +23,7 @@ export class UpdateStatsCommand extends Command<
         const previousHp = player.hp ?? player.maxHp;
         const damageTaken = previousMaxHp - previousHp;
 
+        player.attackSpeedMultiplier = 1;
 
         this.setStats(player, player.baseStats);
 
@@ -39,6 +40,7 @@ export class UpdateStatsCommand extends Command<
             })
         }
 
+        player.attackSpeed = player.attackSpeedMultiplier;
         player.hp = player.maxHp - damageTaken;
     }
 
@@ -48,8 +50,8 @@ export class UpdateStatsCommand extends Command<
             player.strength += affectedStats.strength;
             player.accuracy += affectedStats.accuracy;
             player.defense += affectedStats.defense;
-            if (affectedStats.attackSpeed !== 0) {
-                player.attackSpeed += ((player.baseStats.attackSpeed * (affectedStats.attackSpeed) - player.baseStats.attackSpeed));
+            if (affectedStats.attackSpeed !== 0 && affectedStats.attackSpeed !== 1) {
+                player.attackSpeedMultiplier *= affectedStats.attackSpeed;
             }
             player.dodgeRate += affectedStats.dodgeRate;
             player.flatDmgReduction += affectedStats.flatDmgReduction;
@@ -70,6 +72,7 @@ export class UpdateStatsCommand extends Command<
             player.maxHp = affectedStats.maxHp;
             player.defense = affectedStats.defense;
             player.attackSpeed = affectedStats.attackSpeed;
+            player.attackSpeedMultiplier = affectedStats.attackSpeed;
             player.dodgeRate = affectedStats.dodgeRate;
             player.flatDmgReduction = affectedStats.flatDmgReduction;
             player.income = affectedStats.income;

@@ -31,13 +31,14 @@ export class Player extends Schema implements IStats {
     @type('number') private _hp: number = 0;
     @type(AffectedStats) baseStats: AffectedStats = new AffectedStats();
     damage: number = 0;
-    attackTimer: Delayed;
+    attackTimers: Map<string, Delayed> = new Map();
     poisonTimer: Delayed;
     regenTimer: Delayed;
     invincibleTimer: Delayed;
     talentsOnCooldown: TalentType[] = [];
     invincible: boolean = false;
     rewardRound: number;
+    attackSpeedMultiplier: number = 1;
 
 
     get hp(): number {
@@ -122,6 +123,11 @@ export class Player extends Schema implements IStats {
         } else {
             this._poisonStack = value;
         }
+    }
+
+    clearAllAttackTimers() {
+        this.attackTimers.forEach((timer) => timer.clear());
+        this.attackTimers.clear();
     }
 
     setInvincible(clock: ClockTimer, invincibleLenghtMS: number) {

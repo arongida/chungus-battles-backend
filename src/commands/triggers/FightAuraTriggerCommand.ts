@@ -35,5 +35,19 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
                 }, 1000)
             );
         });
+
+        player.equippedItems.forEach((item) => {
+            if (item.triggerTypes?.includes(TriggerType.AURA)) {
+                this.state.skillsTimers.push(
+                    this.clock.setInterval(() => {
+                        try {
+                            item.executeBehavior(behaviorContext);
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }, 1000)
+                );
+            }
+        });
     }
 }

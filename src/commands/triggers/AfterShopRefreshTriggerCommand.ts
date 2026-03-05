@@ -3,6 +3,7 @@ import {DraftRoom} from '../../rooms/DraftRoom';
 import {TriggerType} from '../../common/types';
 import {Talent} from "../../talents/schema/TalentSchema";
 import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContext";
+import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class AfterShopRefreshTriggerCommand extends Command<
     DraftRoom
@@ -25,5 +26,7 @@ export class AfterShopRefreshTriggerCommand extends Command<
                 console.error(e);
             }
         });
+
+        triggerEquippedItems(this.state.player, onShopRefreshTalentContext, TriggerType.AFTER_REFRESH);
     }
 }
