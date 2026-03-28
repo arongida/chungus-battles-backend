@@ -1,6 +1,8 @@
+/.env
 /.env.development
 /.env.production
 /.env.test
+/.env.local
 /node_modules
 /build
 /config*
@@ -8,3 +10,7 @@
 /.vscode/
 /.idea/
 /scripts/linux/dump
+/.DS_Store
+*.log
+npm-debug.log*
+.claude/
