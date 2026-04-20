@@ -496,7 +496,7 @@ export const TalentBehaviors = {
 
         [TalentType.GAMBLER]:
             (context: TalentBehaviorContext) => {
-                const {attacker, defender, client, questItems, commandDispatcher} = context;
+                const {attacker, client, questItems} = context;
 
                 if (
                     !attacker.inventory.find((item) => item.itemId === 703) &&
@@ -512,29 +512,11 @@ export const TalentBehaviors = {
                         });
                     }
                 }
-
-                if (defender && attacker.equippedItems.get(EquipSlot.OFF_HAND)?.itemId === 703) {
-                    const initialDamage = rollTheDice(1, 1 + attacker.income);
-                    const damage = defender.getDamageAfterDefense(initialDamage);
-
-                    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-                        defender: defender,
-                        damage: damage,
-                        attacker: attacker,
-                    });
-
-                    defender.takeDamage(damage, client);
-                    client.send('combat_log', `${attacker.name} rolls the dice and deals ${damage} damage!`);
-                    client.send('trigger_talent', {
-                        playerId: attacker.playerId,
-                        talentId: TalentType.GAMBLER,
-                    });
-                }
             },
 
         [TalentType.MAGIC_RING_WEAPON]:
             (context: TalentBehaviorContext) => {
-                const {attacker, defender, client, questItems, commandDispatcher} = context;
+                const {attacker, client, questItems} = context;
 
                 if (
                     !attacker.inventory.find((item) => item.itemId === 702) &&
@@ -549,27 +531,6 @@ export const TalentBehaviors = {
                             talentId: TalentType.MAGIC_RING_WEAPON,
                         });
                     }
-                }
-
-                if (defender && attacker.equippedItems.get(EquipSlot.MAIN_HAND)?.itemId === 702) {
-                    const ringWeapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
-                    const damage = rollTheDice(attacker.accuracy, attacker.strength);
-                    const getDamageAfterDefense = defender.getDamageAfterDefense(damage);
-
-                    ringWeapon.affectedStats.strength += 0.01;
-
-                    //ALWAYS SET MAPSCHEMA AFTER CHANGING OBJECT OT TRIGGER COLYSEUS CHANGE DETECTION
-                    attacker.equippedItems.set(EquipSlot.MAIN_HAND, ringWeapon);
-
-                    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-                        defender: defender,
-                        damage: getDamageAfterDefense,
-                        attacker: attacker,
-                    });
-
-                    defender.takeDamage(getDamageAfterDefense, client);
-                    client.send('combat_log', `${attacker.name} deals ${getDamageAfterDefense} damage with the magic ring!`);
-                    client.send('trigger_talent', {playerId: attacker.playerId, talentId: TalentType.MAGIC_RING_WEAPON});
                 }
             },
 
