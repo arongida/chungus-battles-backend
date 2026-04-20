@@ -28,6 +28,7 @@ export class Item extends Schema {
   @type('number') baseMaxDamage: number = 0;
   @type('number') baseAttackSpeed: number = 0;
   @type(['string']) triggerTypes: ArraySchema<string> = new ArraySchema<string>();
+  @type(AffectedStats) affectedEnemyStats: AffectedStats;
 
   executeBehavior(context: BehaviorContext) {
     const behavior = ItemBehaviors[this.itemId];

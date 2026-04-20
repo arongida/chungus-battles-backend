@@ -24,7 +24,8 @@ export const ItemSchema = new Schema({
     baseMinDamage: Number,
     baseMaxDamage: Number,
     baseAttackSpeed: Number,
-    triggerTypes: [String]
+    triggerTypes: [String],
+    affectedEnemyStats: StatsSchema,
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);
@@ -49,11 +50,12 @@ export async function getNumberOfItems(
 }
 
 function getItemSchemaObject(itemFromDb: any): Item {
-    const { affectedStats, setBonusStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
     newItemSchemaObject.affectedStats = new AffectedStats().assign(affectedStats || {});
     newItemSchemaObject.setBonusStats = new AffectedStats().assign(setBonusStats || {});
+    newItemSchemaObject.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
 
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));

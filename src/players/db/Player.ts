@@ -41,10 +41,11 @@ export async function getPlayer(playerId: number): Promise<Player> {
 }
 
 function buildItemSchema(itemFromDb: any): Item {
-    const { affectedStats, setBonusStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
     item.affectedStats = new AffectedStats().assign(affectedStats || {});
     item.setBonusStats = new AffectedStats().assign(setBonusStats || {});
+    item.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
     item.tags = tagsArr;

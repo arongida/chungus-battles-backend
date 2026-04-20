@@ -37,7 +37,12 @@ export class UpdateStatsCommand extends Command<
         if (enemy) {
             enemy.talents.forEach((talent) => {
                 this.increaseStats(player, talent.affectedEnemyStats);
-            })
+            });
+            enemy.equippedItems.forEach((item) => {
+                if (item.affectedEnemyStats) {
+                    this.increaseStats(player, item.affectedEnemyStats);
+                }
+            });
         }
 
         player.attackSpeed = player.attackSpeedMultiplier;
