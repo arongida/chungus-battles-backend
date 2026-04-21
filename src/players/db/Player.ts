@@ -186,6 +186,7 @@ export async function updatePlayer(player: Player): Promise<Player> {
         playerId: player.playerId,
     });
 
+    if (!foundPlayerModel) return player;
     foundPlayerModel.set(playerObject);
 
     await foundPlayerModel.save().catch((err) => console.error(err));
