@@ -28,8 +28,9 @@ describe("testing your Colyseus app", () => {
         const playerId = await getNextPlayerId();
         const room = await colyseus.createRoom("draft_room", {});
         const client = await colyseus.connectTo(room, { playerId, name, avatarUrl: "test_avatar" });
-        // Wait for onJoin to complete (DB load, shop, state setup)
-        await new Promise<void>(r => setTimeout(r, 500));
+        // Wait for onJoin to complete: DraftRoom has a 1000ms clock delay before any DB work,
+        // so 500ms was always insufficient. 2500ms covers the delay + DB round trips in CI.
+        await new Promise<void>(r => setTimeout(r, 2500));
 
 
         async function cleanExit() {
