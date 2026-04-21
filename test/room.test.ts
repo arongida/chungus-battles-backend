@@ -48,6 +48,7 @@ describe("testing your Colyseus app", () => {
 
         const selectedItemId = room.state.shop[0].itemId;
         const selectedTalentId = room.state.availableTalents[0].talentId;
+        const initialInventoryCount = room.state.player.inventory.length;
 
         client.send('buy', { itemId: selectedItemId });
         await new Promise<void>(r => setTimeout(r, 100));
@@ -56,7 +57,7 @@ describe("testing your Colyseus app", () => {
         await new Promise<void>(r => setTimeout(r, 100));
 
         expect(client.sessionId).toEqual(room.clients[0].sessionId);
-        expect(room.state.player.inventory.length).toBe(1);
+        expect(room.state.player.inventory.length).toBe(initialInventoryCount + 1);
         expect(room.state.player.talents.length).toBe(1);
     });
 
@@ -65,13 +66,14 @@ describe("testing your Colyseus app", () => {
 
         const item = room.state.shop[0];
         const goldBefore = room.state.player.gold;
+        const initialInventoryCount = room.state.player.inventory.length;
 
         client.send('buy', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
 
         expect(room.state.player.gold).toBe(goldBefore - item.price);
-        expect(room.state.player.inventory.length).toBe(1);
-        expect(room.state.player.inventory[0].itemId).toBe(item.itemId);
+        expect(room.state.player.inventory.length).toBe(initialInventoryCount + 1);
+        expect(room.state.player.inventory.find((i: Item) => i.itemId === item.itemId)).toBeDefined();
 
         await cleanExit();
     });
@@ -81,6 +83,7 @@ describe("testing your Colyseus app", () => {
 
         const item = room.state.shop[0];
         const goldBefore = room.state.player.gold;
+        const initialInventoryCount = room.state.player.inventory.length;
 
         client.send('buy', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
@@ -90,7 +93,7 @@ describe("testing your Colyseus app", () => {
 
         const expectedGold = (goldBefore - item.price) + Math.floor(item.price * 0.7);
         expect(room.state.player.gold).toBe(expectedGold);
-        expect(room.state.player.inventory.length).toBe(0);
+        expect(room.state.player.inventory.length).toBe(initialInventoryCount);
 
         await cleanExit();
     });
@@ -103,6 +106,7 @@ describe("testing your Colyseus app", () => {
         expect(equippable).toBeDefined();
 
         const slot = Array.from(equippable.equipOptions)[0];
+        const initialInventoryCount = room.state.player.inventory.length;
 
         client.send('buy', { itemId: equippable.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
@@ -110,7 +114,7 @@ describe("testing your Colyseus app", () => {
         client.send('equip', { itemId: equippable.itemId, slot });
         await new Promise<void>(r => setTimeout(r, 100));
 
-        expect(room.state.player.inventory.length).toBe(0);
+        expect(room.state.player.inventory.length).toBe(initialInventoryCount);
         expect(room.state.player.equippedItems.get(slot)).toBeDefined();
         expect(room.state.player.equippedItems.get(slot).itemId).toBe(equippable.itemId);
 
@@ -123,6 +127,7 @@ describe("testing your Colyseus app", () => {
         const equippable = room.state.shop.find((i: Item) => i.equipOptions && (i.equipOptions as any).length > 0);
         expect(equippable).toBeDefined();
         const slot = Array.from(equippable.equipOptions)[0];
+        const itemCountInInventory = room.state.player.inventory.length;
 
         client.send('buy', { itemId: equippable.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
@@ -132,7 +137,7 @@ describe("testing your Colyseus app", () => {
         client.send('unequip', { itemId: equippable.itemId, slot });
         await new Promise<void>(r => setTimeout(r, 100));
 
-        expect(room.state.player.inventory.length).toBe(1);
+        expect(room.state.player.inventory.length).toBe(itemCountInInventory + 1);
         expect(room.state.player.equippedItems.get(slot)).toBeUndefined();
 
         await cleanExit();

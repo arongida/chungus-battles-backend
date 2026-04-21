@@ -4,8 +4,8 @@
 set -e
 
 # Set paths (update these if needed)
-PROD_CONFIG="/home/aron/IdeaProjects/chungus-battles-backend/config.prod.yaml"
-DEV_CONFIG="/home/aron/IdeaProjects/chungus-battles-backend/config.dev.yaml"
+PROD_CONFIG="/Users/arongida/IdeaProjects/chungus-battles-backend/config.prod.yaml"
+DEV_CONFIG="/Users/arongida/IdeaProjects/chungus-battles-backend/config.dev.yaml"
 
 # Dump and restore 'talents' collection
 mongodump --config="$DEV_CONFIG" --collection=talents
