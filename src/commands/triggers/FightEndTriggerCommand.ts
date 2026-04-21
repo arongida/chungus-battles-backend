@@ -3,6 +3,7 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {BehaviorContext} from '../../common/BehaviorContext';
+import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class FightEndTriggerCommand extends Command<FightRoom> {
     execute() {
@@ -25,5 +26,7 @@ export class FightEndTriggerCommand extends Command<FightRoom> {
             }
         });
 
+        triggerEquippedItems(this.state.player, fightEndBehaviorContext, TriggerType.FIGHT_END);
+        triggerEquippedItems(this.state.enemy, {...fightEndBehaviorContext, attacker: this.state.enemy, defender: this.state.player}, TriggerType.FIGHT_END);
     }
 }

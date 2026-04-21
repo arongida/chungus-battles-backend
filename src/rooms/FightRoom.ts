@@ -16,6 +16,7 @@ import {getQuestItems} from '../items/db/Item';
 import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerCommand';
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 import {OnDodgeTriggerCommand} from "../commands/triggers/OnDodgeTriggerCommand";
+import {Item} from '../items/schema/ItemSchema';
 
 export class FightRoom extends Room {
     declare state: FightState;
@@ -145,8 +146,8 @@ export class FightRoom extends Room {
             ) {
                 //set state and clear intervals
                 this.state.battleStarted = false;
-                this.state.player.attackTimer.clear();
-                this.state.enemy.attackTimer.clear();
+                this.state.player.clearAllAttackTimers();
+                this.state.enemy.clearAllAttackTimers();
                 this.state.player.poisonTimer?.clear();
                 this.state.enemy.poisonTimer?.clear();
                 this.state.endBurnTimer?.clear();
@@ -177,13 +178,44 @@ export class FightRoom extends Room {
         }, 1000);
     }
 
-    startAttackTimer(player: Player, enemy: Player) {
-        //start player attack loop
-        player.attackTimer = this.clock.setInterval(() => {
-            this.tryAttack(player, enemy);
-            player.attackTimer.clear();
-            this.startAttackTimer(player, enemy);
-        }, (1 / player.attackSpeed) * 1000);
+    createFistWeapon(): Item {
+        const fist = new Item();
+        fist.itemId = 0;
+        fist.name = 'Fist';
+        fist.baseMinDamage = 0;
+        fist.baseMaxDamage = 0;
+        fist.baseAttackSpeed = 0.8;
+        fist.type = 'weapon';
+        return fist;
+    }
+
+    startWeaponAttackTimers(player: Player, enemy: Player) {
+        player.clearAllAttackTimers();
+
+        player.equippedItems.forEach((item, slot) => {
+            if (item.baseAttackSpeed > 0) {
+                this.startSingleWeaponTimer(player, enemy, item, slot);
+            }
+        });
+
+        if (player.attackTimers.size === 0) {
+            const fist = this.createFistWeapon();
+            this.startSingleWeaponTimer(player, enemy, fist, 'fist');
+        }
+    }
+
+    startSingleWeaponTimer(player: Player, enemy: Player, weapon: Item, slot: string) {
+        const effectiveSpeed = weapon.baseAttackSpeed * player.attackSpeedMultiplier;
+        const clampedSpeed = effectiveSpeed < 0.1 ? 0.1 : effectiveSpeed;
+        const interval = (1 / clampedSpeed) * 1000;
+
+        const timer = this.clock.setInterval(() => {
+            this.tryWeaponAttack(player, enemy, weapon, slot);
+            player.attackTimers.get(slot)?.clear();
+            this.startSingleWeaponTimer(player, enemy, weapon, slot);
+        }, interval);
+
+        player.attackTimers.set(slot, timer);
     }
 
     startRegenTimer(player: Player) {
@@ -222,9 +254,10 @@ export class FightRoom extends Room {
         }
     }
 
-    tryAttack(attacker: Player, defender: Player) {
-
-        const attackRoll = Math.random() * (attacker.strength - attacker.accuracy) + attacker.accuracy;
+    tryWeaponAttack(attacker: Player, defender: Player, weapon: Item, slot: string) {
+        const minDmg = weapon.baseMinDamage + attacker.accuracy;
+        const maxDmg = weapon.baseMaxDamage + attacker.strength;
+        const attackRoll = Math.random() * (maxDmg - minDmg) + minDmg;
 
         const damage = defender.getDamageAfterDefense(attackRoll);
 
@@ -232,7 +265,7 @@ export class FightRoom extends Room {
             const dodgeChance = 1 - 100 / (100 + defender.dodgeRate);
 
             if (Math.random() < dodgeChance) {
-                this.state.playerClient.send('combat_log', `${defender.name} dodged the attack!`);
+                this.state.playerClient.send('combat_log', `${defender.name} dodged ${attacker.name}'s ${weapon.name}!`);
                 this.dispatcher.dispatch(new OnDodgeTriggerCommand(), {
                     attacker: attacker,
                     defender: defender,
@@ -245,11 +278,13 @@ export class FightRoom extends Room {
             attacker: attacker,
             defender: defender,
             damage: damage,
+            weapon: weapon,
         });
         this.dispatcher.dispatch(new OnAttackTriggerCommand(), {
             attacker: attacker,
             defender: defender,
             damage: damage,
+            weapon: weapon,
         });
         this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
             defender: defender,
@@ -259,16 +294,16 @@ export class FightRoom extends Room {
 
         defender.takeDamage(damage, this.state.playerClient);
 
-        //broadcast attack and damage
-        this.state.playerClient.send('combat_log', `${attacker.name} attacks ${defender.name} for ${damage} damage!`);
+        this.state.playerClient.send('trigger_item', { playerId: attacker.playerId, itemId: weapon.itemId, slot });
+        this.state.playerClient.send('combat_log', `${attacker.name}'s ${weapon.name} hits ${defender.name} for ${damage} damage!`);
         this.state.playerClient.send('attack', attacker.playerId);
     }
 
     //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
     startBattle() {
         //start attack timers
-        this.startAttackTimer(this.state.player, this.state.enemy);
-        this.startAttackTimer(this.state.enemy, this.state.player);
+        this.startWeaponAttackTimers(this.state.player, this.state.enemy);
+        this.startWeaponAttackTimers(this.state.enemy, this.state.player);
         this.startRegenTimer(this.state.player);
         this.startRegenTimer(this.state.enemy);
 

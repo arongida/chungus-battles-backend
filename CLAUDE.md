@@ -281,7 +281,7 @@ All served over HTTP on the same port as the WebSocket server.
 | `healing`         | `{ playerId, healing }`          | Healing event                    |
 | `attack`          | `playerId`                       | Attack animation trigger         |
 | `trigger_talent`  | `{ playerId, talentId }`         | Talent activated                 |
-| `trigger_collection` | `{ playerId, collectionId }`  | Item set bonus activated         |
+| `trigger_talent` | `{ playerId, collectionId }`  | Item set bonus activated         |
 | `end_battle`      | `string`                         | Fight ended, continue to draft   |
 | `game_over`       | `string`                         | Player won or lost the run       |
 | `draft_log`       | `string`                         | Draft-phase log message          |

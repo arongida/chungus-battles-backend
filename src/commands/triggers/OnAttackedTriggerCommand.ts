@@ -4,12 +4,14 @@ import {TalentBehaviorContext as BehaviorContext} from '../../talents/behavior/T
 import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
+import {Item} from '../../items/schema/ItemSchema';
+import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class OnAttackedTriggerCommand extends Command<
     FightRoom,
-    { damage: number; attacker: Player; defender: Player }
+    { damage: number; attacker: Player; defender: Player; weapon?: Item }
 > {
-    execute({damage, attacker, defender} = this.payload) {
+    execute({damage, attacker, defender, weapon} = this.payload) {
         const attackContext: BehaviorContext = {
             client: this.state.playerClient,
             attacker: attacker,
@@ -17,7 +19,8 @@ export class OnAttackedTriggerCommand extends Command<
             damage: damage,
             clock: this.clock,
             commandDispatcher: this.room.dispatcher,
-            trigger: TriggerType.ON_ATTACKED
+            trigger: TriggerType.ON_ATTACKED,
+            weapon: weapon
         };
         //handle on attacked talents
         const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
@@ -31,5 +34,6 @@ export class OnAttackedTriggerCommand extends Command<
             }
         });
 
+        triggerEquippedItems(defender, attackContext, TriggerType.ON_ATTACKED);
     }
 }

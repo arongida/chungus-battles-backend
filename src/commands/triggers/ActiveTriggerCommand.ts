@@ -4,6 +4,7 @@ import {TalentBehaviorContext} from '../../talents/behavior/TalentBehaviorContex
 import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
+import {BehaviorContext} from '../../common/BehaviorContext';
 
 export class ActiveTriggerCommand extends Command<FightRoom> {
     execute() {
@@ -36,5 +37,26 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
             );
         });
 
+        const activeItemContext: BehaviorContext = {
+            client: this.state.playerClient,
+            attacker: player,
+            defender: enemy,
+            commandDispatcher: this.room.dispatcher,
+            trigger: TriggerType.ACTIVE
+        };
+
+        player.equippedItems.forEach((item) => {
+            if (item.triggerTypes?.includes(TriggerType.ACTIVE)) {
+                this.state.skillsTimers.push(
+                    this.clock.setInterval(() => {
+                        try {
+                            item.executeBehavior(activeItemContext);
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }, (1 / (item as any).activationRate) * 1000)
+                );
+            }
+        });
     }
 }

@@ -4,6 +4,7 @@ import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
 import {BehaviorContext} from '../../common/BehaviorContext';
+import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class OnDamageTriggerCommand extends Command<
     FightRoom,
@@ -31,5 +32,6 @@ export class OnDamageTriggerCommand extends Command<
             }
         });
 
+        triggerEquippedItems(defender, onDamageTalentBehaviorContext, TriggerType.ON_DAMAGE);
     }
 }

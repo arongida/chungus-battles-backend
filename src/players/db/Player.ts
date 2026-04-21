@@ -41,10 +41,11 @@ export async function getPlayer(playerId: number): Promise<Player> {
 }
 
 function buildItemSchema(itemFromDb: any): Item {
-    const { affectedStats, setBonusStats, tags, equipOptions, itemCollections, _id, __v, ...primitives } = itemFromDb;
+    const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
     item.affectedStats = new AffectedStats().assign(affectedStats || {});
     item.setBonusStats = new AffectedStats().assign(setBonusStats || {});
+    item.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
     item.tags = tagsArr;
@@ -54,6 +55,9 @@ function buildItemSchema(itemFromDb: any): Item {
     const itemCollectionsArr = new ArraySchema<number>();
     if (itemCollections?.length) (itemCollections as number[]).forEach(c => itemCollectionsArr.push(c));
     (item as any).itemCollections = itemCollectionsArr;
+    const triggerTypesArr = new ArraySchema<string>();
+    if (triggerTypes?.length) (triggerTypes as string[]).forEach(t => triggerTypesArr.push(t));
+    item.triggerTypes = triggerTypesArr;
     return item;
 }
 
@@ -124,13 +128,19 @@ function getNewPlayer(playerId: number,
             accuracy: 1,
             maxHp: 100,
             defense: 0,
-            attackSpeed: 0.8,
+            attackSpeed: 1,
             flatDmgReduction: 0,
             dodgeRate: 0,
             income: 0,
             hpRegen: 0,
         }
     });
+}
+
+function getDefaultWeaponId(avatarUrl: string): number {
+    if (avatarUrl === PlayerAvatar.WARRIOR) return 1;
+    if (avatarUrl === PlayerAvatar.THIEF) return 2;
+    return 68;
 }
 
 export async function createNewPlayer(
@@ -142,7 +152,15 @@ export async function createNewPlayer(
     const startingGold = process.env.NODE_ENV === 'production' ? 6 : 1000;
     const newPlayer = getNewPlayer(playerId, name, sessionId, avatarUrl, startingGold);
     await newPlayer.save().catch((err) => console.error(err));
-    return getPlayerSchemaObject(newPlayer.toObject());
+    const playerSchema = getPlayerSchemaObject(newPlayer.toObject());
+    const defaultWeapon = await getItemById(getDefaultWeaponId(avatarUrl));
+    if (defaultWeapon) {
+        playerSchema.inventory.push(defaultWeapon);
+        await updatePlayer(playerSchema);
+    } else {
+        console.warn(`Default weapon for avatar ${avatarUrl} not found in DB`);
+    }
+    return playerSchema;
 }
 
 export async function copyPlayer(player: Player): Promise<Player> {

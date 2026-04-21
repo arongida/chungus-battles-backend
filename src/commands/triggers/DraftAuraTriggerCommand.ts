@@ -3,6 +3,7 @@ import {TriggerType} from '../../common/types';
 import {DraftRoom} from '../../rooms/DraftRoom';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContext";
+import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class DraftAuraTriggerCommand extends Command<DraftRoom> {
     execute() {
@@ -23,5 +24,7 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
                 console.error(e);
             }
         });
+
+        triggerEquippedItems(this.state.player, behaviorContext, TriggerType.AURA);
     }
 }

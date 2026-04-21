@@ -19,5 +19,6 @@ export interface BehaviorContext {
     availableTalents?: Talent[];
     questItems?: ArraySchema<Item>;
     commandDispatcher?: Dispatcher<FightRoom | DraftRoom>
-    trigger: TriggerType
+    trigger: TriggerType;
+    weapon?: Item;
 }

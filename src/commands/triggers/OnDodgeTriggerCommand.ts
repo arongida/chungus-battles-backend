@@ -4,6 +4,7 @@ import {TalentBehaviorContext as BehaviorContext} from '../../talents/behavior/T
 import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
+import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class OnDodgeTriggerCommand extends Command<
     FightRoom,
@@ -27,5 +28,6 @@ export class OnDodgeTriggerCommand extends Command<
             }
         });
 
+        triggerEquippedItems(defender, attackContext, TriggerType.ON_DODGE);
     }
 }

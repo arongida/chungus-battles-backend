@@ -20,7 +20,12 @@ export const ItemSchema = new Schema({
     itemCollections: [Number],
     type: String,
     equipOptions: [String],
-    rarity: Number
+    rarity: Number,
+    baseMinDamage: Number,
+    baseMaxDamage: Number,
+    baseAttackSpeed: Number,
+    triggerTypes: [String],
+    affectedEnemyStats: StatsSchema,
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);
@@ -45,11 +50,12 @@ export async function getNumberOfItems(
 }
 
 function getItemSchemaObject(itemFromDb: any): Item {
-    const { affectedStats, setBonusStats, tags, equipOptions, itemCollections, _id, __v, ...primitives } = itemFromDb;
+    const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
     newItemSchemaObject.affectedStats = new AffectedStats().assign(affectedStats || {});
     newItemSchemaObject.setBonusStats = new AffectedStats().assign(setBonusStats || {});
+    newItemSchemaObject.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
 
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
@@ -60,16 +66,19 @@ function getItemSchemaObject(itemFromDb: any): Item {
     const itemCollectionsArr = new ArraySchema<number>();
     if (itemCollections?.length) (itemCollections as number[]).forEach(c => itemCollectionsArr.push(c));
     (newItemSchemaObject as any).itemCollections = itemCollectionsArr;
+    const triggerTypesArr = new ArraySchema<string>();
+    if (triggerTypes?.length) (triggerTypes as string[]).forEach(t => triggerTypesArr.push(t));
+    newItemSchemaObject.triggerTypes = triggerTypesArr;
 
     return newItemSchemaObject;
 }
 
-export async function getItemById(itemId: number): Promise<Item> {
+export async function getItemById(itemId: number): Promise<Item | null> {
     const itemFromDb = await itemModel
         .findOne({itemId: itemId})
         .lean()
         .select({_id: 0, __v: 0});
-    return getItemSchemaObject(itemFromDb);
+    return itemFromDb ? getItemSchemaObject(itemFromDb) : null;
 }
 
 export async function getQuestItems(): Promise<Item[]> {
