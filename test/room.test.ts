@@ -24,6 +24,20 @@ describe("testing your Colyseus app", () => {
         await colyseus.cleanup();
     });
 
+    const FIGHT_ROOM_SERVER_MESSAGES = [
+        'attack', 'damage', 'healing', 'combat_log', 'trigger_talent',
+        'trigger_item', 'end_battle', 'game_over', 'draft_log', 'error',
+    ];
+
+    async function createAndJoinFightRoom(playerId: number) {
+        const fightRoom = await colyseus.createRoom("fight_room", {});
+        const fightClient = await colyseus.connectTo(fightRoom, { playerId });
+        // Register no-op handlers so the SDK doesn't warn about unhandled message types
+        FIGHT_ROOM_SERVER_MESSAGES.forEach(type => fightClient.onMessage(type, () => {}));
+        await new Promise<void>(r => setTimeout(r, 500));
+        return { fightRoom, fightClient };
+    }
+
     async function createAndJoinDraftRoom(name = "Test Player") {
         const playerId = await getNextPlayerId();
         const room = await colyseus.createRoom("draft_room", {});
@@ -45,7 +59,7 @@ describe("testing your Colyseus app", () => {
     // -------------------------------------------------------------------------
 
     it("connects, creates new player, buys an item, and selects a talent", async () => {
-        const { room, client, cleanExit } = await createAndJoinDraftRoom("Mocked Player");
+        const { room, client } = await createAndJoinDraftRoom("Mocked Player");
 
         const inventoryItemIds = new Set(
             (Array.from(room.state.player.inventory) as Item[]).map((i: Item) => i.itemId)
@@ -229,9 +243,7 @@ describe("testing your Colyseus app", () => {
         await new Promise<void>(r => setTimeout(r, 3000));
 
         // 3. Join fight room
-        const fightRoom = await colyseus.createRoom("fight_room", {});
-        const fightClient = await colyseus.connectTo(fightRoom, { playerId });
-        await new Promise<void>(r => setTimeout(r, 500));
+        const { fightRoom, fightClient } = await createAndJoinFightRoom(playerId);
 
         // 4. Verify initial state: player and enemy are loaded
         expect(fightRoom.state.player.playerId).toBe(playerId);
@@ -281,9 +293,7 @@ describe("testing your Colyseus app", () => {
         draftClient.leave(true);
         await new Promise<void>(r => setTimeout(r, 3000));
 
-        const fightRoom = await colyseus.createRoom("fight_room", {});
-        await colyseus.connectTo(fightRoom, { playerId });
-        await new Promise<void>(r => setTimeout(r, 500));
+        const { fightRoom } = await createAndJoinFightRoom(playerId);
 
         const playerMaxHp = fightRoom.state.player.maxHp;
         const enemyMaxHp = fightRoom.state.enemy.maxHp;
@@ -304,9 +314,7 @@ describe("testing your Colyseus app", () => {
         draftClient.leave(true);
         await new Promise<void>(r => setTimeout(r, 3000));
 
-        const fightRoom = await colyseus.createRoom("fight_room", {});
-        await colyseus.connectTo(fightRoom, { playerId });
-        await new Promise<void>(r => setTimeout(r, 500));
+        const { fightRoom } = await createAndJoinFightRoom(playerId);
 
         const winsAtStart = fightRoom.state.player.wins;
         const livesAtStart = fightRoom.state.player.lives;
