@@ -2,15 +2,20 @@
  * Migration: Weapon affectedStats → baseMinDamage/baseMaxDamage/baseAttackSpeed
  *
  * For all items with type === 'weapon':
- *   - baseMinDamage = affectedStats.accuracy
- *   - baseMaxDamage = affectedStats.strength
- *   - baseAttackSpeed = 0.8 (default; adjust per weapon after migration)
- *   - affectedStats.strength = 0
- *   - affectedStats.accuracy = 0
+ *   - baseMinDamage  = affectedStats.accuracy
+ *   - baseMaxDamage  = affectedStats.strength
+ *   - baseAttackSpeed = 0.8 * affectedStats.attackSpeed
+ *       (0 or 1 treated as neutral → 0.8; 1.5 → 1.2; 0.5 → 0.4)
+ *   - affectedStats.strength  = 0  (moved to baseMaxDamage)
+ *   - affectedStats.accuracy  = 0  (moved to baseMinDamage)
+ *   - affectedStats.attackSpeed = 1 (neutral; baked into baseAttackSpeed)
  *
  * For all player documents:
  *   - baseStats.attackSpeed = 1 (neutral multiplier)
  *   - For each weapon in inventory/equippedItems: same migration as above
+ *
+ * Safe to re-run: if affectedStats.attackSpeed is already 1 (neutral) from a
+ * previous partial run, baseAttackSpeed = 0.8 * 1 = 0.8 which is correct.
  *
  * Run: npx tsx scripts/migrateWeaponsToBaseStats.ts
  */
@@ -26,49 +31,49 @@ if (!DB_CONNECTION_STRING) {
     process.exit(1);
 }
 
-function migrateWeaponDoc(item: any) {
-    if (item?.type === 'weapon') {
-        item.baseMinDamage = item.affectedStats?.accuracy ?? 0;
-        item.baseMaxDamage = item.affectedStats?.strength ?? 0;
-        item.baseAttackSpeed = 0.8;
-        if (item.affectedStats) {
-            item.affectedStats.strength = 0;
-            item.affectedStats.accuracy = 0;
-        }
-    }
-    return item;
+/** Convert old affectedStats.attackSpeed to a weapon baseAttackSpeed. */
+function computeBaseAttackSpeed(affectedStats: any): number {
+    const raw = affectedStats?.attackSpeed;
+    // 0 meant "not set" in the old system (same effect as neutral 1.0)
+    const multiplier = (!raw || raw === 1) ? 1 : raw;
+    return parseFloat((0.8 * multiplier).toFixed(3));
+}
+
+function weaponFieldUpdates(item: any, prefix: string): Record<string, any> {
+    const set: Record<string, any> = {};
+    set[`${prefix}baseMinDamage`]              = item.affectedStats?.accuracy ?? 0;
+    set[`${prefix}baseMaxDamage`]              = item.affectedStats?.strength ?? 0;
+    set[`${prefix}baseAttackSpeed`]            = computeBaseAttackSpeed(item.affectedStats);
+    set[`${prefix}affectedStats.strength`]     = 0;
+    set[`${prefix}affectedStats.accuracy`]     = 0;
+    set[`${prefix}affectedStats.attackSpeed`]  = 1; // neutral — no longer applied as player multiplier
+    return set;
 }
 
 async function main() {
-    await mongoose.connect(DB_CONNECTION_STRING);
+    const conn = await mongoose.connect(DB_CONNECTION_STRING as string);
     console.log('Connected to MongoDB');
 
-    const db = mongoose.connection.db;
+    const db = conn.connection.db!;
 
-    // Migrate Item collection
+    // ── Item collection ──────────────────────────────────────────────────────
     const itemsCollection = db.collection('items');
     const weapons = await itemsCollection.find({ type: 'weapon' }).toArray();
     console.log(`Found ${weapons.length} weapon items to migrate`);
 
     for (const weapon of weapons) {
-        const baseMinDamage = weapon.affectedStats?.accuracy ?? 0;
-        const baseMaxDamage = weapon.affectedStats?.strength ?? 0;
+        const baseAttackSpeed = computeBaseAttackSpeed(weapon.affectedStats);
+        console.log(
+            `  ${weapon.name}: attackSpeed ${weapon.affectedStats?.attackSpeed ?? 'none'} → baseAttackSpeed ${baseAttackSpeed}`
+        );
         await itemsCollection.updateOne(
             { _id: weapon._id },
-            {
-                $set: {
-                    baseMinDamage,
-                    baseMaxDamage,
-                    baseAttackSpeed: 0.8,
-                    'affectedStats.strength': 0,
-                    'affectedStats.accuracy': 0,
-                },
-            }
+            { $set: weaponFieldUpdates(weapon, '') }
         );
     }
-    console.log(`Migrated ${weapons.length} weapon items`);
+    console.log(`Migrated ${weapons.length} weapon items\n`);
 
-    // Migrate Player collection
+    // ── Player collection ────────────────────────────────────────────────────
     const playersCollection = db.collection('players');
     const players = await playersCollection.find({}).toArray();
     console.log(`Found ${players.length} player documents to migrate`);
@@ -79,31 +84,29 @@ async function main() {
             $set: { 'baseStats.attackSpeed': 1 }
         };
 
-        // Migrate inventory weapons
+        // Inventory weapons
         if (Array.isArray(player.inventory)) {
             player.inventory.forEach((item: any, idx: number) => {
                 if (item?.type === 'weapon') {
-                    updateOps.$set[`inventory.${idx}.baseMinDamage`] = item.affectedStats?.accuracy ?? 0;
-                    updateOps.$set[`inventory.${idx}.baseMaxDamage`] = item.affectedStats?.strength ?? 0;
-                    updateOps.$set[`inventory.${idx}.baseAttackSpeed`] = 0.8;
-                    updateOps.$set[`inventory.${idx}.affectedStats.strength`] = 0;
-                    updateOps.$set[`inventory.${idx}.affectedStats.accuracy`] = 0;
+                    Object.assign(
+                        updateOps.$set,
+                        weaponFieldUpdates(item, `inventory.${idx}.`)
+                    );
                 }
             });
         }
 
-        // Migrate equippedItems weapons (stored as map)
+        // EquippedItems weapons (stored as a map)
         if (player.equippedItems) {
             const entries = player.equippedItems instanceof Map
                 ? Array.from(player.equippedItems.entries())
                 : Object.entries(player.equippedItems);
             for (const [slot, item] of entries as [string, any][]) {
                 if (item?.type === 'weapon') {
-                    updateOps.$set[`equippedItems.${slot}.baseMinDamage`] = item.affectedStats?.accuracy ?? 0;
-                    updateOps.$set[`equippedItems.${slot}.baseMaxDamage`] = item.affectedStats?.strength ?? 0;
-                    updateOps.$set[`equippedItems.${slot}.baseAttackSpeed`] = 0.8;
-                    updateOps.$set[`equippedItems.${slot}.affectedStats.strength`] = 0;
-                    updateOps.$set[`equippedItems.${slot}.affectedStats.accuracy`] = 0;
+                    Object.assign(
+                        updateOps.$set,
+                        weaponFieldUpdates(item, `equippedItems.${slot}.`)
+                    );
                 }
             }
         }

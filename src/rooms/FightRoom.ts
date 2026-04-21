@@ -182,8 +182,8 @@ export class FightRoom extends Room {
         const fist = new Item();
         fist.itemId = 0;
         fist.name = 'Fist';
-        fist.baseMinDamage = 1;
-        fist.baseMaxDamage = 3;
+        fist.baseMinDamage = 0;
+        fist.baseMaxDamage = 0;
         fist.baseAttackSpeed = 0.8;
         fist.type = 'weapon';
         return fist;

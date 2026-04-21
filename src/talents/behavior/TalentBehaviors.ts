@@ -600,7 +600,7 @@ export const TalentBehaviors = {
                 });
                 attacker.takeDamage(damageAfterReduction, client);
                 client.send('combat_log', `${defender.name} reflects ${damageAfterReduction} damage to ${attacker.name}!`);
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: defender.playerId,
                     collectionId: TalentType.WARRIOR_1,
                 });
@@ -613,7 +613,7 @@ export const TalentBehaviors = {
                 shop?.forEach((item) => {
                     item.price -= discount;
                 });
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.MERCHANT_1,
                 });
@@ -624,7 +624,7 @@ export const TalentBehaviors = {
                 const {defender, client} = context;
                 defender.gold += 1;
                 client.send('combat_log', `${defender.name} found 1 gold during dodge roll!`);
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: defender.playerId,
                     collectionId: TalentType.ROGUE_1,
                 });
@@ -642,7 +642,7 @@ export const TalentBehaviors = {
                 });
                 defender.takeDamage(damageAfterReduction, client);
                 client.send('combat_log', `${attacker.name} throws weapons for ${damageAfterReduction} damage!`);
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.WARRIOR_2,
                 });
@@ -653,7 +653,7 @@ export const TalentBehaviors = {
                 const {attacker, client, talent} = context;
 
                 attacker.baseStats.attackSpeed += attacker.baseStats.attackSpeed * talent.base - attacker.baseStats.attackSpeed;
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.ROGUE_2,
                 });
@@ -664,7 +664,7 @@ export const TalentBehaviors = {
                 const {attacker} = context;
                 if (attacker.refreshShopCost !== 1) {
                     attacker.refreshShopCost = 1;
-                    // client.send('trigger_collection', {
+                    // client.send('trigger_talent', {
                     //     playerId: attacker.playerId,
                     //     collectionId: ItemCollectionType.MERCHANT_2,
                     // });
@@ -675,7 +675,7 @@ export const TalentBehaviors = {
             (context: TalentBehaviorContext) => {
                 const {attacker, defender, client, clock} = context;
                 defender.addPoisonStacks(clock, client);
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.ROGUE_3,
                 });
@@ -686,7 +686,7 @@ export const TalentBehaviors = {
                 const {attacker, defender, client, talent} = context;
                 if (defender) {
                     talent.affectedStats.defense = defender.defense * talent.scaling;
-                    client.send('trigger_collection', {
+                    client.send('trigger_talent', {
                         playerId: attacker.playerId,
                         collectionId: TalentType.WARRIOR_3,
                     });
@@ -697,7 +697,7 @@ export const TalentBehaviors = {
             (context: TalentBehaviorContext) => {
                 const {attacker, client} = context;
                 attacker.baseStats.income += 1;
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.MERCHANT_4,
                 });
@@ -708,7 +708,7 @@ export const TalentBehaviors = {
                 const {attacker, client, talent} = context;
                 const missingHPPercentage = (attacker.maxHp - attacker.hp) / attacker.maxHp;
                 talent.affectedStats.strength = attacker.strength * missingHPPercentage;
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.WARRIOR_4,
                 });
@@ -720,7 +720,7 @@ export const TalentBehaviors = {
                 attacker.gold += 1;
                 if (defender.gold > 0) defender.gold -= 1;
                 client.send('combat_log', `${attacker.name} stole 1 gold from ${defender.name}!`);
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.ROGUE_4,
                 });
@@ -741,7 +741,7 @@ export const TalentBehaviors = {
                 talent.affectedStats.flatDmgReduction = Math.ceil(attacker.flatDmgReduction * bonusCoefficent);
 
 
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.MERCHANT_3,
                 });
@@ -755,7 +755,7 @@ export const TalentBehaviors = {
                     defender.hp = -9999;
                     client.send('combat_log', `${attacker.name} executed ${defender.name}!`);
                 }
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.WARRIOR_5,
                 });
@@ -776,7 +776,7 @@ export const TalentBehaviors = {
                     'combat_log',
                     `${attacker.name} engraved gold on their weapon to deal ${damageAfterReduction} damage to ${defender.name}!`
                 );
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.ROGUE_5,
                 });
@@ -792,7 +792,7 @@ export const TalentBehaviors = {
                     playerId: attacker.playerId,
                     healing: healingAmount,
                 });
-                client.send('trigger_collection', {
+                client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     collectionId: TalentType.MERCHANT_5,
                 });
