@@ -520,7 +520,8 @@ export const TalentBehaviors = {
 
                 if (
                     !attacker.inventory.find((item) => item.itemId === 702) &&
-                    !(attacker.equippedItems.get(EquipSlot.MAIN_HAND)?.itemId === 702)
+                    !(attacker.equippedItems.get(EquipSlot.MAIN_HAND)?.itemId === 702) &&
+                    !(attacker.equippedItems.get(EquipSlot.OFF_HAND)?.itemId === 702)
                 ) {
                     const ringWeapon = questItems.find((item) => item.itemId === 702);
                     if (ringWeapon) {
