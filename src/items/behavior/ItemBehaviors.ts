@@ -30,7 +30,7 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
     // Magic Ring Weapon (702) — grows +0.01 strength every time it attacks.
     702: ({ attacker, item }) => {
         if (!attacker || !item) return;
-        item.affectedStats.strength += 0.01;
+        item.affectedStats.strength += 0.03;
         attacker.equippedItems.forEach((equipped, slot) => {
             if (equipped === item) attacker.equippedItems.set(slot, equipped);
         });
