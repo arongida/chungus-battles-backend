@@ -8,22 +8,6 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
         defender.addPoisonStacks(clock, client, 1);
     },
 
-    // Swiftsteel Dagger (28) — at fight start, gain +3% AS per rogue-set item owned.
-    28: ({ attacker, item, trigger }) => {
-        if (!attacker || !item) return;
-        if (trigger === TriggerType.FIGHT_START) {
-            let count = 0;
-            attacker.equippedItems.forEach((eq) => { if (eq.set === 'rogue') count++; });
-            attacker.inventory.forEach((inv) => { if (inv.set === 'rogue') count++; });
-            item.affectedStats.attackSpeed = 1 + 0.03 * count;
-            attacker.equippedItems.forEach((eq, slot) => {
-                if (eq === item) attacker.equippedItems.set(slot, eq);
-            });
-        } else if (trigger === TriggerType.FIGHT_END) {
-            item.affectedStats.attackSpeed = 1;
-        }
-    },
-
     // Frozen Blade (29) — each hit reduces enemy attack speed by 2%, stacking down to 50%.
     29: ({ item, trigger }) => {
         if (!item) return;
@@ -41,22 +25,6 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
         const heal = Math.floor(damage * 0.15) + 1;
         attacker.hp += heal;
         client?.send('healing', { playerId: attacker.playerId, healing: heal });
-    },
-
-    // Hunter's Bow (701) — gains +0.5 strength per hit; resets at fight end.
-    701: ({ attacker, item, trigger }) => {
-        if (!attacker || !item) return;
-        if (trigger === TriggerType.ON_ATTACK) {
-            item.affectedStats.strength += 0.5;
-            attacker.equippedItems.forEach((eq, slot) => {
-                if (eq === item) attacker.equippedItems.set(slot, eq);
-            });
-        } else if (trigger === TriggerType.FIGHT_END) {
-            item.affectedStats.strength = 0;
-            attacker.equippedItems.forEach((eq, slot) => {
-                if (eq === item) attacker.equippedItems.set(slot, eq);
-            });
-        }
     },
 
     // Magic Ring Weapon (702) — grows +0.01 strength every time it attacks.

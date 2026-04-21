@@ -5,7 +5,6 @@ import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
 import {Item} from '../../items/schema/ItemSchema';
-import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class OnAttackTriggerCommand extends Command<
     FightRoom,
@@ -32,7 +31,6 @@ export class OnAttackTriggerCommand extends Command<
             talent.triggerTypes.includes(TriggerType.ON_ATTACK)
         );
         talentsToTrigger.forEach((talent) => {
-
             try {
                 talent.executeBehavior(attackContext);
             } catch (e) {
@@ -40,6 +38,12 @@ export class OnAttackTriggerCommand extends Command<
             }
         });
 
-        triggerEquippedItems(attacker, attackContext, TriggerType.ON_ATTACK);
+        if (weapon?.triggerTypes?.includes(TriggerType.ON_ATTACK)) {
+            try {
+                weapon.executeBehavior(attackContext);
+            } catch (e) {
+                console.error(e);
+            }
+        }
     }
 }
