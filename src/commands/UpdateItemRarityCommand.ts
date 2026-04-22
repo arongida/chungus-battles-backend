@@ -24,6 +24,7 @@ export class UpdateItemRarityCommand extends Command<
                 equippedItem.rarity++;
                 equippedItem.affectedStats.mergeInto(mergeWith.affectedStats);
                 equippedItem.setBonusStats.mergeInto(mergeWith.setBonusStats);
+                this.mergeWeaponStats(equippedItem, mergeWith);
                 equippedItem.price += mergeWith.price;
                 const idx1 = player.inventory.indexOf(mergeWith);
                 if (idx1 !== -1) player.inventory.splice(idx1, 1);
@@ -38,6 +39,7 @@ export class UpdateItemRarityCommand extends Command<
                 item.rarity++;
                 item.affectedStats.mergeInto(mergeWith.affectedStats);
                 item.setBonusStats.mergeInto(mergeWith.setBonusStats);
+                this.mergeWeaponStats(item, mergeWith);
                 item.price += mergeWith.price;
                 const idx2 = player.inventory.indexOf(mergeWith);
                 if (idx2 !== -1) player.inventory.splice(idx2, 1);
@@ -45,6 +47,16 @@ export class UpdateItemRarityCommand extends Command<
         })
 
 
+    }
+
+    private mergeWeaponStats(target: any, source: any) {
+        const hasDamage = target.baseMinDamage > 0 || target.baseMaxDamage > 0;
+        if (hasDamage) {
+            target.baseMinDamage += source.baseMinDamage;
+            target.baseMaxDamage += source.baseMaxDamage;
+        } else {
+            target.baseAttackSpeed += source.baseAttackSpeed;
+        }
     }
 
 
