@@ -273,6 +273,18 @@ export class DraftRoom extends Room {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
         await this.state.player.sellItem(item);
+        await this.resetStaleUpgradePreviews(itemId);
+    }
+
+    private async resetStaleUpgradePreviews(soldItemId: number) {
+        for (let i = 0; i < this.state.shop.length; i++) {
+            const shopItem = this.state.shop[i];
+            if (shopItem.itemId !== soldItemId) continue;
+            if (!findOwnedUpgradeTarget(this.state.player, soldItemId)) {
+                const baseItem = await getItemById(soldItemId);
+                if (baseItem) this.state.shop.splice(i, 1, baseItem);
+            }
+        }
     }
 
     private async equipItem(itemId: number, slot: EquipSlot) {
