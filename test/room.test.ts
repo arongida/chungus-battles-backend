@@ -61,10 +61,7 @@ describe("testing your Colyseus app", () => {
     it("connects, creates new player, buys an item, and selects a talent", async () => {
         const { room, client } = await createAndJoinDraftRoom("Mocked Player");
 
-        const inventoryItemIds = new Set(
-            (Array.from(room.state.player.inventory) as Item[]).map((i: Item) => i.itemId)
-        );
-        const shopItem = room.state.shop.find((i: Item) => !inventoryItemIds.has(i.itemId));
+        const shopItem = room.state.shop[0];
         const selectedItemId = shopItem.itemId;
         const selectedTalentId = room.state.availableTalents[0].talentId;
         const initialInventoryCount = room.state.player.inventory.length;
@@ -83,10 +80,7 @@ describe("testing your Colyseus app", () => {
     it("buying an item deducts gold and adds it to inventory", async () => {
         const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
-        const inventoryItemIds = new Set(
-            (Array.from(room.state.player.inventory) as Item[]).map((i: Item) => i.itemId)
-        );
-        const item = room.state.shop.find((i: Item) => !inventoryItemIds.has(i.itemId));
+        const item = room.state.shop[0];
         const goldBefore = room.state.player.gold;
         const initialInventoryCount = room.state.player.inventory.length;
 
@@ -103,10 +97,7 @@ describe("testing your Colyseus app", () => {
     it("selling an item refunds 70% of its price", async () => {
         const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
-        const inventoryItemIds = new Set(
-            (Array.from(room.state.player.inventory) as Item[]).map((i: Item) => i.itemId)
-        );
-        const item = room.state.shop.find((i: Item) => !inventoryItemIds.has(i.itemId));
+        const item = room.state.shop[0];
         const goldBefore = room.state.player.gold;
         const initialInventoryCount = room.state.player.inventory.length;
 
@@ -126,14 +117,8 @@ describe("testing your Colyseus app", () => {
     it("equipping an item moves it from inventory to equipped slot", async () => {
         const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
-        // Find a shop item with equip options that isn't already in inventory (to avoid
-        // UpdateItemRarityCommand merging it with the default weapon before we equip it)
-        const inventoryItemIds = new Set(
-            (Array.from(room.state.player.inventory) as Item[]).map((i: Item) => i.itemId)
-        );
         const equippable = room.state.shop.find((i: Item) =>
-            i.equipOptions && (i.equipOptions as any).length > 0 &&
-            !inventoryItemIds.has(i.itemId)
+            i.equipOptions && (i.equipOptions as any).length > 0
         );
         expect(equippable).toBeDefined();
 
@@ -155,13 +140,8 @@ describe("testing your Colyseus app", () => {
 
     it("unequipping an item moves it back to inventory", async () => {
         const { room, client, cleanExit } = await createAndJoinDraftRoom();
-
-        const inventoryItemIds = new Set(
-            (Array.from(room.state.player.inventory) as Item[]).map((i: Item) => i.itemId)
-        );
         const equippable = room.state.shop.find((i: Item) =>
-            i.equipOptions && (i.equipOptions as any).length > 0 &&
-            !inventoryItemIds.has(i.itemId)
+            i.equipOptions && (i.equipOptions as any).length > 0
         );
         expect(equippable).toBeDefined();
         const slot = Array.from(equippable.equipOptions)[0];

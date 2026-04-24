@@ -2,7 +2,8 @@ import {Client, Room} from '@colyseus/core';
 import {DraftState} from './schema/DraftState';
 import {Item} from '../items/schema/ItemSchema';
 import {copyPlayer, createNewPlayer, getPlayer, updatePlayer} from '../players/db/Player';
-import {getNumberOfItems, getQuestItems} from '../items/db/Item';
+import {getNumberOfItems, getQuestItems, getItemById} from '../items/db/Item';
+import {applyRarityUpgrade, findOwnedUpgradeTarget} from '../commands/ShopUpgradeUtils';
 import {Player} from '../players/schema/PlayerSchema';
 import {delay} from '../common/utils';
 import {getRandomTalents} from '../talents/db/Talent';
@@ -13,7 +14,6 @@ import {AfterShopRefreshTriggerCommand} from '../commands/triggers/AfterShopRefr
 import {DraftAuraTriggerCommand} from '../commands/triggers/DraftAuraTriggerCommand';
 import {EquipSlot} from "../items/types/ItemTypes";
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
-import {UpdateItemRarityCommand} from "../commands/UpdateItemRarityCommand";
 import {UpdateActiveSets} from "../commands/UpdateActiveSets";
 import {ArraySchema} from "@colyseus/schema";
 
@@ -70,7 +70,6 @@ export class DraftRoom extends Room {
     update() {
         if (this.state.player) {
             this.dispatcher.dispatch(new UpdateStatsCommand());
-            this.dispatcher.dispatch(new UpdateItemRarityCommand());
             this.dispatcher.dispatch(new UpdateActiveSets());
         }
     }
@@ -154,7 +153,28 @@ export class DraftRoom extends Room {
             this.state.player.unlockShop();
         } else if (this.state.shop.length < 6) {
             this.state.shop.clear();
-            shopFromDb.forEach(item => this.state.shop.push(item));
+            for (const rolledItem of shopFromDb) {
+                const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
+                if (ownedTarget) {
+                    const preview = await getItemById(rolledItem.itemId);
+                    if (!preview) {
+                        this.state.shop.push(rolledItem);
+                        continue;
+                    }
+                    const source = await getItemById(rolledItem.itemId);
+                    if (!source) {
+                        this.state.shop.push(rolledItem);
+                        continue;
+                    }
+                    while (preview.rarity < ownedTarget.rarity + 1) {
+                        applyRarityUpgrade(preview, source);
+                    }
+                    preview.price = rolledItem.price;
+                    this.state.shop.push(preview);
+                } else {
+                    this.state.shop.push(rolledItem);
+                }
+            }
         }
 
         this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
@@ -218,11 +238,33 @@ export class DraftRoom extends Room {
 
     private async buyItem(itemId: number, client: Client) {
         const item = this.state.shop.find((item) => item.itemId === itemId);
+        if (!item) {
+            client.send('error', 'Not possible to buy item!');
+            return;
+        }
         if (this.state.player.gold < item.price || item.sold) {
             client.send('error', 'Not possible to buy item!');
             return;
         }
-        if (item) {
+        const ownedTarget = findOwnedUpgradeTarget(this.state.player, item.itemId);
+        if (ownedTarget && item.rarity === ownedTarget.rarity + 1) {
+            this.state.player.gold -= item.price;
+            item.sold = true;
+            const lockedIdx = this.state.player.lockedShop.indexOf(item);
+            if (lockedIdx !== -1) this.state.player.lockedShop.splice(lockedIdx, 1);
+            let equippedSlot: EquipSlot | null = null;
+            this.state.player.equippedItems.forEach((value, key) => {
+                if (value === ownedTarget) equippedSlot = key as EquipSlot;
+            });
+            if (equippedSlot !== null) {
+                item.equipped = true;
+                this.state.player.equippedItems.set(equippedSlot, item);
+            } else {
+                const invIdx = this.state.player.inventory.indexOf(ownedTarget);
+                if (invIdx !== -1) this.state.player.inventory.splice(invIdx, 1);
+                this.state.player.inventory.push(item);
+            }
+        } else {
             this.state.player.getItem(item);
         }
     }
