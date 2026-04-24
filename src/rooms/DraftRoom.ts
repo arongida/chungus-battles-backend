@@ -245,7 +245,27 @@ export class DraftRoom extends Room {
             return;
         }
         if (item) {
-            this.state.player.getItem(item);
+            const ownedTarget = findOwnedUpgradeTarget(this.state.player, item.itemId);
+            if (ownedTarget && item.rarity === ownedTarget.rarity + 1) {
+                this.state.player.gold -= item.price;
+                item.sold = true;
+                const lockedIdx = this.state.player.lockedShop.indexOf(item);
+                if (lockedIdx !== -1) this.state.player.lockedShop.splice(lockedIdx, 1);
+                let equippedSlot: string = null;
+                this.state.player.equippedItems.forEach((value, key) => {
+                    if (value === ownedTarget) equippedSlot = key;
+                });
+                if (equippedSlot !== null) {
+                    item.equipped = true;
+                    this.state.player.equippedItems.set(equippedSlot, item);
+                } else {
+                    const invIdx = this.state.player.inventory.indexOf(ownedTarget);
+                    if (invIdx !== -1) this.state.player.inventory.splice(invIdx, 1);
+                    this.state.player.inventory.push(item);
+                }
+            } else {
+                this.state.player.getItem(item);
+            }
         }
     }
 
