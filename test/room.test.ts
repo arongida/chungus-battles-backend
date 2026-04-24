@@ -64,10 +64,10 @@ describe("testing your Colyseus app", () => {
         const shopItem = room.state.shop[0];
         const selectedItemId = shopItem.itemId;
         const selectedTalentId = room.state.availableTalents[0].talentId;
-        const initialInventoryCount = room.state.player.inventory.length;
-
+        
         client.send('buy', { itemId: selectedItemId });
         await new Promise<void>(r => setTimeout(r, 100));
+        const initialInventoryCount = room.state.player.inventory.length;
 
         client.send('select_talent', { talentId: selectedTalentId });
         await new Promise<void>(r => setTimeout(r, 100));
@@ -82,10 +82,10 @@ describe("testing your Colyseus app", () => {
 
         const item = room.state.shop[0];
         const goldBefore = room.state.player.gold;
-        const initialInventoryCount = room.state.player.inventory.length;
-
+        
         client.send('buy', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
+        const initialInventoryCount = room.state.player.inventory.length;
 
         expect(room.state.player.gold).toBe(goldBefore - item.price);
         expect(room.state.player.inventory.length).toBe(initialInventoryCount + 1);
@@ -99,10 +99,10 @@ describe("testing your Colyseus app", () => {
 
         const item = room.state.shop[0];
         const goldBefore = room.state.player.gold;
-        const initialInventoryCount = room.state.player.inventory.length;
-
+        
         client.send('buy', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
+        const initialInventoryCount = room.state.player.inventory.length;
 
         client.send('sell', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
@@ -123,10 +123,10 @@ describe("testing your Colyseus app", () => {
         expect(equippable).toBeDefined();
 
         const slot = Array.from(equippable.equipOptions)[0];
-        const initialInventoryCount = room.state.player.inventory.length;
-
+        
         client.send('buy', { itemId: equippable.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
+        const initialInventoryCount = room.state.player.inventory.length;
 
         client.send('equip', { itemId: equippable.itemId, slot });
         await new Promise<void>(r => setTimeout(r, 100));
