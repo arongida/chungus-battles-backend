@@ -185,7 +185,7 @@ export class Player extends Schema implements IStats {
 
     async sellItem(item: Item) {
         if (item.equipped) return;
-        this.gold += Math.floor(item.price * 0.7);
+        this.gold += Math.floor(item.price * 0.7 * item.rarity);
         const indexOfDeletedItem = this.inventory.indexOf(item);
         this.inventory.splice(indexOfDeletedItem, 1);
     }
