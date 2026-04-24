@@ -24,7 +24,7 @@ describe("testing your Colyseus app", () => {
         await colyseus.cleanup();
     });
 
-    const FIGHT_ROOM_SERVER_MESSAGES = [
+    const ROOM_SERVER_MESSAGES = [
         'attack', 'damage', 'healing', 'combat_log', 'trigger_talent',
         'trigger_item', 'end_battle', 'game_over', 'draft_log', 'error',
     ];
@@ -33,7 +33,7 @@ describe("testing your Colyseus app", () => {
         const fightRoom = await colyseus.createRoom("fight_room", {});
         const fightClient = await colyseus.connectTo(fightRoom, { playerId });
         // Register no-op handlers so the SDK doesn't warn about unhandled message types
-        FIGHT_ROOM_SERVER_MESSAGES.forEach(type => fightClient.onMessage(type, () => {}));
+        ROOM_SERVER_MESSAGES.forEach(type => fightClient.onMessage(type, () => {}));
         await new Promise<void>(r => setTimeout(r, 500));
         return { fightRoom, fightClient };
     }
@@ -44,6 +44,7 @@ describe("testing your Colyseus app", () => {
         const client = await colyseus.connectTo(room, { playerId, name, avatarUrl: "test_avatar" });
         // Wait for onJoin to complete: DraftRoom has a 1000ms clock delay before any DB work,
         // so 500ms was always insufficient. 2500ms covers the delay + DB round trips in CI.
+        ROOM_SERVER_MESSAGES.forEach(type => client.onMessage(type, () => {}));
         await new Promise<void>(r => setTimeout(r, 2500));
 
 
@@ -67,14 +68,14 @@ describe("testing your Colyseus app", () => {
         
         client.send('buy', { itemId: selectedItemId });
         await new Promise<void>(r => setTimeout(r, 100));
-        const initialInventoryCount = room.state.player.inventory.length;
+
 
         client.send('select_talent', { talentId: selectedTalentId });
         await new Promise<void>(r => setTimeout(r, 100));
 
         expect(client.sessionId).toEqual(room.clients[0].sessionId);
-        expect(room.state.player.inventory.length).toBe(initialInventoryCount + 1);
         expect(room.state.player.talents.length).toBe(1);
+        expect(room.state.player.inventory.find((i: Item) => i.itemId === selectedItemId)).toBeDefined();
     });
 
     it("buying an item deducts gold and adds it to inventory", async () => {
@@ -85,10 +86,8 @@ describe("testing your Colyseus app", () => {
         
         client.send('buy', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
-        const initialInventoryCount = room.state.player.inventory.length;
 
         expect(room.state.player.gold).toBe(goldBefore - item.price);
-        expect(room.state.player.inventory.length).toBe(initialInventoryCount + 1);
         expect(room.state.player.inventory.find((i: Item) => i.itemId === item.itemId)).toBeDefined();
 
         await cleanExit();
@@ -102,14 +101,13 @@ describe("testing your Colyseus app", () => {
         
         client.send('buy', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
-        const initialInventoryCount = room.state.player.inventory.length;
 
         client.send('sell', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
 
         const expectedGold = (goldBefore - item.price) + Math.floor(item.price * 0.7);
         expect(room.state.player.gold).toBe(expectedGold);
-        expect(room.state.player.inventory.length).toBe(initialInventoryCount);
+        expect(room.state.player.inventory.find((i: Item) => i.itemId === item.itemId)).toBeUndefined();
 
         await cleanExit();
     });
@@ -126,12 +124,11 @@ describe("testing your Colyseus app", () => {
         
         client.send('buy', { itemId: equippable.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
-        const initialInventoryCount = room.state.player.inventory.length;
 
         client.send('equip', { itemId: equippable.itemId, slot });
         await new Promise<void>(r => setTimeout(r, 100));
 
-        expect(room.state.player.inventory.length).toBe(initialInventoryCount);
+        expect(room.state.player.inventory.find((i: Item) => i.itemId === equippable.itemId)).toBeUndefined();
         expect(room.state.player.equippedItems.get(slot)).toBeDefined();
         expect(room.state.player.equippedItems.get(slot).itemId).toBe(equippable.itemId);
 
@@ -145,7 +142,6 @@ describe("testing your Colyseus app", () => {
         );
         expect(equippable).toBeDefined();
         const slot = Array.from(equippable.equipOptions)[0];
-        const itemCountInInventory = room.state.player.inventory.length;
 
         client.send('buy', { itemId: equippable.itemId });
         await new Promise<void>(r => setTimeout(r, 250));
@@ -156,7 +152,7 @@ describe("testing your Colyseus app", () => {
         client.send('unequip', { itemId: equippable.itemId, slot });
         await new Promise<void>(r => setTimeout(r, 100));
 
-        expect(room.state.player.inventory.length).toBe(itemCountInInventory + 1);
+        expect(room.state.player.inventory.find((i: Item) => i.itemId === equippable.itemId)).toBeDefined();
         expect(room.state.player.equippedItems.get(slot)).toBeUndefined();
 
         await cleanExit();
