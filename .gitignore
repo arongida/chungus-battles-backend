@@ -14,3 +14,5 @@
 *.log
 npm-debug.log*
 .claude/
+.devmode.json
+/dump/
