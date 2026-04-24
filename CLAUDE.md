@@ -393,3 +393,8 @@ PM2 config in `ecosystem.config.js` runs `build/index.js` with one process per C
 6. **Talent `affectedStats` are persistent across fights** for aura/accumulating talents (e.g., `RAGE`, `ASSASSIN_AMUSEMENT`). These are reset on `FIGHT_END` trigger. When designing talents that accumulate, add a reset case to `TalentBehaviors` for `TriggerType.FIGHT_END`.
 
 7. **`copyPlayer`** is called in `DraftRoom.onLeave`, not `FightRoom.onLeave`. The fight room only calls `updatePlayer`. The draft room creates the persistent snapshot after each round.
+
+
+## Development guidelines
+
+1. Do not create feature branch and/or worktrees, just start the implementation in the current branch that is checked out

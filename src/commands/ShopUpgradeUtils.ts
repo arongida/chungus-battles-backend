@@ -1,6 +1,6 @@
 import { Item } from '../items/schema/ItemSchema';
 import { Player } from '../players/schema/PlayerSchema';
-import { ItemRarity, ItemSet } from '../items/types/ItemTypes';
+import { EquipSlot, ItemRarity, ItemSet } from '../items/types/ItemTypes';
 
 export function applyRarityUpgrade(target: Item, source: Item): void {
   target.rarity++;
@@ -18,7 +18,7 @@ export function applyRarityUpgrade(target: Item, source: Item): void {
       break;
     case ItemSet.MERCHANT:
       target.affectedStats.mergeInto(source.affectedStats);
-      target.affectedStats.mergeInto(source.affectedStats);
+      if (target.type === 'weapon') target.affectedStats.mergeInto(source.affectedStats);
       break;
     default:
       target.affectedStats.mergeInto(source.affectedStats);
