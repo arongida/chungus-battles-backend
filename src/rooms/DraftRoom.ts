@@ -2,7 +2,8 @@ import {Client, Room} from '@colyseus/core';
 import {DraftState} from './schema/DraftState';
 import {Item} from '../items/schema/ItemSchema';
 import {copyPlayer, createNewPlayer, getPlayer, updatePlayer} from '../players/db/Player';
-import {getNumberOfItems, getQuestItems} from '../items/db/Item';
+import {getNumberOfItems, getQuestItems, getItemById} from '../items/db/Item';
+import {applyRarityUpgrade, findOwnedUpgradeTarget} from '../commands/ShopUpgradeUtils';
 import {Player} from '../players/schema/PlayerSchema';
 import {delay} from '../common/utils';
 import {getRandomTalents} from '../talents/db/Talent';
@@ -154,7 +155,25 @@ export class DraftRoom extends Room {
             this.state.player.unlockShop();
         } else if (this.state.shop.length < 6) {
             this.state.shop.clear();
-            shopFromDb.forEach(item => this.state.shop.push(item));
+            for (const rolledItem of shopFromDb) {
+                const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
+                if (ownedTarget) {
+                    const preview = await getItemById(rolledItem.itemId);
+                    if (!preview) {
+                        this.state.shop.push(rolledItem);
+                        continue;
+                    }
+                    while (preview.rarity < ownedTarget.rarity + 1) {
+                        const source = await getItemById(rolledItem.itemId);
+                        if (!source) break;
+                        applyRarityUpgrade(preview, source);
+                    }
+                    preview.price = rolledItem.price;
+                    this.state.shop.push(preview);
+                } else {
+                    this.state.shop.push(rolledItem);
+                }
+            }
         }
 
         this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
