@@ -163,9 +163,12 @@ export class DraftRoom extends Room {
                         this.state.shop.push(rolledItem);
                         continue;
                     }
+                    const source = await getItemById(rolledItem.itemId);
+                    if (!source) {
+                        this.state.shop.push(rolledItem);
+                        continue;
+                    }
                     while (preview.rarity < ownedTarget.rarity + 1) {
-                        const source = await getItemById(rolledItem.itemId);
-                        if (!source) break;
                         applyRarityUpgrade(preview, source);
                     }
                     preview.price = rolledItem.price;
