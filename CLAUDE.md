@@ -47,8 +47,8 @@ chungus-battles-backend/
 │   │   └── types/TalentTypes.ts    # TalentType enum (IDs 1–503)
 │   ├── commands/
 │   │   ├── UpdateStatsCommand.ts   # Recalculates all player stats each tick
-│   │   ├── UpdateItemRarityCommand.ts
 │   │   ├── UpdateActiveSets.ts     # Detects active item set bonuses
+│   │   ├── ShopUpgradeUtils.ts     # applyRarityUpgrade + findOwnedUpgradeTarget helpers
 │   │   └── triggers/               # One Command per TriggerType
 │   │       ├── ActiveTriggerCommand.ts
 │   │       ├── AfterShopRefreshTriggerCommand.ts
@@ -116,7 +116,7 @@ The server listens on port `2567` by default (or the `PORT` env var).
 
 1. **DraftRoom** (`draft_room`) — Player buys items, manages inventory, equips gear, selects talents.
    - `maxClients = 1` (one player per room)
-   - Simulation interval: 500ms (runs `UpdateStatsCommand`, `UpdateItemRarityCommand`, `UpdateActiveSets`)
+   - Simulation interval: 500ms (runs `UpdateStatsCommand`, `UpdateActiveSets`)
    - Aura interval: 1000ms (runs `DraftAuraTriggerCommand`)
    - `autoDispose = false`
 
