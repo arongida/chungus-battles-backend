@@ -14,7 +14,6 @@ import {AfterShopRefreshTriggerCommand} from '../commands/triggers/AfterShopRefr
 import {DraftAuraTriggerCommand} from '../commands/triggers/DraftAuraTriggerCommand';
 import {EquipSlot} from "../items/types/ItemTypes";
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
-import {UpdateItemRarityCommand} from "../commands/UpdateItemRarityCommand";
 import {UpdateActiveSets} from "../commands/UpdateActiveSets";
 import {ArraySchema} from "@colyseus/schema";
 
@@ -71,7 +70,6 @@ export class DraftRoom extends Room {
     update() {
         if (this.state.player) {
             this.dispatcher.dispatch(new UpdateStatsCommand());
-            this.dispatcher.dispatch(new UpdateItemRarityCommand());
             this.dispatcher.dispatch(new UpdateActiveSets());
         }
     }
