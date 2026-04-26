@@ -323,7 +323,6 @@ export const TalentBehaviors = {
         [TalentType.EYE_FOR_AN_EYE]: (context: TalentBehaviorContext) => {
             const {attacker, defender, client, talent, damage, clock, commandDispatcher} = context;
             if (defender.talentsOnCooldown.includes(TalentType.EYE_FOR_AN_EYE)) {
-                console.log('Eye for an eye is on cooldown');
                 return;
             }
             const random = Math.random();
@@ -545,7 +544,7 @@ export const TalentBehaviors = {
 
                 const randomBonus = rollTheDice(1, 9);
                 if (randomBonus === 1) {
-                    amount = 5 + attacker.level;
+                    amount = 10 * attacker.level;
                     talent.affectedStats.maxHp += amount;
                     stat = "hp";
                 } else if (randomBonus === 2) {
@@ -557,15 +556,15 @@ export const TalentBehaviors = {
                     talent.affectedStats.strength += amount;
                     stat = "strength";
                 } else if (randomBonus === 4) {
-                    amount = 9 + attacker.level;
+                    amount = 9 * attacker.level;
                     talent.affectedStats.defense += amount;
                     stat = "defense";
                 } else if (randomBonus === 5) {
-                    amount = attacker.level * 0.1;
+                    amount = attacker.level * 0.15;
                     talent.affectedStats.flatDmgReduction += amount;
                     stat = "flat damage reduction";
                 } else if (randomBonus === 6) {
-                    amount = 10 + attacker.level;
+                    amount = 10 * attacker.level;
                     talent.affectedStats.dodgeRate += amount;
                     stat = "dodge rate";
                 } else if (randomBonus === 7) {
@@ -577,7 +576,7 @@ export const TalentBehaviors = {
                     talent.affectedStats.income += amount;
                     stat = "income";
                 } else if (randomBonus === 9) {
-                    amount = attacker.level * 0.1;
+                    amount = attacker.level * 0.15;
                     talent.affectedStats.hpRegen += amount;
                     stat = "hp regeneration";
                 }

@@ -158,6 +158,24 @@ Stats are **recalculated from scratch on every tick**:
 | `income`           | Bonus gold per round                         |
 | `hpRegen`          | HP restored per second during fight          |
 
+### Stat Gold Values
+
+Derived from linear regression across all items in the DB (R² = 0.94). Useful as a baseline when pricing new items.
+
+| Stat | Gold / unit | Notes |
+|------|-------------|-------|
+| `income` | ~3.0g | Per bonus gold/round |
+| `accuracy` | ~2.4g | Per point of min damage |
+| `hpRegen` | ~1.85g | Per HP/sec restored during fight |
+| `strength` | ~0.78g | Per point of max damage |
+| `defense` | ~0.35g | Per point; formula: `dmg × 100/(100+defense)` |
+| `dodgeRate` | ~0.33g | Per point; formula: `1 - 100/(100+dodgeRate)` |
+| `maxHp` | ~0.17g | Per HP |
+| `attackSpeed` | ~4.75g | Per +0.1 multiplier on weapon base speed |
+| `flatDmgReduction` | ~1–2g | Per point subtracted after percent reduction; hard to isolate — only appears on shields alongside large amounts of defense, which skews regression |
+
+`attackSpeed` on non-weapon items is a multiplier applied to `weapon.baseAttackSpeed`, so its effective value scales with how much damage you already deal.
+
 ### Player Progression
 
 - Start: level 1, 3 lives, 0 wins
