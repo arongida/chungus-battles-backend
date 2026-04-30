@@ -156,6 +156,7 @@ export async function createNewPlayer(
     const defaultWeapon = await getItemById(getDefaultWeaponId(avatarUrl));
     if (defaultWeapon) {
         playerSchema.inventory.push(defaultWeapon);
+        playerSchema.setItemEquipped(defaultWeapon, EquipSlot.MAIN_HAND);
         await updatePlayer(playerSchema);
     } else {
         console.warn(`Default weapon for avatar ${avatarUrl} not found in DB`);

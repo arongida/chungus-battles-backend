@@ -4,6 +4,7 @@ import {DraftRoom} from '../rooms/DraftRoom';
 import {Player} from "../players/schema/PlayerSchema";
 import {DraftState} from "../rooms/schema/DraftState";
 import {AffectedStats} from "../common/schema/AffectedStatsSchema";
+import {addStats} from '../common/statsUtils';
 
 export class UpdateStatsCommand extends Command<
     FightRoom | DraftRoom
@@ -52,17 +53,10 @@ export class UpdateStatsCommand extends Command<
 
     increaseStats(player: Player, affectedStats: AffectedStats) {
         try {
-            player.strength += affectedStats.strength;
-            player.accuracy += affectedStats.accuracy;
-            player.defense += affectedStats.defense;
+            addStats(player, affectedStats);
             if (affectedStats.attackSpeed !== 0 && affectedStats.attackSpeed !== 1) {
                 player.attackSpeedMultiplier *= affectedStats.attackSpeed;
             }
-            player.dodgeRate += affectedStats.dodgeRate;
-            player.flatDmgReduction += affectedStats.flatDmgReduction;
-            player.income += affectedStats.income;
-            player.hpRegen += affectedStats.hpRegen;
-            player.maxHp += affectedStats.maxHp;
         } catch (e) {
             console.error('Failed to increase stats for player: ', player?.name)
             console.error(e)

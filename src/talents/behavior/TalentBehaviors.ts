@@ -239,9 +239,10 @@ export const TalentBehaviors = {
         },
 
         [TalentType.STRONG]: (context: TalentBehaviorContext) => {
-            const {attacker, talent, client} = context;
-            const hpBonus = attacker.maxHp * talent.activationRate;
-            const attackBonus = attacker.strength * talent.activationRate;
+            const {attacker, talent, client, attackerSnapshot} = context;
+            const base = attackerSnapshot ?? attacker;
+            const hpBonus = base.maxHp * talent.activationRate;
+            const attackBonus = base.strength * talent.activationRate;
 
             talent.affectedStats.maxHp = hpBonus;
             talent.affectedStats.strength = attackBonus;
@@ -281,8 +282,9 @@ export const TalentBehaviors = {
         },
 
         [TalentType.ZEALOT]: (context: TalentBehaviorContext) => {
-            const {attacker, client, talent} = context;
-            talent.affectedStats.attackSpeed = 1 + (attacker.defense * talent.activationRate * 0.01);
+            const {attacker, client, talent, attackerSnapshot} = context;
+            const base = attackerSnapshot ?? attacker;
+            talent.affectedStats.attackSpeed = 1 + (base.defense * talent.activationRate * 0.01);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ZEALOT,
@@ -728,17 +730,18 @@ export const TalentBehaviors = {
 
         [TalentType.MERCHANT_3]:
             (context: TalentBehaviorContext) => {
-                const {attacker, client, talent} = context;
-                const bonusCoefficent = (attacker.income * talent.scaling + talent.base) / 100;
+                const {attacker, client, talent, attackerSnapshot} = context;
+                const base = attackerSnapshot ?? attacker;
+                const bonusCoefficent = (base.income * talent.scaling + talent.base) / 100;
 
-                talent.affectedStats.strength = Math.ceil(attacker.strength * bonusCoefficent);
-                talent.affectedStats.accuracy = Math.ceil(attacker.accuracy * bonusCoefficent);
+                talent.affectedStats.strength = Math.ceil(base.strength * bonusCoefficent);
+                talent.affectedStats.accuracy = Math.ceil(base.accuracy * bonusCoefficent);
                 talent.affectedStats.attackSpeed = 1 + bonusCoefficent;
-                talent.affectedStats.defense = Math.ceil(attacker.defense * bonusCoefficent);
-                talent.affectedStats.maxHp = Math.ceil(attacker.maxHp * bonusCoefficent);
-                talent.affectedStats.dodgeRate = Math.ceil(attacker.dodgeRate * bonusCoefficent);
-                talent.affectedStats.hpRegen = Math.ceil(attacker.hpRegen * bonusCoefficent);
-                talent.affectedStats.flatDmgReduction = Math.ceil(attacker.flatDmgReduction * bonusCoefficent);
+                talent.affectedStats.defense = Math.ceil(base.defense * bonusCoefficent);
+                talent.affectedStats.maxHp = Math.ceil(base.maxHp * bonusCoefficent);
+                talent.affectedStats.dodgeRate = Math.ceil(base.dodgeRate * bonusCoefficent);
+                talent.affectedStats.hpRegen = Math.ceil(base.hpRegen * bonusCoefficent);
+                talent.affectedStats.flatDmgReduction = Math.ceil(base.flatDmgReduction * bonusCoefficent);
 
 
                 client.send('trigger_talent', {
