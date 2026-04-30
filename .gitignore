@@ -11,6 +11,7 @@
 /.idea/
 /scripts/linux/dump
 /.DS_Store
+/scripts/.DS_Store
 *.log
 npm-debug.log*
 .claude/

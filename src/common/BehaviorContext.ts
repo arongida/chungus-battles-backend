@@ -8,6 +8,9 @@ import {Dispatcher} from '@colyseus/command';
 import {FightRoom} from '../rooms/FightRoom';
 import {DraftRoom} from '../rooms/DraftRoom';
 import {TriggerType} from "./types";
+import {StatsSnapshot} from './statsUtils';
+
+export {StatsSnapshot};
 
 export interface BehaviorContext {
     client: Client;
@@ -21,4 +24,5 @@ export interface BehaviorContext {
     commandDispatcher?: Dispatcher<FightRoom | DraftRoom>
     trigger: TriggerType;
     weapon?: Item;
+    attackerSnapshot?: StatsSnapshot;
 }

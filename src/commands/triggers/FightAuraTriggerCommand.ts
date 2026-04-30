@@ -4,6 +4,7 @@ import {FightRoom} from '../../rooms/FightRoom';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {BehaviorContext} from '../../common/BehaviorContext';
 import {Player} from '../../players/schema/PlayerSchema';
+import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
 
 export class FightAuraTriggerCommand extends Command<FightRoom> {
     execute() {
@@ -15,13 +16,16 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
 
         const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes.includes(TriggerType.AURA));
 
+        const attackerSnapshot = buildBaseAndItemsSnapshot(player);
+
         let behaviorContext: BehaviorContext = {
             client: this.state.playerClient,
             attacker: player,
             defender: enemy,
             questItems: this.state.questItems,
             commandDispatcher: this.room.dispatcher,
-            trigger: TriggerType.AURA
+            trigger: TriggerType.AURA,
+            attackerSnapshot,
         };
 
         auraTalents.forEach((talent) => {
