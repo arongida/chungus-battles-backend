@@ -2,9 +2,11 @@ import {TalentType} from '../types/TalentTypes';
 import {Item} from '../../items/schema/ItemSchema';
 import {OnDamageTriggerCommand} from '../../commands/triggers/OnDamageTriggerCommand';
 import {TriggerType} from "../../common/types";
-import {EquipSlot} from "../../items/types/ItemTypes";
+import {EquipSlot, ItemSet} from "../../items/types/ItemTypes";
 import {rollTheDice} from "../../common/utils";
 import {TalentBehaviorContext} from "./TalentBehaviorContext";
+import {ArraySchema} from "@colyseus/schema";
+import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 
 export const TalentBehaviors = {
         [TalentType.RAGE]: (context: TalentBehaviorContext) => {
@@ -590,21 +592,67 @@ export const TalentBehaviors = {
                 });
             },
 
+        [TalentType.DUAL_WIELD]:
+            (context: TalentBehaviorContext) => {
+                const {attacker, talent} = context;
+
+                // Remove ghost copies that leaked into inventory (e.g. from a prior setItemUnequipped)
+                for (let i = attacker.inventory.length - 1; i >= 0; i--) {
+                    if (attacker.inventory[i].tags?.includes('dual_wield_copy')) {
+                        attacker.inventory.splice(i, 1);
+                    }
+                }
+
+                const mainHand = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
+                const offHand = attacker.equippedItems.get(EquipSlot.OFF_HAND);
+                const offHandIsGhost = offHand?.tags?.includes('dual_wield_copy');
+
+                talent.affectedStats.attackSpeed = 1;
+
+                if (!mainHand) {
+                    if (offHandIsGhost) attacker.setItemUnequipped(offHand, EquipSlot.OFF_HAND);
+                    return;
+                }
+
+                // Respect a real item the player placed in off hand
+                if (offHand && !offHandIsGhost) {
+                    return;
+                }
+
+                // Ghost already matches — no need to re-equip, just refresh speed bonus
+                if (offHandIsGhost && offHand.itemId === mainHand.itemId) {
+                    talent.affectedStats.attackSpeed = 1 + mainHand.tier * talent.scaling;
+                    return;
+                }
+
+                attacker.setItemEquipped(clonedAsGhost(mainHand), EquipSlot.OFF_HAND);
+                talent.affectedStats.attackSpeed = 1 + mainHand.tier * talent.scaling;
+            },
+
         [TalentType.WARRIOR_1]:
             (context: TalentBehaviorContext) => {
-                const {attacker, defender, client, talent, commandDispatcher} = context;
-                const reflectDamage = talent.base + talent.scaling * defender.level;
-                const damageAfterReduction = attacker.getDamageAfterDefense(reflectDamage);
-                commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-                    defender: attacker,
-                    damage: damageAfterReduction,
-                    attacker: attacker,
-                });
-                attacker.takeDamage(damageAfterReduction, client);
-                client.send('combat_log', `${defender.name} reflects ${damageAfterReduction} damage to ${attacker.name}!`);
-                client.send('trigger_talent', {
-                    playerId: defender.playerId,
-                    talentId: TalentType.WARRIOR_1,
+                const {attacker, talent} = context;
+
+                talent.affectedStats.strength = 0;
+                talent.affectedStats.accuracy = 0;
+                talent.affectedStats.maxHp = 0;
+                talent.affectedStats.defense = 0;
+                talent.affectedStats.dodgeRate = 0;
+                talent.affectedStats.flatDmgReduction = 0;
+                talent.affectedStats.income = 0;
+                talent.affectedStats.hpRegen = 0;
+
+                attacker.equippedItems.forEach((item) => {
+                    if (item.set === ItemSet.WARRIOR && item.setActive) {
+                        talent.affectedStats.strength += item.setBonusStats.strength * talent.activationRate;
+                        talent.affectedStats.accuracy += item.setBonusStats.accuracy * talent.activationRate;
+                        talent.affectedStats.maxHp += item.setBonusStats.maxHp * talent.activationRate;
+                        talent.affectedStats.defense += item.setBonusStats.defense * talent.activationRate;
+                        talent.affectedStats.dodgeRate += item.setBonusStats.dodgeRate * talent.activationRate;
+                        talent.affectedStats.flatDmgReduction += item.setBonusStats.flatDmgReduction * talent.activationRate;
+                        talent.affectedStats.income += item.setBonusStats.income * talent.activationRate;
+                        talent.affectedStats.hpRegen += item.setBonusStats.hpRegen * talent.activationRate;
+                    }
                 });
             },
 
@@ -802,5 +850,35 @@ export const TalentBehaviors = {
             },
     }
 ;
+
+function clonedAsGhost(source: Item): Item {
+    const raw = source.toJSON() as any;
+    const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
+
+    const ghost = new Item().assign(primitives);
+    ghost.affectedStats = new AffectedStats().assign(affectedStats || {});
+    ghost.setBonusStats = new AffectedStats().assign(setBonusStats || {});
+    ghost.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
+
+    const equipOptionsArr = new ArraySchema<string>();
+    if (equipOptions?.length) (equipOptions as string[]).forEach((e: string) => equipOptionsArr.push(e));
+    (ghost as any).equipOptions = equipOptionsArr;
+
+    const itemCollectionsArr = new ArraySchema<number>();
+    if (itemCollections?.length) (itemCollections as number[]).forEach((c: number) => itemCollectionsArr.push(c));
+    (ghost as any).itemCollections = itemCollectionsArr;
+
+    const triggerTypesArr = new ArraySchema<string>();
+    if (triggerTypes?.length) (triggerTypes as string[]).forEach((t: string) => triggerTypesArr.push(t));
+    ghost.triggerTypes = triggerTypesArr;
+
+    ghost.price = 0;
+    ghost.sold = false;
+    ghost.equipped = false;
+    ghost.setActive = false;
+    ghost.tags = new ArraySchema<string>('dual_wield_copy');
+
+    return ghost;
+}
 
 

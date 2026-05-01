@@ -41,6 +41,7 @@ export async function getNumberOfItems(
                     {tier: {$lte: levelRequirement}},
                     {levelRequirement: {$lte: levelRequirement}},
                 ],
+                tags: {$ne: 'quest'},
             },
         },
         {$sample: {size: numberOfItems}},
@@ -83,7 +84,7 @@ export async function getItemById(itemId: number): Promise<Item | null> {
 
 export async function getQuestItems(): Promise<Item[]> {
     const itemArrayFromDb = await itemModel
-        .find({tier: ItemTier.QUEST_TIER_1})
+        .find({tags: "quest"})
         .lean()
         .select({_id: 0, __v: 0});
 
