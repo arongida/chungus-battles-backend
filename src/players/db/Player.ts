@@ -43,6 +43,7 @@ export async function getPlayer(playerId: number): Promise<Player> {
 function buildItemSchema(itemFromDb: any): Item {
     const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
+    if (!item.sellPrice) item.sellPrice = Math.floor(item.price * item.rarity * 0.7);
     item.affectedStats = new AffectedStats().assign(affectedStats || {});
     item.setBonusStats = new AffectedStats().assign(setBonusStats || {});
     item.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});

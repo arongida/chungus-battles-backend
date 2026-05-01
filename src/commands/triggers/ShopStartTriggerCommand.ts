@@ -26,6 +26,5 @@ export class ShopStartTriggerCommand extends Command<DraftRoom> {
         });
 
         triggerEquippedItems(this.state.player, onShopStartTalentsContext, TriggerType.SHOP_START);
-        this.room.checkLevelUp();
     }
 }

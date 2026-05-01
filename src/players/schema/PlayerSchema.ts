@@ -4,7 +4,7 @@ import {Item} from '../../items/schema/ItemSchema';
 import {IStats} from '../../common/types';
 import {TalentType} from '../../talents/types/TalentTypes';
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
-import {EquipSlot} from "../../items/types/ItemTypes";
+import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 
 export class Player extends Schema implements IStats {
@@ -180,12 +180,42 @@ export class Player extends Schema implements IStats {
         item.sold = true;
         const lockedIdx = this.lockedShop.indexOf(item);
         if (lockedIdx !== -1) this.lockedShop.splice(lockedIdx, 1);
-        this.inventory.push(item);
+
+        const ownedTarget = this.findUpgradeTarget(item.itemId);
+        if (ownedTarget && item.rarity === ownedTarget.rarity + 1) {
+            let equippedSlot: EquipSlot | null = null;
+            this.equippedItems.forEach((value, key) => {
+                if (value === ownedTarget) equippedSlot = key as EquipSlot;
+            });
+            if (equippedSlot !== null) {
+                item.equipped = true;
+                this.equippedItems.set(equippedSlot, item);
+            } else {
+                const invIdx = this.inventory.indexOf(ownedTarget);
+                if (invIdx !== -1) this.inventory.splice(invIdx, 1);
+                this.inventory.push(item);
+            }
+        } else {
+            this.inventory.push(item);
+        }
+    }
+
+    private findUpgradeTarget(itemId: number): Item | null {
+        const candidates: Item[] = [];
+        this.equippedItems.forEach((item) => {
+            if (item.itemId === itemId && item.rarity < ItemRarity.LEGENDARY) candidates.push(item);
+        });
+        this.inventory.forEach((item) => {
+            if (item.itemId === itemId && item.rarity < ItemRarity.LEGENDARY) candidates.push(item);
+        });
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => b.rarity - a.rarity);
+        return candidates[0];
     }
 
     async sellItem(item: Item) {
         if (item.equipped) return;
-        this.gold += Math.floor(item.price * 0.7 * item.rarity);
+        this.gold += item.sellPrice;
         const indexOfDeletedItem = this.inventory.indexOf(item);
         this.inventory.splice(indexOfDeletedItem, 1);
     }

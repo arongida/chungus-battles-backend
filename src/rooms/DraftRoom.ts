@@ -22,6 +22,7 @@ export class DraftRoom extends Room {
     maxClients = 1;
 
     dispatcher = new Dispatcher(this);
+    private talentSelectionGeneration: number = 0;
 
     async onCreate(options: any) {
         this.setState(new DraftState());
@@ -42,16 +43,16 @@ export class DraftRoom extends Room {
             this.refreshShop(client);
         });
 
-        this.onMessage('buy_xp', (client) => {
-            this.buyXp(4, 4, client);
+        this.onMessage('buy_xp', async (client) => {
+            await this.buyXp(4, 4, client);
         });
 
-        this.onMessage('select_talent', (client, message) => {
-            this.selectTalent(message.talentId);
+        this.onMessage('select_talent', async (client, message) => {
+            await this.selectTalent(message.talentId);
         });
 
-        this.onMessage('refresh_talents', (client) => {
-            this.handleRefreshTalentSelection(client);
+        this.onMessage('refresh_talents', async (client) => {
+            await this.handleRefreshTalentSelection(client);
         });
         this.onMessage('lock-shop', (client)=>{
             this.handleLockShop(client);
@@ -110,6 +111,7 @@ export class DraftRoom extends Room {
 
         //shop start trigger
         this.dispatcher.dispatch(new ShopStartTriggerCommand());
+        await this.checkLevelUp();
 
         //start auras
         this.clock.setInterval(() => {
@@ -204,12 +206,17 @@ export class DraftRoom extends Room {
         //if player has no talent points, return
         if (this.state.remainingTalentPoints <= 0) return;
 
+        const generation = ++this.talentSelectionGeneration;
+
         //get next talent level to choose from
         let nextTalentLevel = 1;
-        if (this.state.player.talents.length > 0)
-            nextTalentLevel = this.state.player.talents.sort((a, b) => b.tier - a.tier)[0].tier + 1;
+        if (this.state.player.talents.length > 0) {
+            const maxTier = this.state.player.talents.reduce((max, t) => Math.max(max, t.tier), 0);
+            nextTalentLevel = maxTier + 1;
+        }
         //assign talents from db to state
         const talents = await getRandomTalents(2, nextTalentLevel, exceptions);
+        if (generation !== this.talentSelectionGeneration) return;
         talents.forEach((talent) => {
             if (this.state.availableTalents.length < 2) this.state.availableTalents.push(talent);
         });
@@ -219,12 +226,9 @@ export class DraftRoom extends Room {
     private async setUpState(player: Player, client: Client) {
         this.state.player.copyFrom(player);
 
-        let highestTalentTier;
-        if (this.state.player.talents.length > 0) {
-            highestTalentTier = this.state.player.talents.sort((a, b) => b.tier - a.tier)[0].tier;
-        } else {
-            highestTalentTier = 0;
-        }
+        const highestTalentTier = this.state.player.talents.length > 0
+            ? this.state.player.talents.reduce((max, t) => Math.max(max, t.tier), 0)
+            : 0;
 
         this.state.remainingTalentPoints = player.level - highestTalentTier;
         this.state.hasFreeTalentReroll = this.state.remainingTalentPoints > 0;
@@ -246,27 +250,7 @@ export class DraftRoom extends Room {
             client.send('error', 'Not possible to buy item!');
             return;
         }
-        const ownedTarget = findOwnedUpgradeTarget(this.state.player, item.itemId);
-        if (ownedTarget && item.rarity === ownedTarget.rarity + 1) {
-            this.state.player.gold -= item.price;
-            item.sold = true;
-            const lockedIdx = this.state.player.lockedShop.indexOf(item);
-            if (lockedIdx !== -1) this.state.player.lockedShop.splice(lockedIdx, 1);
-            let equippedSlot: EquipSlot | null = null;
-            this.state.player.equippedItems.forEach((value, key) => {
-                if (value === ownedTarget) equippedSlot = key as EquipSlot;
-            });
-            if (equippedSlot !== null) {
-                item.equipped = true;
-                this.state.player.equippedItems.set(equippedSlot, item);
-            } else {
-                const invIdx = this.state.player.inventory.indexOf(ownedTarget);
-                if (invIdx !== -1) this.state.player.inventory.splice(invIdx, 1);
-                this.state.player.inventory.push(item);
-            }
-        } else {
-            this.state.player.getItem(item);
-        }
+        this.state.player.getItem(item);
     }
 
     private async sellItem(itemId: number) {
@@ -331,21 +315,24 @@ export class DraftRoom extends Room {
         }
     }
 
-    private buyXp(xp: number, price: number, client: Client) {
+    private async buyXp(xp: number, price: number, client: Client) {
         if (this.state.player.gold < price) {
             client.send('error', 'Not enough gold!');
             return;
         }
         this.state.player.gold -= price;
         this.state.player.xp += xp;
-        this.checkLevelUp();
+        await this.checkLevelUp();
     }
 
     public async checkLevelUp() {
-        if (this.state.player.level >= 5) return;
-        if (this.state.player.xp >= this.state.player.maxXp) {
+        let leveled = false;
+        while (this.state.player.level < 5 && this.state.player.xp >= this.state.player.maxXp) {
             await this.levelUp(this.state.player.xp - this.state.player.maxXp);
             this.state.remainingTalentPoints++;
+            leveled = true;
+        }
+        if (leveled) {
             this.state.hasFreeTalentReroll = true;
             this.updateTalentRerollCost();
             await this.updateTalentSelection();

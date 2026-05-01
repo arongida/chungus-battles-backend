@@ -21,6 +21,7 @@ export const ItemSchema = new Schema({
     type: String,
     equipOptions: [String],
     rarity: Number,
+    sellPrice: Number,
     baseMinDamage: Number,
     baseMaxDamage: Number,
     baseAttackSpeed: Number,
@@ -41,6 +42,7 @@ export async function getNumberOfItems(
                     {tier: {$lte: levelRequirement}},
                     {levelRequirement: {$lte: levelRequirement}},
                 ],
+                tags: {$ne: 'quest'},
             },
         },
         {$sample: {size: numberOfItems}},
@@ -53,6 +55,7 @@ function getItemSchemaObject(itemFromDb: any): Item {
     const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
+    if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);
     newItemSchemaObject.affectedStats = new AffectedStats().assign(affectedStats || {});
     newItemSchemaObject.setBonusStats = new AffectedStats().assign(setBonusStats || {});
     newItemSchemaObject.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
@@ -83,7 +86,7 @@ export async function getItemById(itemId: number): Promise<Item | null> {
 
 export async function getQuestItems(): Promise<Item[]> {
     const itemArrayFromDb = await itemModel
-        .find({tier: ItemTier.QUEST_TIER_1})
+        .find({tags: "quest"})
         .lean()
         .select({_id: 0, __v: 0});
 

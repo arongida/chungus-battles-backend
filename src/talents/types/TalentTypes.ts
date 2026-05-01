@@ -38,6 +38,7 @@ export enum TalentType {
 	GAMBLER = 39,
 	MAGIC_RING_WEAPON = 40,
 	JOKER = 41,
+	DUAL_WIELD = 42,
 	WARRIOR_1 = 101,
 	ROGUE_1 = 102,
 	MERCHANT_1 = 103,

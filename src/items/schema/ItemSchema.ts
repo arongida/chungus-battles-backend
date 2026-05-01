@@ -10,6 +10,7 @@ export class Item extends Schema {
   @type('string') name: string = 'Missing';
   @type('string') description: string;
   @type('number') price: number = 0;
+  @type('number') sellPrice: number = 0;
   @type(AffectedStats) affectedStats: AffectedStats;
   @type(AffectedStats) setBonusStats: AffectedStats;
   @type('boolean') setActive: boolean = false;
