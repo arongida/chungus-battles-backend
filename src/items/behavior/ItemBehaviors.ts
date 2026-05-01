@@ -1,5 +1,6 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
+import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerCommand';
 
 export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => void> = {
     // Dagger of Poison (18) — applies 1 poison stack to defender on every hit.
@@ -44,4 +45,26 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
             if (equipped === item) attacker.equippedItems.set(slot, equipped);
         });
     },
+
 };
+
+const shieldReflect: (context: ItemBehaviorContext) => void = ({ defender, attacker, item, client, commandDispatcher }) => {
+    if (!defender || !item || !attacker || !client || !commandDispatcher) return;
+    const baseDamage = 0.5 * item.rarity * item.tier;
+    const damage = attacker.getDamageAfterDefense(baseDamage);
+    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
+        defender: defender,
+        damage: damage,
+        attacker: attacker,
+    });
+    attacker.takeDamage(damage, client);
+    client.send('combat_log', `${defender.name}'s ${item.name} reflects ${damage} damage to ${attacker.name}!`)
+    defender.equippedItems.forEach((equipped, slot) => {
+        if (equipped === item) client.send('trigger_item', { playerId: defender.playerId, itemId: item.itemId, slot: slot });
+    });
+
+};
+
+for (let id = 76; id <= 80; id++) {
+    ItemBehaviors[id] = shieldReflect;
+}
