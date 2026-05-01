@@ -1,9 +1,10 @@
 import { Item } from '../items/schema/ItemSchema';
 import { Player } from '../players/schema/PlayerSchema';
-import { EquipSlot, ItemRarity, ItemSet } from '../items/types/ItemTypes';
+import { ItemRarity, ItemSet } from '../items/types/ItemTypes';
 
-export function applyRarityUpgrade(target: Item, source: Item): void {
+export function applyRarityUpgrade(target: Item, source: Item, increaseSellPrice = true): void {
   target.rarity++;
+  if (increaseSellPrice) target.sellPrice += source.sellPrice;
   target.setBonusStats.mergeInto(source.setBonusStats);
 
   switch (target.set) {

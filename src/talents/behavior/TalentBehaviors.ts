@@ -2,11 +2,13 @@ import {TalentType} from '../types/TalentTypes';
 import {Item} from '../../items/schema/ItemSchema';
 import {OnDamageTriggerCommand} from '../../commands/triggers/OnDamageTriggerCommand';
 import {TriggerType} from "../../common/types";
-import {EquipSlot, ItemSet} from "../../items/types/ItemTypes";
+import {EquipSlot, ItemRarity, ItemSet} from "../../items/types/ItemTypes";
 import {rollTheDice} from "../../common/utils";
 import {TalentBehaviorContext} from "./TalentBehaviorContext";
 import {ArraySchema} from "@colyseus/schema";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
+import {getItemById} from "../../items/db/Item";
+import {applyRarityUpgrade} from "../../commands/ShopUpgradeUtils";
 
 export const TalentBehaviors = {
         [TalentType.RAGE]: (context: TalentBehaviorContext) => {
@@ -213,22 +215,29 @@ export const TalentBehaviors = {
             });
         },
 
-        [TalentType.WEAPON_WHISPERER]: (context: TalentBehaviorContext) => {
-            const {attacker, client, talent} = context;
-
-            //get equipped weapon
+        [TalentType.WEAPON_WHISPERER]: async (context: TalentBehaviorContext) => {
+            const {attacker, client} = context;
             const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
-            if (weapon) {
-                attacker.equippedItems.delete(EquipSlot.MAIN_HAND)
+            if (!weapon || weapon.rarity >= ItemRarity.LEGENDARY) return;
 
-                talent.affectedStats.mergeInto(weapon.affectedStats);
+            // Lock rarity immediately so subsequent aura ticks skip this while the DB fetch is in flight
+            const originalRarity = weapon.rarity;
+            weapon.rarity = ItemRarity.LEGENDARY;
 
-                client.send('combat_log', `${attacker.name} consumed ${weapon.name}!`);
-                client.send('trigger_talent', {
-                    playerId: attacker.playerId,
-                    talentId: TalentType.WEAPON_WHISPERER,
-                });
+            const baseItem = await getItemById(weapon.itemId);
+            if (!baseItem) return;
+
+            // Restore so applyRarityUpgrade can increment step by step
+            weapon.rarity = originalRarity;
+            while (weapon.rarity < ItemRarity.LEGENDARY) {
+                applyRarityUpgrade(weapon, baseItem, false);
             }
+
+            client.send('combat_log', `${attacker.name}'s ${weapon.name} becomes Legendary!`);
+            client.send('trigger_talent', {
+                playerId: attacker.playerId,
+                talentId: TalentType.WEAPON_WHISPERER,
+            });
         },
 
         [TalentType.GOLD_GENIE]: (context: TalentBehaviorContext) => {
@@ -325,10 +334,7 @@ export const TalentBehaviors = {
         },
 
         [TalentType.EYE_FOR_AN_EYE]: (context: TalentBehaviorContext) => {
-            const {attacker, defender, client, talent, damage, clock, commandDispatcher} = context;
-            if (defender.talentsOnCooldown.includes(TalentType.EYE_FOR_AN_EYE)) {
-                return;
-            }
+            const {attacker, defender, client, talent, damage, commandDispatcher} = context;
             const random = Math.random();
             if (random < talent.activationRate) {
                 commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
@@ -344,13 +350,6 @@ export const TalentBehaviors = {
                     playerId: defender.playerId,
                     talentId: TalentType.EYE_FOR_AN_EYE,
                 });
-
-                defender.talentsOnCooldown.push(TalentType.EYE_FOR_AN_EYE);
-                clock.setTimeout(() => {
-                    defender.talentsOnCooldown = defender.talentsOnCooldown.filter(
-                        (talent) => talent !== TalentType.EYE_FOR_AN_EYE
-                    );
-                }, 1000);
             }
         },
 
@@ -620,7 +619,7 @@ export const TalentBehaviors = {
                 }
 
                 // Ghost already matches — no need to re-equip, just refresh speed bonus
-                if (offHandIsGhost && offHand.itemId === mainHand.itemId) {
+                if (offHandIsGhost && offHand.itemId === mainHand.itemId && offHand.rarity === mainHand.rarity) {
                     talent.affectedStats.attackSpeed = 1 + mainHand.tier * talent.scaling;
                     return;
                 }
@@ -873,6 +872,7 @@ function clonedAsGhost(source: Item): Item {
     ghost.triggerTypes = triggerTypesArr;
 
     ghost.price = 0;
+    ghost.sellPrice = 0;
     ghost.sold = false;
     ghost.equipped = false;
     ghost.setActive = false;

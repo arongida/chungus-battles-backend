@@ -21,6 +21,7 @@ export const ItemSchema = new Schema({
     type: String,
     equipOptions: [String],
     rarity: Number,
+    sellPrice: Number,
     baseMinDamage: Number,
     baseMaxDamage: Number,
     baseAttackSpeed: Number,
@@ -54,6 +55,7 @@ function getItemSchemaObject(itemFromDb: any): Item {
     const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
+    if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);
     newItemSchemaObject.affectedStats = new AffectedStats().assign(affectedStats || {});
     newItemSchemaObject.setBonusStats = new AffectedStats().assign(setBonusStats || {});
     newItemSchemaObject.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});

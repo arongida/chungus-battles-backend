@@ -17,7 +17,8 @@ export class OnDamageTriggerCommand extends Command<
             defender: defender,
             damage: damage,
             clock: this.clock,
-            trigger: TriggerType.ON_DAMAGE
+            trigger: TriggerType.ON_DAMAGE,
+            commandDispatcher: this.room.dispatcher,
         };
 
         const onDamageTalents: Talent[] = defender.talents.filter((talent) =>
