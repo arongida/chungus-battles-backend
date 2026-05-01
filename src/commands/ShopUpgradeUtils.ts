@@ -5,6 +5,9 @@ import { ItemRarity, ItemSet } from '../items/types/ItemTypes';
 export function applyRarityUpgrade(target: Item, source: Item, increaseSellPrice = true): void {
   target.rarity++;
   if (increaseSellPrice) target.sellPrice += source.sellPrice;
+  if (target.type === 'shield') {
+    target.description = `Reflect ${0.5 * target.rarity * target.tier} damage on attacked.`;
+  }
   target.setBonusStats.mergeInto(source.setBonusStats);
 
   switch (target.set) {
