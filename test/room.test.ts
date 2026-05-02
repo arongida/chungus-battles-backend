@@ -107,7 +107,9 @@ describe("testing your Colyseus app", () => {
     it("selling an item refunds 70% of its price", async () => {
         const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
-        const item = room.state.shop[0];
+        const equippedIds = new Set<number>();
+        room.state.player.equippedItems.forEach((i: Item) => equippedIds.add(i.itemId));
+        const item = room.state.shop.find((i: Item) => !equippedIds.has(i.itemId));
         const goldBefore = room.state.player.gold;
         
         client.send('buy', { itemId: item.itemId });
