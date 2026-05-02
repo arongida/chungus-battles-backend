@@ -446,12 +446,14 @@ export const TalentBehaviors = {
             (context: TalentBehaviorContext) => {
                 const {attacker, client, talent} = context;
 
-                const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
-                const offHandWeapon = attacker.equippedItems.get(EquipSlot.OFF_HAND);
-                if (weapon || offHandWeapon) {
+                const mainHandItem = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
+                const offHandItem = attacker.equippedItems.get(EquipSlot.OFF_HAND);
+                const mainHandWeapon = mainHandItem?.type === ItemType.WEAPON ? mainHandItem : null;
+                const offHandWeapon = offHandItem?.type === ItemType.WEAPON ? offHandItem : null;
+                if (mainHandWeapon || offHandWeapon) {
                     client.send('combat_log', `${attacker.name} is a martial artist and doesn't need a weapon!`);
-                    if (weapon) attacker.setItemUnequipped(weapon, EquipSlot.MAIN_HAND);
-                    if (offHandWeapon && offHandWeapon.type === "weapon") attacker.setItemUnequipped(offHandWeapon, EquipSlot.OFF_HAND);
+                    if (mainHandWeapon) attacker.setItemUnequipped(mainHandWeapon, EquipSlot.MAIN_HAND);
+                    if (offHandWeapon) attacker.setItemUnequipped(offHandWeapon, EquipSlot.OFF_HAND);
                 }
 
 
@@ -605,7 +607,6 @@ export const TalentBehaviors = {
 
                 const upgradeShield = (item: Item) => {
                     if (item.type !== ItemType.SHIELD) return;
-                    item.type = ItemType.WEAPON;
                     item.baseAttackSpeed = 0.6;
                     item.baseMinDamage = 1;
                     item.baseMaxDamage = 2;
