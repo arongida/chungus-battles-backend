@@ -55,4 +55,5 @@ export enum TalentType {
 	WARRIOR_5 = 501,
 	ROGUE_5 = 502,
 	MERCHANT_5 = 503,
+	MERCHANT_5B = 504,
 }

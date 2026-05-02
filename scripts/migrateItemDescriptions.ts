@@ -21,13 +21,8 @@ if (!DB_CONNECTION_STRING) {
 }
 
 const DESCRIPTIONS: Record<number, string> = {
-    18:  'Applies 1 poison stack on hit.',
     28:  '+3% attack speed per rogue item at fight start.',
-    29:  'Each hit slows enemy attack speed by 2%, down to 50%.',
-    59:  'Heals for 15% of damage dealt + 1 on hit.',
     701: '+0.5 strength per hit, resets after fight.',
-    702: '+0.01 strength on each attack.',
-    703: 'Max damage equals your current income.',
 };
 
 const TRIGGER_ITEM_IDS = Object.keys(DESCRIPTIONS).map(Number);

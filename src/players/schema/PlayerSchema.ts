@@ -19,6 +19,7 @@ export class Player extends Schema implements IStats {
     @type('number') lives: number;
     @type('number') wins: number;
     @type('string') avatarUrl: string;
+    @type('number') gameVersion: number;
     @type('number') income: number = 0;
     @type('number') hpRegen: number = 0;
     @type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
