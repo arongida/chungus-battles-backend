@@ -49,7 +49,8 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
 };
 
 const shieldReflect: (context: ItemBehaviorContext) => void = ({ defender, attacker, item, client, commandDispatcher }) => {
-    if (!defender || !item || !attacker || !client || !commandDispatcher) return;
+    if (!defender || !item || !attacker || !client || !commandDispatcher || item.rarity <= 1) return;
+
     const baseDamage = 0.5 * item.rarity * item.tier;
     const damage = attacker.getDamageAfterDefense(baseDamage);
     commandDispatcher.dispatch(new OnDamageTriggerCommand(), {

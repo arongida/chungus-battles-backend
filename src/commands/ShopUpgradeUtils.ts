@@ -1,11 +1,11 @@
 import { Item } from '../items/schema/ItemSchema';
 import { Player } from '../players/schema/PlayerSchema';
-import { ItemRarity, ItemSet } from '../items/types/ItemTypes';
+import { ItemRarity, ItemSet, ItemType } from '../items/types/ItemTypes';
 
 export function applyRarityUpgrade(target: Item, source: Item, increaseSellPrice = true): void {
   target.rarity++;
   if (increaseSellPrice) target.sellPrice += source.sellPrice;
-  if (target.type === 'shield') {
+  if (target.type === ItemType.SHIELD && target.rarity > 1) {
     target.description = `Reflect ${0.5 * target.rarity * target.tier} damage on attacked.`;
   }
   target.setBonusStats.mergeInto(source.setBonusStats);
@@ -22,7 +22,7 @@ export function applyRarityUpgrade(target: Item, source: Item, increaseSellPrice
       break;
     case ItemSet.MERCHANT:
       target.affectedStats.mergeInto(source.affectedStats);
-      if (target.type === 'weapon') target.affectedStats.mergeInto(source.affectedStats);
+      if (target.type === ItemType.WEAPON) target.affectedStats.mergeInto(source.affectedStats);
       break;
     default:
       target.affectedStats.mergeInto(source.affectedStats);

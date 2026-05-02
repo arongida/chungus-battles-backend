@@ -56,9 +56,6 @@ function getItemSchemaObject(itemFromDb: any): Item {
 
     const newItemSchemaObject = new Item().assign(primitives);
     if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);
-    if (newItemSchemaObject.type === 'shield') {
-        newItemSchemaObject.description = `Reflect ${0.5 * newItemSchemaObject.rarity * newItemSchemaObject.tier} damage on attacked.`;
-    }
     newItemSchemaObject.affectedStats = new AffectedStats().assign(affectedStats || {});
     newItemSchemaObject.setBonusStats = new AffectedStats().assign(setBonusStats || {});
     newItemSchemaObject.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});

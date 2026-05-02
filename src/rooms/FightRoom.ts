@@ -17,6 +17,7 @@ import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerComm
 import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
 import {OnDodgeTriggerCommand} from "../commands/triggers/OnDodgeTriggerCommand";
 import {Item} from '../items/schema/ItemSchema';
+import { ItemType } from '../items/types/ItemTypes';
 
 export class FightRoom extends Room {
     declare state: FightState;
@@ -185,7 +186,7 @@ export class FightRoom extends Room {
         fist.baseMinDamage = 0;
         fist.baseMaxDamage = 0;
         fist.baseAttackSpeed = 0.8;
-        fist.type = 'weapon';
+        fist.type = ItemType.WEAPON;
         return fist;
     }
 

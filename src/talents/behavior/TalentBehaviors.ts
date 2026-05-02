@@ -2,7 +2,7 @@ import {TalentType} from '../types/TalentTypes';
 import {Item} from '../../items/schema/ItemSchema';
 import {OnDamageTriggerCommand} from '../../commands/triggers/OnDamageTriggerCommand';
 import {TriggerType} from "../../common/types";
-import {EquipSlot, ItemRarity, ItemSet} from "../../items/types/ItemTypes";
+import {EquipSlot, ItemRarity, ItemSet, ItemType} from "../../items/types/ItemTypes";
 import {rollTheDice} from "../../common/utils";
 import {TalentBehaviorContext} from "./TalentBehaviorContext";
 import {ArraySchema} from "@colyseus/schema";
@@ -199,7 +199,7 @@ export const TalentBehaviors = {
 
         [TalentType.DISARM]: (context: TalentBehaviorContext) => {
             const {attacker, defender, client} = context;
-            const weapons: Item[] = defender.inventory.filter((item) => item.tags.includes('weapon'));
+            const weapons: Item[] = defender.inventory.filter((item) => item.tags.includes(ItemType.WEAPON));
             if (weapons.length > 0) {
                 const mostExpensiveWeapon: Item = weapons.reduce((maxWeapon: Item, currentWeapon: Item) => {
                     return currentWeapon.price > maxWeapon.price ? currentWeapon : maxWeapon;
@@ -319,7 +319,8 @@ export const TalentBehaviors = {
 
         [TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {
             const {attacker, defender, client, talent, commandDispatcher} = context;
-            const reflectDamage = talent.activationRate * defender.defense;
+            const reflectDamage = attacker.getDamageAfterDefense(talent.activationRate * defender.defense);
+
             commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
                 defender: attacker,
                 damage: reflectDamage,
@@ -589,6 +590,27 @@ export const TalentBehaviors = {
                     playerId: attacker.playerId,
                     talentId: TalentType.JOKER,
                 });
+            },
+
+        [TalentType.SHADY_SHIELDS]:
+            (context: TalentBehaviorContext) => {
+                const { attacker, shop } = context;
+
+                const upgradeShield = (item: Item) => {
+                    if (item.type !== ItemType.SHIELD) return;
+                    item.type = ItemType.WEAPON;
+                    item.baseAttackSpeed = 0.6;
+                    item.baseMinDamage = 1;
+                    item.baseMaxDamage = 2;
+                    const equipOpts = item.equipOptions as any;
+                    if (equipOpts && !equipOpts.includes(EquipSlot.MAIN_HAND)) {
+                        equipOpts.push(EquipSlot.MAIN_HAND);
+                    }
+                };
+
+                attacker.inventory.forEach(upgradeShield);
+                attacker.equippedItems.forEach(upgradeShield);
+                shop?.forEach(upgradeShield);
             },
 
         [TalentType.DUAL_WIELD]:

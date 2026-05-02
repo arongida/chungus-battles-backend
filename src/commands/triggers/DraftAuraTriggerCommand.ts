@@ -16,6 +16,7 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         let behaviorContext: TalentBehaviorContext = {
             client: this.state.playerClient,
             attacker: player,
+            shop: this.state.shop,
             questItems: this.state.questItems,
             trigger: TriggerType.AURA,
             attackerSnapshot,
