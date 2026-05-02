@@ -730,7 +730,7 @@ export const TalentBehaviors = {
             (context: TalentBehaviorContext) => {
                 const {attacker, client, talent} = context;
 
-                attacker.baseStats.attackSpeed += attacker.baseStats.attackSpeed * talent.base - attacker.baseStats.attackSpeed;
+                attacker.baseStats.attackSpeed += talent.base - 1;
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     talentId: TalentType.ROGUE_2,
