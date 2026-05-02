@@ -10,6 +10,7 @@ import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollTheDice} from "../../common/utils";
 import {PlayerAvatar} from "../types/PlayerTypes";
+import {GAME_VERSION} from "../../common/types";
 
 
 const PlayerSchema = new Schema({
@@ -25,6 +26,7 @@ const PlayerSchema = new Schema({
     lives: Number,
     wins: Number,
     avatarUrl: String,
+    gameVersion: Number,
     talents: [TalentSchema],
     inventory: [ItemSchema],
     lockedShop: [ItemSchema],
@@ -120,6 +122,7 @@ function getNewPlayer(playerId: number,
         lives: 3,
         wins: 0,
         avatarUrl: avatarUrl,
+        gameVersion: GAME_VERSION,
         talents: [],
         inventory: [],
         activeItemCollections: [],
@@ -241,20 +244,6 @@ export async function getHighestWin(): Promise<number> {
 }
 
 export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
-    if (round === 1) {
-        const avatarArray = Array.from(Object.values(PlayerAvatar));
-        const roundOneBot = getNewPlayer(0, 'Joe', '',avatarArray[rollTheDice(0, 2)], 10 )
-        const roundOneBotSchemaObject = getPlayerSchemaObject(roundOneBot.toObject())
-
-        roundOneBotSchemaObject.baseStats.maxHp = 50;
-        roundOneBotSchemaObject.baseStats.strength = 2;
-        const weapon = await getItemById(81);
-
-        roundOneBotSchemaObject.setItemEquipped(weapon, EquipSlot.MAIN_HAND);
-
-        return roundOneBotSchemaObject;
-    }
-
     if (round < 1) {
         const defaultPlayerClone = await playerModel
             .findOne({originalPlayerId: playerId, playerId: {$ne: playerId}})
@@ -262,15 +251,31 @@ export async function getSameRoundPlayer(round: number, playerId: number): Promi
         return defaultPlayerClone ? getPlayerSchemaObject(defaultPlayerClone) : null;
     }
 
-    const randomPlayerWithSameTurn = await playerModel.aggregate([
-        {$match: {round: round, originalPlayerId: {$ne: playerId}}},
+    if (round === 1) {
+        const avatarArray = Array.from(Object.values(PlayerAvatar));
+        const joeModel = getNewPlayer(0, 'Joe', '', avatarArray[rollTheDice(0, 2)], 10);
+        const joe = getPlayerSchemaObject(joeModel.toObject());
+        joe.baseStats.maxHp = 50;
+        joe.baseStats.strength = 2;
+        const weapon = await getItemById(81);
+        joe.setItemEquipped(weapon, EquipSlot.MAIN_HAND);
+        return joe;
+    }
+
+    const baseMatch = {round, originalPlayerId: {$ne: playerId}};
+
+    const [sameVersion] = await playerModel.aggregate([
+        {$match: {...baseMatch, gameVersion: GAME_VERSION}},
         {$sample: {size: 1}},
     ]);
-    const [enemyPlayerObject] = randomPlayerWithSameTurn;
+    if (sameVersion) return getPlayerSchemaObject(sameVersion);
 
-    if (!enemyPlayerObject) {
-        console.log('No player found for round', round);
-        return await getSameRoundPlayer(round - 1, playerId);
-    }
-    return getPlayerSchemaObject(enemyPlayerObject);
+    const [anyVersion] = await playerModel.aggregate([
+        {$match: baseMatch},
+        {$sample: {size: 1}},
+    ]);
+    if (anyVersion) return getPlayerSchemaObject(anyVersion);
+
+    console.log('No player found for round', round, '— trying round', round - 1);
+    return getSameRoundPlayer(round - 1, playerId);
 }

@@ -1,7 +1,7 @@
 /**
  * Migration: Weapon affectedStats → baseMinDamage/baseMaxDamage/baseAttackSpeed
  *
- * For all items with type === 'weapon':
+ * For all items with type === ItemType.WEAPON:
  *   - baseMinDamage  = affectedStats.accuracy
  *   - baseMaxDamage  = affectedStats.strength
  *   - baseAttackSpeed = 0.8 * affectedStats.attackSpeed
@@ -58,7 +58,7 @@ async function main() {
 
     // ── Item collection ──────────────────────────────────────────────────────
     const itemsCollection = db.collection('items');
-    const weapons = await itemsCollection.find({ type: 'weapon' }).toArray();
+    const weapons = await itemsCollection.find({ type: ItemType.WEAPON }).toArray();
     console.log(`Found ${weapons.length} weapon items to migrate`);
 
     for (const weapon of weapons) {
@@ -87,7 +87,7 @@ async function main() {
         // Inventory weapons
         if (Array.isArray(player.inventory)) {
             player.inventory.forEach((item: any, idx: number) => {
-                if (item?.type === 'weapon') {
+                if (item?.type === ItemType.WEAPON) {
                     Object.assign(
                         updateOps.$set,
                         weaponFieldUpdates(item, `inventory.${idx}.`)
@@ -102,7 +102,7 @@ async function main() {
                 ? Array.from(player.equippedItems.entries())
                 : Object.entries(player.equippedItems);
             for (const [slot, item] of entries as [string, any][]) {
-                if (item?.type === 'weapon') {
+                if (item?.type === ItemType.WEAPON) {
                     Object.assign(
                         updateOps.$set,
                         weaponFieldUpdates(item, `equippedItems.${slot}.`)

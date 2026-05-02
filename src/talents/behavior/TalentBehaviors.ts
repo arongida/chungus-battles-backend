@@ -2,7 +2,7 @@ import {TalentType} from '../types/TalentTypes';
 import {Item} from '../../items/schema/ItemSchema';
 import {OnDamageTriggerCommand} from '../../commands/triggers/OnDamageTriggerCommand';
 import {TriggerType} from "../../common/types";
-import {EquipSlot, ItemRarity, ItemSet} from "../../items/types/ItemTypes";
+import {EquipSlot, ItemRarity, ItemSet, ItemType} from "../../items/types/ItemTypes";
 import {rollTheDice} from "../../common/utils";
 import {TalentBehaviorContext} from "./TalentBehaviorContext";
 import {ArraySchema} from "@colyseus/schema";
@@ -199,7 +199,7 @@ export const TalentBehaviors = {
 
         [TalentType.DISARM]: (context: TalentBehaviorContext) => {
             const {attacker, defender, client} = context;
-            const weapons: Item[] = defender.inventory.filter((item) => item.tags.includes('weapon'));
+            const weapons: Item[] = defender.inventory.filter((item) => item.tags.includes(ItemType.WEAPON));
             if (weapons.length > 0) {
                 const mostExpensiveWeapon: Item = weapons.reduce((maxWeapon: Item, currentWeapon: Item) => {
                     return currentWeapon.price > maxWeapon.price ? currentWeapon : maxWeapon;
@@ -319,7 +319,8 @@ export const TalentBehaviors = {
 
         [TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {
             const {attacker, defender, client, talent, commandDispatcher} = context;
-            const reflectDamage = talent.activationRate * defender.defense;
+            const reflectDamage = attacker.getDamageAfterDefense(talent.activationRate * defender.defense);
+
             commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
                 defender: attacker,
                 damage: reflectDamage,
@@ -475,15 +476,18 @@ export const TalentBehaviors = {
                 for (let i = 0; i < rewardCount; i++) {
                     if (shop[i]) {
                         shop[i].price = 0;
+                        shop[i].sellPrice = 0;
                     }
                 }
 
                 attacker.inventory.forEach(item => {
                     item.price = 0;
+                    item.sellPrice = 0;
                 });
 
                 attacker.equippedItems.forEach(item => {
                     item.price = 0;
+                    item.sellPrice = 0;
                 });
 
                 client.send('trigger_talent', {
@@ -506,6 +510,8 @@ export const TalentBehaviors = {
                 ) {
                     const diceItem = questItems?.find((item) => item.itemId === 703);
                     if (diceItem) {
+                        diceItem.rarity = 2;
+                        diceItem.description = 'Max damage equals your current income.';
                         attacker.getItem(diceItem);
                         client.send('draft_log', `${attacker.name} found a gambler's dice!`);
                         client.send('trigger_talent', {
@@ -527,6 +533,8 @@ export const TalentBehaviors = {
                 ) {
                     const ringWeapon = questItems.find((item) => item.itemId === 702);
                     if (ringWeapon) {
+                        ringWeapon.rarity = 2;
+                        ringWeapon.description = 'Gains +0.03 strength per attack.';
                         attacker.getItem(ringWeapon);
                         client.send('draft_log', `${attacker.name} found a ring weapon!`);
                         client.send('trigger_talent', {
@@ -589,6 +597,27 @@ export const TalentBehaviors = {
                     playerId: attacker.playerId,
                     talentId: TalentType.JOKER,
                 });
+            },
+
+        [TalentType.SHADY_SHIELDS]:
+            (context: TalentBehaviorContext) => {
+                const { attacker, shop } = context;
+
+                const upgradeShield = (item: Item) => {
+                    if (item.type !== ItemType.SHIELD) return;
+                    item.type = ItemType.WEAPON;
+                    item.baseAttackSpeed = 0.6;
+                    item.baseMinDamage = 1;
+                    item.baseMaxDamage = 2;
+                    const equipOpts = item.equipOptions as any;
+                    if (equipOpts && !equipOpts.includes(EquipSlot.MAIN_HAND)) {
+                        equipOpts.push(EquipSlot.MAIN_HAND);
+                    }
+                };
+
+                attacker.inventory.forEach(upgradeShield);
+                attacker.equippedItems.forEach(upgradeShield);
+                shop?.forEach(upgradeShield);
             },
 
         [TalentType.DUAL_WIELD]:
@@ -834,17 +863,39 @@ export const TalentBehaviors = {
 
         [TalentType.MERCHANT_5]:
             (context: TalentBehaviorContext) => {
-                const {attacker, client, talent} = context;
-                const healingAmount = attacker.income * talent.scaling + talent.base;
-                attacker.hp += healingAmount;
-                client.send('combat_log', `${attacker.name}: private doctor was paid to heal ${healingAmount}!`);
-                client.send('healing', {
-                    playerId: attacker.playerId,
-                    healing: healingAmount,
+                const {defender, client} = context;
+                defender.gold += 1;
+                client.send('combat_log', `${defender.name} profits from pain, gaining 1 gold!`);
+                client.send('trigger_talent', {
+                    playerId: defender.playerId,
+                    talentId: TalentType.MERCHANT_5,
                 });
+            },
+
+        [TalentType.MERCHANT_5B]:
+            (context: TalentBehaviorContext) => {
+                const {attacker, client, shop} = context;
+                const upgradable = shop?.filter(item => item.rarity < ItemRarity.LEGENDARY);
+                if (!upgradable?.length) return;
+
+                const item = upgradable[Math.floor(Math.random() * upgradable.length)];
+                const originalPrice = item.price;
+                const snapshot = new Item();
+                snapshot.affectedStats = new AffectedStats().assign(item.affectedStats.toJSON());
+                snapshot.setBonusStats = new AffectedStats().assign(item.setBonusStats.toJSON());
+                snapshot.sellPrice = item.sellPrice;
+                snapshot.baseAttackSpeed = item.baseAttackSpeed;
+                snapshot.baseMinDamage = item.baseMinDamage;
+                snapshot.baseMaxDamage = item.baseMaxDamage;
+                while (item.rarity < ItemRarity.LEGENDARY) {
+                    applyRarityUpgrade(item, snapshot, false);
+                }
+                item.price = originalPrice;
+
+                client.send('draft_log', `Black market contact: ${item.name} is now Legendary!`);
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
-                    talentId: TalentType.MERCHANT_5,
+                    talentId: TalentType.MERCHANT_5B,
                 });
             },
     }
