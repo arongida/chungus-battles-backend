@@ -120,6 +120,10 @@ export class DraftRoom extends Room {
 
     }
 
+    async onDrop(client: Client, code: number) {
+        await this.allowReconnection(client, 60)
+    }
+
     async onLeave(client: Client, code: number) {
         console.log(`[DraftRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
         try {
@@ -130,7 +134,7 @@ export class DraftRoom extends Room {
 
             console.log(`[DraftRoom] allowReconnection(60) started  sid=${client.sessionId}`);
             // allow disconnected client to reconnect into this room until 60 seconds
-            await this.allowReconnection(client, 60);
+            await this.allowReconnection(client, 600);
             console.log(`[DraftRoom] reconnected  sid=${client.sessionId}`);
             // Nudge a field so the reconnected client receives a state patch and
             // onStateChange fires (draft room has no inherent ongoing state updates).
