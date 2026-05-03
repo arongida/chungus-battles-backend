@@ -216,7 +216,7 @@ export const TalentBehaviors = {
         },
 
         [TalentType.WEAPON_WHISPERER]: async (context: TalentBehaviorContext) => {
-            const {attacker, client} = context;
+            const {attacker, client, talent} = context;
             const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
             if (!weapon || weapon.rarity >= ItemRarity.LEGENDARY) return;
 
