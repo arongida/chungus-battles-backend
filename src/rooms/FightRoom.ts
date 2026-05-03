@@ -91,6 +91,17 @@ export class FightRoom extends Room {
         }, 5500);
     }
 
+    async onReconnect(): Promise<any> {
+        await delay(500, this.clock);
+        if (this.state.fightResult) {
+            if (this.state.player.lives > 0 && this.state.player.wins < 10)
+                this.broadcast('end_battle', 'The battle has ended!');
+            else if (this.state.player.lives <= 0 && this.state.player.wins < 10)
+                this.broadcast('game_over', 'You have lost the game!');
+            else if (this.state.player.wins >= 10) this.broadcast('game_over', 'You have won the game!');
+        }
+    }
+
     onDrop(client: Client) {
         console.log(`[FightRoom] allowReconnection(60) started  sid=${client.sessionId}`);
         // allow disconnected client to reconnect into this room until 60 seconds
