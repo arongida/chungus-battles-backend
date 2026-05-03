@@ -1,22 +1,22 @@
-import {Client, Room} from '@colyseus/core';
-import {FightState} from './schema/FightState';
-import {getHighestWin, getPlayer, getSameRoundPlayer, updatePlayer} from '../players/db/Player';
-import {Player} from '../players/schema/PlayerSchema';
-import {delay} from '../common/utils';
-import {FightResultType} from '../common/types';
-import {Dispatcher} from '@colyseus/command';
-import {ActiveTriggerCommand} from '../commands/triggers/ActiveTriggerCommand';
-import {FightStartTriggerCommand} from '../commands/triggers/FightStartTriggerCommand';
-import {FightEndTriggerCommand} from '../commands/triggers/FightEndTriggerCommand';
-import {OnDamageTriggerCommand} from '../commands/triggers/OnDamageTriggerCommand';
-import {OnAttackedTriggerCommand} from '../commands/triggers/OnAttackedTriggerCommand';
-import {OnAttackTriggerCommand} from '../commands/triggers/OnAttackTriggerCommand';
-import {TalentType} from '../talents/types/TalentTypes';
-import {getQuestItems} from '../items/db/Item';
-import {FightAuraTriggerCommand} from '../commands/triggers/FightAuraTriggerCommand';
-import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
-import {OnDodgeTriggerCommand} from "../commands/triggers/OnDodgeTriggerCommand";
-import {Item} from '../items/schema/ItemSchema';
+import { Client, Room } from '@colyseus/core';
+import { FightState } from './schema/FightState';
+import { getHighestWin, getPlayer, getSameRoundPlayer, updatePlayer } from '../players/db/Player';
+import { Player } from '../players/schema/PlayerSchema';
+import { delay } from '../common/utils';
+import { FightResultType } from '../common/types';
+import { Dispatcher } from '@colyseus/command';
+import { ActiveTriggerCommand } from '../commands/triggers/ActiveTriggerCommand';
+import { FightStartTriggerCommand } from '../commands/triggers/FightStartTriggerCommand';
+import { FightEndTriggerCommand } from '../commands/triggers/FightEndTriggerCommand';
+import { OnDamageTriggerCommand } from '../commands/triggers/OnDamageTriggerCommand';
+import { OnAttackedTriggerCommand } from '../commands/triggers/OnAttackedTriggerCommand';
+import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerCommand';
+import { TalentType } from '../talents/types/TalentTypes';
+import { getQuestItems } from '../items/db/Item';
+import { FightAuraTriggerCommand } from '../commands/triggers/FightAuraTriggerCommand';
+import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
+import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
+import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
 
 export class FightRoom extends Room {
@@ -42,8 +42,8 @@ export class FightRoom extends Room {
     }
 
     async onJoin(client: Client, options: any) {
-        console.log('[FightRoom]' ,client.sessionId, 'joined!');
-        console.log('[FightRoom]' ,'player id', options.playerId);
+        console.log('[FightRoom]', client.sessionId, 'joined!');
+        console.log('[FightRoom]', 'player id', options.playerId);
 
         // check if player id is provided
         if (!options.playerId) throw new Error('Player ID is required!');
@@ -83,52 +83,47 @@ export class FightRoom extends Room {
         this.clock.setTimeout(async () => {
             countdownTimer.clear();
             this.broadcast('combat_log', 'The battle begins!');
-            console.log('[FightRoom]' ,'battle started!');
-            console.log('[FightRoom]' ,'player', this.state.player.name);
-            console.log('[FightRoom]' ,'enemy', this.state.enemy.name);
+            console.log('[FightRoom]', 'battle started!');
+            console.log('[FightRoom]', 'player', this.state.player.name);
+            console.log('[FightRoom]', 'enemy', this.state.enemy.name);
             this.state.battleStarted = true;
             this.startBattle();
         }, 5500);
     }
 
-    async onLeave(client: Client, code: number) {
-        console.log(`[FightRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
-        try {
-            if (code === 4000) {
-                console.log(`[FightRoom] consented leave  sid=${client.sessionId}`);
-                throw new Error('consented leave');
-            }
-
-            console.log(`[FightRoom] allowReconnection(60) started  sid=${client.sessionId}`);
-            // allow disconnected client to reconnect into this room until 60 seconds
-            await this.allowReconnection(client, 60);
-            console.log(`[FightRoom] reconnected  sid=${client.sessionId} fightResult=${!!this.state.fightResult}`);
-            if (this.state.fightResult) {
-                // Wait for the client to finish registering its onMessage handlers
-                // before broadcasting — Angular effects are deferred one CD cycle.
-                await delay(300, this.clock);
-                if (this.state.player.lives > 0 && this.state.player.wins < 10)
-                    this.broadcast('end_battle', 'The battle has ended!');
-                else if (this.state.player.lives <= 0 && this.state.player.wins < 10)
-                    this.broadcast('game_over', 'You have lost the game!');
-                else if (this.state.player.wins >= 10) this.broadcast('game_over', 'You have won the game!');
-            }
-        } catch (e) {
-            console.log(`[FightRoom] permanent leave  sid=${client.sessionId} reason=${(e as Error).message}`);
-            //save player state to db
-            this.state.player.sessionId = '';
-            //set player for next round
-            this.state.player.round++;
-            await updatePlayer(this.state.player);
-            console.log(`[FightRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
-            this.clock.setTimeout(() => {
-                this.disconnect();
-            }, 5000);
+    async onDrop(client: Client) {
+        console.log(`[FightRoom] allowReconnection(60) started  sid=${client.sessionId}`);
+        // allow disconnected client to reconnect into this room until 60 seconds
+        await this.allowReconnection(client, 30);
+        console.log(`[FightRoom] reconnected  sid=${client.sessionId} fightResult=${!!this.state.fightResult}`);
+        if (this.state.fightResult) {
+            // Wait for the client to finish registering its onMessage handlers
+            // before broadcasting — Angular effects are deferred one CD cycle.
+            await delay(300, this.clock);
+            if (this.state.player.lives > 0 && this.state.player.wins < 10)
+                this.broadcast('end_battle', 'The battle has ended!');
+            else if (this.state.player.lives <= 0 && this.state.player.wins < 10)
+                this.broadcast('game_over', 'You have lost the game!');
+            else if (this.state.player.wins >= 10) this.broadcast('game_over', 'You have won the game!');
         }
     }
 
+    async onLeave(client: Client, code: number) {
+        console.log(`[FightRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
+        //save player state to db
+        this.state.player.sessionId = '';
+        //set player for next round
+        this.state.player.round++;
+        await updatePlayer(this.state.player);
+        console.log(`[FightRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
+        this.clock.setTimeout(() => {
+            this.disconnect();
+        }, 5000);
+
+    }
+
     onDispose() {
-        console.log('[FightRoom]' ,'room', this.roomId, 'disposing...');
+        console.log('[FightRoom]', 'room', this.roomId, 'disposing...');
     }
 
     //this is running all the time
@@ -394,7 +389,7 @@ export class FightRoom extends Room {
     }
 
     private handleDraw() {
-        console.log('[FightRoom]' ,'draw!');
+        console.log('[FightRoom]', 'draw!');
         this.broadcast('combat_log', "It's a draw!");
         this.broadcast('end_battle', 'The battle has ended!');
     }
