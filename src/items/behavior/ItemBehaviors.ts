@@ -60,19 +60,3 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
     },
 
 };
-
-const shieldBehavior: (context: ItemBehaviorContext) => void = ({ defender, attacker, item, client, commandDispatcher }) => {
-    if (!defender || !item || !attacker || !client || !commandDispatcher || item.rarity <= 1) return;
-
-    const bonusDefStack = 0.01 * item.rarity * item.tier;
-    item.affectedStats.defense += bonusDefStack;
-
-    defender.equippedItems.forEach((equipped, slot) => {
-        if (equipped === item) client.send('trigger_item', { playerId: defender.playerId, itemId: item.itemId, slot: slot });
-    });
-
-};
-
-for (let id = 76; id <= 80; id++) {
-    ItemBehaviors[id] = shieldBehavior;
-}
