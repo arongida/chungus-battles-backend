@@ -120,14 +120,12 @@ export class DraftRoom extends Room {
 
     }
 
-     onDrop(client: Client, code: number) {
+    onDrop(client: Client) {
         this.allowReconnection(client, 30)
     }
 
     async onLeave(client: Client, code: number) {
         console.log(`[DraftRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
-
-        //save player state to db
         this.state.player.sessionId = '';
         await copyPlayer(this.state.player);
         await updatePlayer(this.state.player);
