@@ -76,9 +76,9 @@ export class DraftRoom extends Room {
     }
 
     async onJoin(client: Client, options: any) {
-        console.log(client.sessionId, 'joined!');
-        console.log('name: ', options.name);
-        console.log('player id: ', options.playerId);
+        console.log('[DraftRoom]' , client.sessionId, 'joined!');
+        console.log('[DraftRoom]' ,'name: ', options.name);
+        console.log('[DraftRoom]' ,'player id: ', options.playerId);
 
         if (!options.name) throw new Error('Name is required!');
         if (!options.playerId) throw new Error('Player ID is required!');
@@ -118,24 +118,30 @@ export class DraftRoom extends Room {
             this.dispatcher.dispatch(new DraftAuraTriggerCommand());
         }, 1000)
 
-        console.log('set up room finished!');
     }
 
     async onLeave(client: Client, code: number) {
+        console.log(`[DraftRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
         try {
             if (code === 4000) {
+                console.log(`[DraftRoom] consented leave  sid=${client.sessionId}`);
                 throw new Error('consented leave');
             }
 
-            // allow disconnected client to reconnect into this room until 20 seconds
-            await this.allowReconnection(client, 20);
-            console.log(`${client.sessionId} reconnected!`);
+            console.log(`[DraftRoom] allowReconnection(60) started  sid=${client.sessionId}`);
+            // allow disconnected client to reconnect into this room until 60 seconds
+            await this.allowReconnection(client, 60);
+            console.log(`[DraftRoom] reconnected  sid=${client.sessionId}`);
+            // Nudge a field so the reconnected client receives a state patch and
+            // onStateChange fires (draft room has no inherent ongoing state updates).
+            this.state.player.sessionId = client.sessionId;
         } catch (e) {
+            console.log(`[DraftRoom] permanent leave  sid=${client.sessionId} reason=${(e as Error).message}`);
             //save player state to db
             this.state.player.sessionId = '';
             await copyPlayer(this.state.player);
             await updatePlayer(this.state.player);
-            console.log(client.sessionId, 'left!');
+            console.log(`[DraftRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
             this.clock.setTimeout(() => {
                 this.disconnect();
             }, 5000);
@@ -143,7 +149,7 @@ export class DraftRoom extends Room {
     }
 
     onDispose() {
-        console.log('room', this.roomId, 'disposing...');
+        console.log('[DraftRoom]' ,'room', this.roomId, 'disposing...');
     }
 
     private async updateShop(newShopSize: number) {

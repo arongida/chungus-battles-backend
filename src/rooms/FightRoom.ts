@@ -42,8 +42,8 @@ export class FightRoom extends Room {
     }
 
     async onJoin(client: Client, options: any) {
-        console.log(client.sessionId, 'joined!');
-        console.log('player id', options.playerId);
+        console.log('[FightRoom]' ,client.sessionId, 'joined!');
+        console.log('[FightRoom]' ,'player id', options.playerId);
 
         // check if player id is provided
         if (!options.playerId) throw new Error('Player ID is required!');
@@ -83,24 +83,30 @@ export class FightRoom extends Room {
         this.clock.setTimeout(async () => {
             countdownTimer.clear();
             this.broadcast('combat_log', 'The battle begins!');
-            console.log('battle started!');
-            console.log('player', this.state.player.name);
-            console.log('enemy', this.state.enemy.name);
+            console.log('[FightRoom]' ,'battle started!');
+            console.log('[FightRoom]' ,'player', this.state.player.name);
+            console.log('[FightRoom]' ,'enemy', this.state.enemy.name);
             this.state.battleStarted = true;
             this.startBattle();
         }, 5500);
     }
 
     async onLeave(client: Client, code: number) {
+        console.log(`[FightRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
         try {
             if (code === 4000) {
+                console.log(`[FightRoom] consented leave  sid=${client.sessionId}`);
                 throw new Error('consented leave');
             }
 
-            // allow disconnected client to reconnect into this room until 20 seconds
-            await this.allowReconnection(client, 20);
-            console.log('client reconnected!');
+            console.log(`[FightRoom] allowReconnection(60) started  sid=${client.sessionId}`);
+            // allow disconnected client to reconnect into this room until 60 seconds
+            await this.allowReconnection(client, 60);
+            console.log(`[FightRoom] reconnected  sid=${client.sessionId} fightResult=${!!this.state.fightResult}`);
             if (this.state.fightResult) {
+                // Wait for the client to finish registering its onMessage handlers
+                // before broadcasting — Angular effects are deferred one CD cycle.
+                await delay(300, this.clock);
                 if (this.state.player.lives > 0 && this.state.player.wins < 10)
                     this.broadcast('end_battle', 'The battle has ended!');
                 else if (this.state.player.lives <= 0 && this.state.player.wins < 10)
@@ -108,12 +114,13 @@ export class FightRoom extends Room {
                 else if (this.state.player.wins >= 10) this.broadcast('game_over', 'You have won the game!');
             }
         } catch (e) {
+            console.log(`[FightRoom] permanent leave  sid=${client.sessionId} reason=${(e as Error).message}`);
             //save player state to db
             this.state.player.sessionId = '';
             //set player for next round
             this.state.player.round++;
             await updatePlayer(this.state.player);
-            console.log(client.sessionId, 'left!');
+            console.log(`[FightRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
             this.clock.setTimeout(() => {
                 this.disconnect();
             }, 5000);
@@ -121,7 +128,7 @@ export class FightRoom extends Room {
     }
 
     onDispose() {
-        console.log('room', this.roomId, 'disposing...');
+        console.log('[FightRoom]' ,'room', this.roomId, 'disposing...');
     }
 
     //this is running all the time
@@ -365,7 +372,7 @@ export class FightRoom extends Room {
 
     private async handleWin() {
         this.broadcast('combat_log', 'You win!');
-        console.log(`${this.state.player.name} wins!`);
+        console.log(`'[FightRoom]' ${this.state.player.name} wins!`);
         this.state.player.wins++;
         const highestWin = await getHighestWin();
         if (this.state.player.wins > highestWin) {
@@ -377,7 +384,7 @@ export class FightRoom extends Room {
 
     private handleLoose() {
         this.broadcast('combat_log', 'You loose!');
-        console.log(`${this.state.player.name} looses!`);
+        console.log(`[FightRoom]' ${this.state.player.name} looses!`);
         this.state.player.lives--;
         if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');
@@ -387,7 +394,7 @@ export class FightRoom extends Room {
     }
 
     private handleDraw() {
-        console.log('draw!');
+        console.log('[FightRoom]' ,'draw!');
         this.broadcast('combat_log', "It's a draw!");
         this.broadcast('end_battle', 'The battle has ended!');
     }

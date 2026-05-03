@@ -61,18 +61,12 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
 
 };
 
-const shieldReflect: (context: ItemBehaviorContext) => void = ({ defender, attacker, item, client, commandDispatcher }) => {
+const shieldBehavior: (context: ItemBehaviorContext) => void = ({ defender, attacker, item, client, commandDispatcher }) => {
     if (!defender || !item || !attacker || !client || !commandDispatcher || item.rarity <= 1) return;
 
-    const baseDamage = 0.25 * item.rarity * item.tier;
-    const damage = attacker.getDamageAfterDefense(baseDamage);
-    commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-        defender: defender,
-        damage: damage,
-        attacker: attacker,
-    });
-    attacker.takeDamage(damage, client);
-    client.send('combat_log', `${defender.name}'s ${item.name} reflects ${damage} damage to ${attacker.name}!`)
+    const bonusDefStack = 0.01 * item.rarity * item.tier;
+    item.affectedStats.defense += bonusDefStack;
+
     defender.equippedItems.forEach((equipped, slot) => {
         if (equipped === item) client.send('trigger_item', { playerId: defender.playerId, itemId: item.itemId, slot: slot });
     });
@@ -80,5 +74,5 @@ const shieldReflect: (context: ItemBehaviorContext) => void = ({ defender, attac
 };
 
 for (let id = 76; id <= 80; id++) {
-    ItemBehaviors[id] = shieldReflect;
+    ItemBehaviors[id] = shieldBehavior;
 }
