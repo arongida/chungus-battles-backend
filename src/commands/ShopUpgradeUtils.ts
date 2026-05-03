@@ -21,7 +21,7 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item) => string>> =
 function updateRarityDescription(target: Item): void {
   if (target.rarity <= 1) return;
   if (target.type === ItemType.SHIELD) {
-    target.description = `Reflect ${0.25 * target.rarity * target.tier} damage on attacked.`;
+    target.description = `Gain ${0.01 * target.rarity * target.tier} defense when you are hit.`;
     return;
   }
   const updater = itemDescriptionUpdaters[target.itemId];
