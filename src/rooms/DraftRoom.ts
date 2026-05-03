@@ -1,21 +1,21 @@
-import {Client, Room} from '@colyseus/core';
-import {DraftState} from './schema/DraftState';
-import {Item} from '../items/schema/ItemSchema';
-import {copyPlayer, createNewPlayer, getPlayer, updatePlayer} from '../players/db/Player';
-import {getNumberOfItems, getQuestItems, getItemById} from '../items/db/Item';
-import {applyRarityUpgrade, findOwnedUpgradeTarget} from '../commands/ShopUpgradeUtils';
-import {Player} from '../players/schema/PlayerSchema';
-import {delay} from '../common/utils';
-import {getRandomTalents} from '../talents/db/Talent';
-import {Dispatcher} from '@colyseus/command';
-import {ShopStartTriggerCommand} from '../commands/triggers/ShopStartTriggerCommand';
-import {LevelUpTriggerCommand} from '../commands/triggers/LevelUpTriggerCommand';
-import {AfterShopRefreshTriggerCommand} from '../commands/triggers/AfterShopRefreshTriggerCommand';
-import {DraftAuraTriggerCommand} from '../commands/triggers/DraftAuraTriggerCommand';
-import {EquipSlot} from "../items/types/ItemTypes";
-import {UpdateStatsCommand} from "../commands/UpdateStatsCommand";
-import {UpdateActiveSets} from "../commands/UpdateActiveSets";
-import {ArraySchema} from "@colyseus/schema";
+import { Client, Room } from '@colyseus/core';
+import { DraftState } from './schema/DraftState';
+import { Item } from '../items/schema/ItemSchema';
+import { copyPlayer, createNewPlayer, getPlayer, updatePlayer } from '../players/db/Player';
+import { getNumberOfItems, getQuestItems, getItemById } from '../items/db/Item';
+import { applyRarityUpgrade, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
+import { Player } from '../players/schema/PlayerSchema';
+import { delay } from '../common/utils';
+import { getRandomTalents } from '../talents/db/Talent';
+import { Dispatcher } from '@colyseus/command';
+import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCommand';
+import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
+import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
+import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCommand';
+import { EquipSlot } from "../items/types/ItemTypes";
+import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
+import { UpdateActiveSets } from "../commands/UpdateActiveSets";
+import { ArraySchema } from "@colyseus/schema";
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -54,10 +54,10 @@ export class DraftRoom extends Room {
         this.onMessage('refresh_talents', async (client) => {
             await this.handleRefreshTalentSelection(client);
         });
-        this.onMessage('lock-shop', (client)=>{
+        this.onMessage('lock-shop', (client) => {
             this.handleLockShop(client);
         });
-        this.onMessage('unlock-shop', (client)=>{
+        this.onMessage('unlock-shop', (client) => {
             this.handleUnlockShop(client);
         });
 
@@ -76,9 +76,9 @@ export class DraftRoom extends Room {
     }
 
     async onJoin(client: Client, options: any) {
-        console.log('[DraftRoom]' , client.sessionId, 'joined!');
-        console.log('[DraftRoom]' ,'name: ', options.name);
-        console.log('[DraftRoom]' ,'player id: ', options.playerId);
+        console.log('[DraftRoom]', client.sessionId, 'joined!');
+        console.log('[DraftRoom]', 'name: ', options.name);
+        console.log('[DraftRoom]', 'player id: ', options.playerId);
 
         if (!options.name) throw new Error('Name is required!');
         if (!options.playerId) throw new Error('Player ID is required!');
@@ -120,40 +120,26 @@ export class DraftRoom extends Room {
 
     }
 
-    async onDrop(client: Client, code: number) {
-        await this.allowReconnection(client, 60)
+     onDrop(client: Client, code: number) {
+        this.allowReconnection(client, 30)
     }
 
     async onLeave(client: Client, code: number) {
         console.log(`[DraftRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
-        try {
-            if (code === 4000) {
-                console.log(`[DraftRoom] consented leave  sid=${client.sessionId}`);
-                throw new Error('consented leave');
-            }
 
-            console.log(`[DraftRoom] allowReconnection(60) started  sid=${client.sessionId}`);
-            // allow disconnected client to reconnect into this room until 60 seconds
-            await this.allowReconnection(client, 600);
-            console.log(`[DraftRoom] reconnected  sid=${client.sessionId}`);
-            // Nudge a field so the reconnected client receives a state patch and
-            // onStateChange fires (draft room has no inherent ongoing state updates).
-            this.state.player.sessionId = client.sessionId;
-        } catch (e) {
-            console.log(`[DraftRoom] permanent leave  sid=${client.sessionId} reason=${(e as Error).message}`);
-            //save player state to db
-            this.state.player.sessionId = '';
-            await copyPlayer(this.state.player);
-            await updatePlayer(this.state.player);
-            console.log(`[DraftRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
-            this.clock.setTimeout(() => {
-                this.disconnect();
-            }, 5000);
-        }
+        //save player state to db
+        this.state.player.sessionId = '';
+        await copyPlayer(this.state.player);
+        await updatePlayer(this.state.player);
+        console.log(`[DraftRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
+        this.clock.setTimeout(() => {
+            this.disconnect();
+        }, 5000);
+
     }
 
     onDispose() {
-        console.log('[DraftRoom]' ,'room', this.roomId, 'disposing...');
+        console.log('[DraftRoom]', 'room', this.roomId, 'disposing...');
     }
 
     private async updateShop(newShopSize: number) {
@@ -298,13 +284,13 @@ export class DraftRoom extends Room {
         await this.updateShop(this.state.shopSize);
     }
 
-    private async handleLockShop(client: Client){
+    private async handleLockShop(client: Client) {
         const shop = this.state.shop;
         this.state.player.setLockedShop(shop);
         client.send('message', 'shop locked');
     }
 
-    private async handleUnlockShop(client: Client){
+    private async handleUnlockShop(client: Client) {
         this.state.player.unlockShop();
         client.send('message', 'shop unlocked');
     }
