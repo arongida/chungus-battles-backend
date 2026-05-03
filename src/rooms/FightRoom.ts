@@ -26,7 +26,7 @@ export class FightRoom extends Room {
     dispatcher = new Dispatcher(this);
 
     onCreate() {
-        this.setState(new FightState());
+        this.state = new FightState();
 
         this.onMessage('chat', (client, message) => {
             this.broadcast('messages', `${client.sessionId}: ${message}`);
@@ -91,15 +91,12 @@ export class FightRoom extends Room {
         }, 5500);
     }
 
-    async onDrop(client: Client) {
+    onDrop(client: Client) {
         console.log(`[FightRoom] allowReconnection(60) started  sid=${client.sessionId}`);
         // allow disconnected client to reconnect into this room until 60 seconds
-        await this.allowReconnection(client, 30);
+        this.allowReconnection(client, 30);
         console.log(`[FightRoom] reconnected  sid=${client.sessionId} fightResult=${!!this.state.fightResult}`);
         if (this.state.fightResult) {
-            // Wait for the client to finish registering its onMessage handlers
-            // before broadcasting — Angular effects are deferred one CD cycle.
-            await delay(300, this.clock);
             if (this.state.player.lives > 0 && this.state.player.wins < 10)
                 this.broadcast('end_battle', 'The battle has ended!');
             else if (this.state.player.lives <= 0 && this.state.player.wins < 10)
