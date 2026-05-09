@@ -306,7 +306,7 @@ export class FightRoom extends Room {
         this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
             defender: defender,
             damage: damage,
-            attacker: this.state.player,
+            attacker: attacker
         });
 
         defender.takeDamage(damage, this.state.playerClient);
