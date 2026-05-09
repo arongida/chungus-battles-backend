@@ -865,12 +865,14 @@ export const TalentBehaviors = {
         [TalentType.MERCHANT_5]:
             (context: TalentBehaviorContext) => {
                 const {defender, client} = context;
-                defender.gold += 1;
-                client.send('combat_log', `${defender.name} profits from pain, gaining 1 gold!`);
-                client.send('trigger_talent', {
-                    playerId: defender.playerId,
-                    talentId: TalentType.MERCHANT_5,
-                });
+                if (Math.random() < 0.5) {
+                    defender.gold += 1;
+                    client.send('combat_log', `${defender.name} profits from pain, gaining 1 gold!`);
+                    client.send('trigger_talent', {
+                        playerId: defender.playerId,
+                        talentId: TalentType.MERCHANT_5,
+                    });
+                }
             },
 
         [TalentType.MERCHANT_5B]:

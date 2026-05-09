@@ -40,6 +40,7 @@ export class Player extends Schema implements IStats {
     invincible: boolean = false;
     rewardRound: number;
     attackSpeedMultiplier: number = 1;
+    hasVersionWin: boolean = false;
 
 
     get hp(): number {
