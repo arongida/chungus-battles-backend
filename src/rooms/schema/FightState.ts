@@ -14,4 +14,5 @@ export class FightState extends Schema {
     endBurnTimer: Delayed;
     endBurnDamage: number = 10;
     playerClient: Client;
+    versionWinPending: boolean = false;
 }

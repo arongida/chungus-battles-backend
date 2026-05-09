@@ -1,4 +1,4 @@
-import mongoose, {Schema} from 'mongoose';
+import mongoose, {Schema, PipelineStage} from 'mongoose';
 import {Player} from '../schema/PlayerSchema';
 import {Item} from '../../items/schema/ItemSchema';
 import {getItemById, ItemSchema} from "../../items/db/Item";
@@ -27,6 +27,7 @@ const PlayerSchema = new Schema({
     wins: Number,
     avatarUrl: String,
     gameVersion: Number,
+    hasVersionWin: Boolean,
     talents: [TalentSchema],
     inventory: [ItemSchema],
     lockedShop: [ItemSchema],
@@ -169,28 +170,20 @@ export async function createNewPlayer(
 }
 
 export async function copyPlayer(player: Player): Promise<Player> {
-    let playerObject = player.toJSON();
-
     const newPlayerObject = {
-        ...playerObject,
+        ...playerToPlainObject(player),
         playerId: await getNextPlayerId(),
     };
 
     const newPlayer = new playerModel(newPlayerObject);
-
-
     await newPlayer.save().catch((err) => console.error(err));
     return getPlayerSchemaObject(newPlayer.toObject());
 }
 
 export async function updatePlayer(player: Player): Promise<Player> {
-    let playerObject = player.toJSON();
+    const playerObject = playerToPlainObject(player);
 
-
-    const foundPlayerModel = await playerModel.findOne({
-        playerId: player.playerId,
-    });
-
+    const foundPlayerModel = await playerModel.findOne({playerId: player.playerId});
     if (!foundPlayerModel) return player;
     foundPlayerModel.set(playerObject);
 
@@ -205,31 +198,114 @@ export async function getNextPlayerId(): Promise<number> {
     return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
 
-export async function getTopPlayers(number: number): Promise<Player[]> {
-    const topPlayers = await playerModel
-        .aggregate([
-            {
-                $sort: {wins: -1, originalPlayerId: -1, playerId: 1}, // Sort by wins (descending) and then by _id (ascending) for stability
-            },
-            {
-                $group: {
-                    _id: '$originalPlayerId',
-                    doc: {$first: '$$ROOT'}, // Keep the first (highest win) document per player
-                },
-            },
-            {
-                $replaceRoot: {newRoot: '$doc'}, // Replace root with selected document
-            },
-            {
-                $sort: {wins: -1, originalPlayerId: -1, playerId: 1}, // Re-sort to maintain order after grouping
-            },
-            {
-                $limit: number, // Limit the number of results
-            },
-        ])
-        .exec();
+function cleanRawObj(obj: any): Record<string, any> {
+    if (!obj) return {};
+    const { _id, __v, ...rest } = obj;
+    return rest;
+}
 
-    return topPlayers as unknown as Player[];
+function cleanRawItem(item: any): Record<string, any> | null {
+    if (!item) return null;
+    const { _id, __v, affectedStats, setBonusStats, affectedEnemyStats, ...rest } = item;
+    return {
+        ...rest,
+        affectedStats: cleanRawObj(affectedStats),
+        setBonusStats: cleanRawObj(setBonusStats),
+        affectedEnemyStats: cleanRawObj(affectedEnemyStats),
+    };
+}
+
+function cleanRawTalent(talent: any): Record<string, any> | null {
+    if (!talent) return null;
+    const { _id, __v, affectedStats, affectedEnemyStats, ...rest } = talent;
+    return {
+        ...rest,
+        affectedStats: cleanRawObj(affectedStats),
+        affectedEnemyStats: cleanRawObj(affectedEnemyStats),
+    };
+}
+
+function cleanRawPlayerDoc(doc: any): Record<string, any> {
+    const { _id, __v, equippedItems, inventory, talents, lockedShop, baseStats, ...rest } = doc;
+    const cleanEquippedItems: Record<string, any> = {};
+    if (equippedItems) {
+        for (const [slot, item] of Object.entries(equippedItems)) {
+            cleanEquippedItems[slot] = cleanRawItem(item as any);
+        }
+    }
+    return {
+        ...rest,
+        baseStats: cleanRawObj(baseStats),
+        equippedItems: cleanEquippedItems,
+        inventory: (inventory || []).map(cleanRawItem),
+        talents: (talents || []).map(cleanRawTalent),
+        lockedShop: (lockedShop || []).map(cleanRawItem),
+    };
+}
+
+export function playerToPlainObject(player: Player): Record<string, any> {
+    const equippedItems: Record<string, any> = {};
+    player.equippedItems.forEach((item, slot) => {
+        equippedItems[slot] = item.toJSON();
+    });
+    return {
+        playerId: player.playerId,
+        originalPlayerId: player.originalPlayerId,
+        name: player.name,
+        gold: player.gold,
+        xp: player.xp,
+        level: player.level,
+        sessionId: player.sessionId,
+        maxXp: player.maxXp,
+        round: player.round,
+        lives: player.lives,
+        wins: player.wins,
+        avatarUrl: player.avatarUrl,
+        gameVersion: player.gameVersion,
+        hasVersionWin: player.hasVersionWin,
+        income: player.income,
+        hpRegen: player.hpRegen,
+        dodgeRate: player.dodgeRate,
+        refreshShopCost: player.refreshShopCost,
+        maxHp: player.maxHp,
+        hp: player.hp,
+        strength: player.strength,
+        accuracy: player.accuracy,
+        defense: player.defense,
+        attackSpeed: player.attackSpeed,
+        flatDmgReduction: player.flatDmgReduction,
+        baseStats: player.baseStats?.toJSON() || {},
+        equippedItems,
+        inventory: player.inventory.map(item => item.toJSON()),
+        talents: player.talents.map(talent => talent.toJSON()),
+        lockedShop: player.lockedShop.map(item => item.toJSON()),
+    };
+}
+
+const TOP_PLAYERS_AGGREGATION: PipelineStage[] = [
+    {$sort: {wins: -1, originalPlayerId: -1, playerId: 1}},
+    {$group: {_id: '$originalPlayerId', doc: {$first: '$$ROOT'}}},
+    {$replaceRoot: {newRoot: '$doc'}},
+    {$sort: {wins: -1, originalPlayerId: -1, playerId: 1}},
+];
+
+export async function getTopPlayers(number: number): Promise<Record<string, any>[]> {
+    const topPlayers = await playerModel
+        .aggregate([...TOP_PLAYERS_AGGREGATION, {$limit: number}])
+        .exec();
+    return topPlayers.map(cleanRawPlayerDoc);
+}
+
+export async function getTopPlayersByVersion(number: number, gameVersion: number): Promise<Record<string, any>[]> {
+    const topPlayers = await playerModel
+        .aggregate([{$match: {gameVersion}}, ...TOP_PLAYERS_AGGREGATION, {$limit: number}])
+        .exec();
+    return topPlayers.map(cleanRawPlayerDoc);
+}
+
+export async function getHighestWinByVersion(gameVersion: number): Promise<number> {
+    const player = await playerModel.findOne({gameVersion}).sort({wins: -1}).limit(1).lean();
+    return player?.wins ?? 0;
 }
 
 export async function getPlayerRank(playerId: number): Promise<number> {

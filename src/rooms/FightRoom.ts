@@ -1,9 +1,9 @@
 import { Client, Room } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import { getHighestWin, getPlayer, getSameRoundPlayer, updatePlayer } from '../players/db/Player';
+import { getHighestWin, getHighestWinByVersion, getPlayer, getSameRoundPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
-import { FightResultType } from '../common/types';
+import { FightResultType, GAME_VERSION } from '../common/types';
 import { Dispatcher } from '@colyseus/command';
 import { ActiveTriggerCommand } from '../commands/triggers/ActiveTriggerCommand';
 import { FightStartTriggerCommand } from '../commands/triggers/FightStartTriggerCommand';
@@ -30,6 +30,16 @@ export class FightRoom extends Room {
 
         this.onMessage('chat', (client, message) => {
             this.broadcast('messages', `${client.sessionId}: ${message}`);
+        });
+
+        this.onMessage('continue_run', () => {
+            this.state.versionWinPending = false;
+            this.broadcast('end_battle', 'The battle has ended!');
+        });
+
+        this.onMessage('accept_win', () => {
+            this.state.versionWinPending = false;
+            this.broadcast('game_over', 'You are the best of the current version!');
         });
 
         //start clock for timings
@@ -92,13 +102,15 @@ export class FightRoom extends Room {
     }
 
     async sendFightEndToClient() {
-        await delay(1000, this.clock)
-        if (this.state.fightResult) {
-            if (this.state.player.lives > 0 && this.state.player.wins < 10)
-                this.broadcast('end_battle', 'The battle has ended!');
-            else if (this.state.player.lives <= 0 && this.state.player.wins < 10)
-                this.broadcast('game_over', 'You have lost the game!');
-            else if (this.state.player.wins >= 10) this.broadcast('game_over', 'You have won the game!');
+        await delay(2000, this.clock);
+        if (!this.state.fightResult) return;
+
+        if (this.state.versionWinPending) {
+            this.broadcast('version_win', {wins: this.state.player.wins});
+        } else if (this.state.player.lives <= 0) {
+            this.broadcast('game_over', 'You have lost the game!');
+        } else {
+            this.broadcast('end_battle', 'The battle has ended!');
         }
     }
 
@@ -371,6 +383,17 @@ export class FightRoom extends Room {
         this.broadcast('combat_log', 'You win!');
         console.log(`'[FightRoom]' ${this.state.player.name} wins!`);
         this.state.player.wins++;
+
+        if (!this.state.player.hasVersionWin) {
+            const highestVersionWin = await getHighestWinByVersion(GAME_VERSION);
+            if (this.state.player.wins > highestVersionWin) {
+                this.state.player.hasVersionWin = true;
+                this.state.versionWinPending = true;
+                this.broadcast('version_win', {wins: this.state.player.wins});
+                return;
+            }
+        }
+
         const highestWin = await getHighestWin();
         if (this.state.player.wins > highestWin) {
             this.broadcast('game_over', 'YOU ARE THE #1 TOP CHUNGERION! CHUNGRATULATIONS!');

@@ -110,16 +110,16 @@ export class DraftRoom extends Room {
         (await getQuestItems()).forEach(item => this.state.questItems.push(item));
 
 
-        await this.checkLevelUp();
-
+        
         //start auras
         this.clock.setInterval(() => {
             this.dispatcher.dispatch(new DraftAuraTriggerCommand());
         }, 1000)
-
+        
         //shop start trigger - wait a bit for client to load
         await delay(500, this.clock);
         this.dispatcher.dispatch(new ShopStartTriggerCommand());
+        await this.checkLevelUp();
 
     }
 

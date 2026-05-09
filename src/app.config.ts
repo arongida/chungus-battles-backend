@@ -8,7 +8,8 @@ import cors from 'cors';
  */
 import {FightRoom} from './rooms/FightRoom';
 import {DraftRoom} from './rooms/DraftRoom';
-import {getNextPlayerId, getPlayer, getPlayerRank, getTopPlayers} from './players/db/Player';
+import {getNextPlayerId, getPlayer, getPlayerRank, getTopPlayers, getTopPlayersByVersion, playerToPlainObject} from './players/db/Player';
+import {GAME_VERSION} from './common/types';
 
 export const server = defineServer({
 
@@ -43,7 +44,12 @@ export const server = defineServer({
             const playerId = Number(req.query.playerId);
             const player = await getPlayer(playerId);
             if (!player) return res.status(404).send({error: 'Player not found'});
-            res.status(200).json(player);
+            res.status(200).json(playerToPlainObject(player));
+        });
+
+        app.get('/topPlayersCurrentVersion', async (req, res) => {
+            const players = await getTopPlayersByVersion(Number(req.query.numberOfPlayers), GAME_VERSION);
+            res.status(200).send(players);
         });
 
         app.get('/rank', async (req, res) => {

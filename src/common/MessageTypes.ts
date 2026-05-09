@@ -12,3 +12,7 @@ export type TriggerTalentMessage = {
   playerId: number;
   talentId: number;
 };
+
+export type VersionWinMessage = {
+  wins: number;
+};
