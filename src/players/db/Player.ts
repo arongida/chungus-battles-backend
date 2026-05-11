@@ -162,6 +162,7 @@ export async function createNewPlayer(
     if (defaultWeapon) {
         playerSchema.inventory.push(defaultWeapon);
         playerSchema.setItemEquipped(defaultWeapon, EquipSlot.MAIN_HAND);
+        if (defaultWeapon.itemId === 68) playerSchema.gold += 3;
         await updatePlayer(playerSchema);
     } else {
         console.warn(`Default weapon for avatar ${avatarUrl} not found in DB`);

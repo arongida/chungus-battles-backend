@@ -286,6 +286,7 @@ export class DraftRoom extends Room {
             return;
         }
         this.state.player.gold -= this.state.player.refreshShopCost;
+        this.state.player.unlockShop();
         this.state.shop.clear();
         await this.updateShop(this.state.shopSize);
     }

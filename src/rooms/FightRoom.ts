@@ -384,6 +384,12 @@ export class FightRoom extends Room {
         console.log(`'[FightRoom]' ${this.state.player.name} wins!`);
         this.state.player.wins++;
 
+        const highestWin = await getHighestWin();
+        if (this.state.player.wins > highestWin) {
+            this.broadcast('game_over', 'YOU ARE THE #1 TOP CHUNGERION! CHUNGRATULATIONS!');
+            return;
+        }
+
         if (!this.state.player.hasVersionWin) {
             const highestVersionWin = await getHighestWinByVersion(GAME_VERSION);
             if (this.state.player.wins > highestVersionWin) {
@@ -394,12 +400,7 @@ export class FightRoom extends Room {
             }
         }
 
-        const highestWin = await getHighestWin();
-        if (this.state.player.wins > highestWin) {
-            this.broadcast('game_over', 'YOU ARE THE #1 TOP CHUNGERION! CHUNGRATULATIONS!');
-        } else {
-            this.broadcast('end_battle', 'The battle has ended!');
-        }
+        this.broadcast('end_battle', 'The battle has ended!');
     }
 
     private handleLoose() {
