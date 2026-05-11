@@ -690,7 +690,8 @@ export const TalentBehaviors = {
                 const {attacker, client, talent, shop} = context;
                 const discount = talent.base * attacker.level;
                 shop?.forEach((item) => {
-                    item.price -= discount;
+                    item.price = Math.max(0, item.price - discount);
+                    item.sellPrice = Math.max(0, item.sellPrice - discount);
                 });
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
