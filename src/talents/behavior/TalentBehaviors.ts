@@ -146,12 +146,12 @@ export const TalentBehaviors = {
         const reducedAmount = defender.getDamageAfterDefense(amount);
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
             defender: defender,
-            damage: amount,
+            damage: reducedAmount,
             attacker: attacker,
         });
         defender.takeDamage(reducedAmount, client);
         attacker.hp += reducedAmount;
-        client.send('combat_log', `${attacker.name} scams ${amount} health from ${defender.name}!`);
+        client.send('combat_log', `${attacker.name} scams ${reducedAmount} health from ${defender.name}!`);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.SCAM,
@@ -715,8 +715,9 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { defender, attacker, client, damage } = context;
             const chance = damage / 100;
+            console.log('chance ',chance)
             if (Math.random() < chance) {
-
+                console.log('got it!')
                 attacker.gold += 1;
                 client.send('combat_log', `${defender.name} bled a gold coin!`);
                 client.send('trigger_talent', {
