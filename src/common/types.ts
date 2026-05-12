@@ -1,4 +1,4 @@
-export const GAME_VERSION = 5;
+export const GAME_VERSION = 6;
 
 export enum FightResultType {
 	WIN = 'win',
