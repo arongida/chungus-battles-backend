@@ -1,6 +1,5 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
-import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerCommand';
 import { EquipSlot } from '../types/ItemTypes';
 
 export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => void> = {
@@ -39,12 +38,13 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
         const heal = Math.floor(damage * (item.rarity * 5 + 5) / 100) + 1;
         attacker.hp += heal;
         client?.send('healing', { playerId: attacker.playerId, healing: heal });
+        client?.send('combat_log', `${attacker.name}'s ${item.name} leeches ${heal} health!`)
     },
 
     // Magic Ring Weapon (702) — rarity 2+: gains +(rarity*0.01+0.01) strength per attack.
     702: ({ attacker, item }) => {
         if (!attacker || !item || item.rarity <= 1) return;
-        item.affectedStats.strength += item.rarity * 0.01 + 0.01;
+        item.affectedStats.strength +=  attacker.level * item.rarity * 0.01 + 0.01;
         attacker.equippedItems.forEach((equipped, slot) => {
             if (equipped === item) attacker.equippedItems.set(slot, equipped);
         });

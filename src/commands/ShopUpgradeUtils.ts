@@ -2,14 +2,14 @@ import { Item } from '../items/schema/ItemSchema';
 import { Player } from '../players/schema/PlayerSchema';
 import { ItemRarity, ItemSet, ItemType } from '../items/types/ItemTypes';
 
-const itemDescriptionUpdaters: Partial<Record<number, (item: Item) => string>> = {
+const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Player) => string>> = {
   18: (item) => {
     const stacks = item.rarity - 1;
     return `Applies ${stacks} poison stack${stacks > 1 ? 's' : ''} on hit.`;
   },
   29: (item) => `Each hit slows enemy attack speed by ${item.rarity}%, down to 50%.`,
   59: (item) => `Heals for ${item.rarity * 5 + 6}% of damage dealt on hit.`,
-  702: (item) => `Gains +${(item.rarity * 0.01 + 0.01).toFixed(2)} strength per attack.`,
+  702: (item, player) => `Gains +${(player.level * item.rarity * 0.01 + 0.01).toFixed(2)} * level strength per attack.`,
   703: (item) => {
     const multiplier = item.rarity / 2;
     return multiplier === 1
@@ -18,16 +18,16 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item) => string>> =
   },
 };
 
-function updateRarityDescription(target: Item): void {
+function updateRarityDescription(target: Item, player: Player): void {
   if (target.rarity <= 1) return;
   const updater = itemDescriptionUpdaters[target.itemId];
-  if (updater) target.description = updater(target);
+  if (updater) target.description = updater(target, player);
 }
 
-export function applyRarityUpgrade(target: Item, source: Item, increaseSellPrice = true): void {
+export function applyRarityUpgrade(target: Item, source: Item, player: Player, increaseSellPrice = true): void {
   target.rarity++;
   if (increaseSellPrice) target.sellPrice += source.sellPrice;
-  updateRarityDescription(target);
+  updateRarityDescription(target, player);
   target.setBonusStats.mergeInto(source.setBonusStats);
 
   switch (target.set) {

@@ -40,6 +40,7 @@ export enum TalentType {
 	JOKER = 41,
 	DUAL_WIELD = 42,
 	SHADY_SHIELDS = 43,
+	MERCENARY = 44,
 	WARRIOR_1 = 101,
 	ROGUE_1 = 102,
 	MERCHANT_1 = 103,
@@ -54,6 +55,6 @@ export enum TalentType {
 	MERCHANT_4 = 403,
 	WARRIOR_5 = 501,
 	ROGUE_5 = 502,
-	MERCHANT_5 = 503,
+	JUST_A_SCRATCH = 503,
 	MERCHANT_5B = 504,
 }
