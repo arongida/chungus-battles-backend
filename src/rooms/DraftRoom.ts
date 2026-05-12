@@ -166,7 +166,7 @@ export class DraftRoom extends Room {
                         continue;
                     }
                     while (preview.rarity < ownedTarget.rarity + 1) {
-                        applyRarityUpgrade(preview, source);
+                        applyRarityUpgrade(preview, source, this.state.player);
                     }
                     preview.price = rolledItem.price;
                     this.state.shop.push(preview);
