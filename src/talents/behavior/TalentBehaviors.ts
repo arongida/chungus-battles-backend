@@ -713,11 +713,9 @@ export const TalentBehaviors = {
 
     [TalentType.MERCENARY]:
         (context: TalentBehaviorContext) => {
-            const { defender, attacker, client, damage } = context;
-            const chance = damage / 100;
-            console.log('chance ',chance)
+            const { defender, attacker, client, damage, talent } = context;
+            const chance = damage / talent.base;
             if (Math.random() < chance) {
-                console.log('got it!')
                 attacker.gold += 1;
                 client.send('combat_log', `${defender.name} bled a gold coin!`);
                 client.send('trigger_talent', {
