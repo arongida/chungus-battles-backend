@@ -1,6 +1,7 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
 import { EquipSlot } from '../types/ItemTypes';
+import { CombatLogMessage } from '../../common/MessageTypes';
 
 export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => void> = {
     // Zwei-Hander (4) — AURA: unequips any item in the other hand slot while equipped.
@@ -38,7 +39,7 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
         const heal = Math.floor(damage * (item.rarity * 5 + 5) / 100) + 1;
         attacker.hp += heal;
         client?.send('healing', { playerId: attacker.playerId, healing: heal });
-        client?.send('combat_log', `${attacker.name}'s ${item.name} leeches ${heal} health!`)
+        client?.send('combat_log', { text: `${attacker.name}'s ${item.name} leeches ${heal} health!`, kind: 'leech', attackerId: attacker.playerId, itemId: item.itemId, healing: heal } as CombatLogMessage)
     },
 
     // Magic Ring Weapon (702) — rarity 2+: gains +(rarity*0.01+0.01) strength per attack.

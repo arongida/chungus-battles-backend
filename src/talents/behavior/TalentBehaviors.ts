@@ -9,13 +9,22 @@ import { ArraySchema } from "@colyseus/schema";
 import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { getItemById } from "../../items/db/Item";
 import { applyRarityUpgrade } from "../../commands/ShopUpgradeUtils";
+import { CombatLogMessage, fmt } from "../../common/MessageTypes";
+import { Talent } from "../schema/TalentSchema";
+
+export function track(talent: Talent, activations: number, damage = 0, healing = 0, gold = 0) {
+    talent.statActivations  += activations;  talent.totalActivations  += activations;
+    talent.statDamageDealt  += damage;       talent.totalDamageDealt  += damage;
+    talent.statHealingDone  += healing;      talent.totalHealingDone  += healing;
+    talent.statGoldGained   += gold;         talent.totalGoldGained   += gold;
+}
 
 export const TalentBehaviors = {
     [TalentType.RAGE]: (context: TalentBehaviorContext) => {
         const { talent, defender, client } = context;
 
         talent.affectedStats.strength += talent.activationRate;
-        client.send('combat_log', `${defender.name} rages, increased attack by 1!`);
+        client.send('combat_log', { text: `${defender.name} rages, increased attack by 1!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: defender.playerId,
             talentId: TalentType.RAGE,
@@ -33,7 +42,8 @@ export const TalentBehaviors = {
             attacker: attacker,
         });
         defender.takeDamage(calculatedStabDamage, client);
-        client.send('combat_log', `${attacker.name} stabs ${defender.name} for ${calculatedStabDamage} damage!`);
+        track(talent, 1, calculatedStabDamage);
+        client.send('combat_log', { text: `${attacker.name} stabs ${defender.name} for ${fmt(calculatedStabDamage)} damage!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: calculatedStabDamage } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.STAB,
@@ -50,7 +60,8 @@ export const TalentBehaviors = {
             attacker: attacker,
         });
         defender.takeDamage(calculatedBearDamage, client);
-        client.send('combat_log', `${attacker.name} mauls ${defender.name} for ${calculatedBearDamage} damage!`);
+        track(talent, 1, calculatedBearDamage);
+        client.send('combat_log', { text: `${attacker.name} mauls ${defender.name} for ${fmt(calculatedBearDamage)} damage!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: calculatedBearDamage } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.BEAR,
@@ -61,7 +72,7 @@ export const TalentBehaviors = {
         const { attacker, client, talent, trigger } = context;
         if (trigger === TriggerType.ON_ATTACK) {
             talent.affectedStats.attackSpeed += talent.activationRate;
-            client.send('combat_log', `${attacker.name} gains ${talent.activationRate * 100}% attack speed!`);
+            client.send('combat_log', { text: `${attacker.name} gains ${talent.activationRate * 100}% attack speed!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ASSASSIN_AMUSEMENT,
@@ -72,8 +83,9 @@ export const TalentBehaviors = {
     },
 
     [TalentType.POISON]: (context: TalentBehaviorContext) => {
-        const { attacker, defender, client, clock } = context;
+        const { attacker, defender, client, clock, talent } = context;
         defender.addPoisonStacks(clock, client);
+        track(talent, 1, 0, 0);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.POISON,
@@ -84,7 +96,8 @@ export const TalentBehaviors = {
         const { attacker, damage, client } = context;
         const leechAmount = damage * 0.15 + 1;
         attacker.hp += leechAmount;
-        client.send('combat_log', `${attacker.name} leeches ${leechAmount} health!`);
+        track(context.talent, 1, 0, leechAmount);
+        client.send('combat_log', { text: `${attacker.name} leeches ${fmt(leechAmount)} health!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, healing: leechAmount } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.INVIGORATE,
@@ -101,7 +114,7 @@ export const TalentBehaviors = {
             if (defender.strength > 1 && defender.strength > defender.accuracy) {
                 talent.affectedEnemyStats.strength -= 1;
                 talent.affectedStats.strength += 1;
-                client.send('combat_log', `${attacker.name} snitches 1 strength from ${defender.name}!`);
+                client.send('combat_log', { text: `${attacker.name} snitches 1 strength from ${defender.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     talentId: TalentType.SNITCH,
@@ -119,7 +132,7 @@ export const TalentBehaviors = {
         const stolenItem = defender.inventory[stolenItemIndex];
         if (stolenItem) {
             defender.inventory.splice(stolenItemIndex, 1);
-            client.send('combat_log', `${attacker.name} steals ${stolenItem.name} from ${defender.name}!`);
+            client.send('combat_log', { text: `${attacker.name} steals ${stolenItem.name} from ${defender.name}!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, itemId: stolenItem.itemId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.STEAL,
@@ -133,7 +146,8 @@ export const TalentBehaviors = {
         const { attacker, defender, client } = context;
         attacker.gold += 1;
         if (defender.gold > 0) defender.gold -= 1;
-        client.send('combat_log', `${attacker.name} stole 1 gold from ${defender.name}!`);
+        track(context.talent, 1, 0, 0, 1);
+        client.send('combat_log', { text: `${attacker.name} stole 1 gold from ${defender.name}!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.PICKPOCKET,
@@ -151,7 +165,8 @@ export const TalentBehaviors = {
         });
         defender.takeDamage(reducedAmount, client);
         attacker.hp += reducedAmount;
-        client.send('combat_log', `${attacker.name} scams ${reducedAmount} health from ${defender.name}!`);
+        track(context.talent, 1, reducedAmount, reducedAmount);
+        client.send('combat_log', { text: `${attacker.name} scams ${fmt(reducedAmount)} health from ${defender.name}!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: reducedAmount, healing: reducedAmount } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.SCAM,
@@ -166,7 +181,8 @@ export const TalentBehaviors = {
         const { attacker, client } = context;
         const healing = 2 + attacker.level;
         attacker.hp += healing;
-        client.send('combat_log', `${attacker.name} restores ${healing} health!`);
+        track(context.talent, 1, 0, healing);
+        client.send('combat_log', { text: `${attacker.name} restores ${fmt(healing)} health!`, kind: 'heal', talentId: context.talent.talentId, attackerId: attacker.playerId, healing } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.BANDAGE,
@@ -189,7 +205,8 @@ export const TalentBehaviors = {
         });
 
         defender.takeDamage(damage, client);
-        client.send('combat_log', `${attacker.name} throws money for ${damage} damage!`);
+        track(context.talent, 1, damage);
+        client.send('combat_log', { text: `${attacker.name} throws money for ${fmt(damage)} damage!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.THROW_MONEY,
@@ -204,9 +221,9 @@ export const TalentBehaviors = {
                 return currentWeapon.price > maxWeapon.price ? currentWeapon : maxWeapon;
             }, weapons[0]);
 
-            client.send('combat_log', `${defender.name} is disarmed! ${mostExpensiveWeapon.name} is disabled for the fight!`);
+            client.send('combat_log', { text: `${defender.name} is disarmed! ${mostExpensiveWeapon.name} is disabled for the fight!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, itemId: mostExpensiveWeapon.itemId } as CombatLogMessage);
         } else {
-            client.send('combat_log', `${defender.name} has no weapons to disarm!`);
+            client.send('combat_log', { text: `${defender.name} has no weapons to disarm!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
         }
         client.send('trigger_talent', {
             playerId: attacker.playerId,
@@ -232,7 +249,7 @@ export const TalentBehaviors = {
             applyRarityUpgrade(weapon, baseItem, attacker, false);
         }
 
-        client.send('combat_log', `${attacker.name}'s ${weapon.name} becomes Legendary!`);
+        client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Legendary!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.WEAPON_WHISPERER,
@@ -284,7 +301,7 @@ export const TalentBehaviors = {
         const poisonStackToApply = defender.inventory.length * 2;
         defender.addPoisonStacks(clock, client, poisonStackToApply);
 
-        client.send('combat_log', `${attacker.name} corrodes ${defender.name}'s collection!`);
+        client.send('combat_log', { text: `${attacker.name} corrodes ${defender.name}'s collection!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.CORRODING_COLLECTION,
@@ -305,7 +322,8 @@ export const TalentBehaviors = {
         const { defender, client, talent } = context;
         const healingAmount = talent.activationRate * defender.maxHp;
         defender.hp += healingAmount;
-        client.send('combat_log', `${defender.name} recovers ${healingAmount} health!`);
+        track(talent, 1, 0, healingAmount);
+        client.send('combat_log', { text: `${defender.name} recovers ${fmt(healingAmount)} health!`, kind: 'heal', talentId: talent.talentId, attackerId: defender.playerId, healing: healingAmount } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: defender.playerId,
             talentId: TalentType.RESILIENCE,
@@ -326,7 +344,8 @@ export const TalentBehaviors = {
             attacker: defender,
         });
         attacker.takeDamage(reflectDamage, client);
-        client.send('combat_log', `${defender.name} reflects ${reflectDamage} damage to ${attacker.name}!`);
+        track(talent, 1, reflectDamage);
+        client.send('combat_log', { text: `${defender.name} reflects ${fmt(reflectDamage)} damage to ${attacker.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId, defenderId: attacker.playerId, damage: reflectDamage } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: defender.playerId,
             talentId: TalentType.THORNY_FENCE,
@@ -344,8 +363,8 @@ export const TalentBehaviors = {
             });
 
             attacker.takeDamage(damage, client);
-
-            client.send('combat_log', `${defender.name} reflects ${damage} damage to ${attacker.name}!`);
+            track(talent, 1, damage);
+            client.send('combat_log', { text: `${defender.name} reflects ${fmt(damage)} damage to ${attacker.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId, defenderId: attacker.playerId, damage } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: defender.playerId,
                 talentId: TalentType.EYE_FOR_AN_EYE,
@@ -359,7 +378,7 @@ export const TalentBehaviors = {
         const playerAttack = attacker.strength;
         attacker.strength = enemyAttack;
         defender.strength = playerAttack;
-        client.send('combat_log', `${attacker.name} tricks ${defender.name}!`);
+        client.send('combat_log', { text: `${attacker.name} tricks ${defender.name}!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.TRICKSTER,
@@ -369,7 +388,7 @@ export const TalentBehaviors = {
     [TalentType.EVASION]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
         attacker.dodgeRate += talent.activationRate;
-        client.send('combat_log', `${attacker.name} gains ${talent.activationRate * 100}% dodge chance!`);
+        client.send('combat_log', { text: `${attacker.name} gains ${talent.activationRate * 100}% dodge chance!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.EVASION,
@@ -378,7 +397,7 @@ export const TalentBehaviors = {
 
     [TalentType.FUTURE_NOW]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
-        client.send('combat_log', 'You are in the future now! You gain extra gold and xp!');
+        client.send('combat_log', { text: 'You are in the future now! You gain extra gold and xp!', kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: talent.talentId,
@@ -390,7 +409,8 @@ export const TalentBehaviors = {
         const { attacker, client, talent } = context;
         const goldBonus = Math.max(Math.round(attacker.gold * talent.activationRate), 5);
         attacker.gold += goldBonus;
-        client.send('combat_log', `You gained ${goldBonus} gold from selling loot!`);
+        track(talent, 1, 0, 0, goldBonus);
+        client.send('combat_log', { text: `You gained ${goldBonus} gold from selling loot!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldBonus } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.SMART_INVESTMENT,
@@ -404,7 +424,7 @@ export const TalentBehaviors = {
             defender.setInvincible(clock, talent.activationRate);
             defender.talentsOnCooldown.push(TalentType.GUARDIAN_ANGEL);
 
-            client.send('combat_log', `You are invincible for ${talent.activationRate / 1000} seconds!`);
+            client.send('combat_log', { text: `You are invincible for ${talent.activationRate / 1000} seconds!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.GUARDIAN_ANGEL,
@@ -417,7 +437,8 @@ export const TalentBehaviors = {
         attacker.gold += talent.activationRate;
 
         talent.triggerTypes.clear();
-        talent.description = 'Cashed out already!';
+
+        track(talent, 1, 0, 0, talent.activationRate)
 
         client.send('draft_log', `Gained ${talent.activationRate} gold!`);
         client.send('trigger_talent', {
@@ -428,11 +449,12 @@ export const TalentBehaviors = {
     },
 
     [TalentType.ROBBERY]: (context: TalentBehaviorContext) => {
-        const { attacker, client, shop } = context;
+        const { attacker, client, shop, talent } = context;
         const randomItem = shop[Math.floor(Math.random() * shop.length)];
         if (randomItem) {
             attacker.gold += randomItem.price;
             attacker.getItem(randomItem);
+            track(talent, 0, 0, 0);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ROBBERY,
@@ -450,7 +472,7 @@ export const TalentBehaviors = {
             const mainHandWeapon = mainHandItem?.type === ItemType.WEAPON ? mainHandItem : null;
             const offHandWeapon = offHandItem?.type === ItemType.WEAPON ? offHandItem : null;
             if (mainHandWeapon || offHandWeapon) {
-                client.send('combat_log', `${attacker.name} is a martial artist and doesn't need a weapon!`);
+                client.send('combat_log', { text: `${attacker.name} is a martial artist and doesn't need a weapon!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
                 if (mainHandWeapon) attacker.setItemUnequipped(mainHandWeapon, EquipSlot.MAIN_HAND);
                 if (offHandWeapon) attacker.setItemUnequipped(offHandWeapon, EquipSlot.OFF_HAND);
             }
@@ -593,7 +615,7 @@ export const TalentBehaviors = {
                 stat = "hp regeneration";
             }
 
-            client.send('combat_log', `${attacker.name} gets ${amount} bonus ${stat} from Joker talent.`);
+            client.send('combat_log', { text: `${attacker.name} gets ${amount} bonus ${stat} from Joker talent.`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.JOKER,
@@ -704,7 +726,8 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { defender, client } = context;
             defender.gold += 1;
-            client.send('combat_log', `${defender.name} found 1 gold during dodge roll!`);
+            track(context.talent, 1, 0, 0, 1);
+            client.send('combat_log', { text: `${defender.name} found 1 gold during dodge roll!`, kind: 'reward', talentId: context.talent.talentId, attackerId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: defender.playerId,
                 talentId: TalentType.ROGUE_1,
@@ -717,7 +740,8 @@ export const TalentBehaviors = {
             const chance = damage / talent.base;
             if (Math.random() < chance) {
                 attacker.gold += 1;
-                client.send('combat_log', `${defender.name} bled a gold coin!`);
+                track(talent, 1, 0, 0, 1);
+                client.send('combat_log', { text: `${defender.name} bled a gold coin!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     talentId: TalentType.MERCENARY,
@@ -736,7 +760,8 @@ export const TalentBehaviors = {
                 attacker: attacker,
             });
             defender.takeDamage(damageAfterReduction, client);
-            client.send('combat_log', `${attacker.name} throws weapons for ${damageAfterReduction} damage!`);
+            track(context.talent, 1, damageAfterReduction);
+            client.send('combat_log', { text: `${attacker.name} throws weapons for ${fmt(damageAfterReduction)} damage!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: damageAfterReduction } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.WARRIOR_2,
@@ -747,7 +772,7 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
 
-            attacker.baseStats.attackSpeed += talent.base - 1;
+            talent.affectedStats.attackSpeed += talent.base;
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ROGUE_2,
@@ -756,13 +781,14 @@ export const TalentBehaviors = {
 
     [TalentType.MERCHANT_2]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client } = context;
+            const { attacker, client, talent } = context;
             if (attacker.refreshShopCost !== 1) {
                 attacker.refreshShopCost = 1;
 
             }
             if (!attacker.talentsOnCooldown.includes(TalentType.MERCHANT_2)) {
                 attacker.gold += 20;
+                track(talent, 1, 0, 0, 20);
                 attacker.talentsOnCooldown.push(TalentType.MERCHANT_2);
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
@@ -774,8 +800,9 @@ export const TalentBehaviors = {
 
     [TalentType.ROGUE_3]:
         (context: TalentBehaviorContext) => {
-            const { attacker, defender, client, clock } = context;
+            const { attacker, defender, client, clock, talent } = context;
             defender.addPoisonStacks(clock, client);
+            track(talent, 1, 0, 0, 0);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ROGUE_3,
@@ -796,8 +823,8 @@ export const TalentBehaviors = {
 
     [TalentType.MERCHANT_4]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client } = context;
-            attacker.baseStats.income += 1;
+            const { attacker, client, talent } = context;
+            talent.affectedStats.income += 1;
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.MERCHANT_4,
@@ -819,7 +846,8 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { attacker, client } = context;
             attacker.gold += 1;
-            client.send('combat_log', `${attacker.name} gets 1 gold!`);
+            track(context.talent, 1, 0, 0, 1);
+            client.send('combat_log', { text: `${attacker.name} gets 1 gold!`, kind: 'reward', talentId: context.talent.talentId, attackerId: attacker.playerId, goldDelta: 1 } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ROGUE_4,
@@ -869,7 +897,8 @@ export const TalentBehaviors = {
             const { defender, client, talent } = context;
             if (Math.random() < talent.activationRate) {
                 defender.gold += 1;
-                client.send('combat_log', `${defender.name} profits from pain, gaining 1 gold!`);
+                track(talent, 1, 0, 0, 1);
+                client.send('combat_log', { text: `${defender.name} profits from pain, gaining 1 gold!`, kind: 'reward', talentId: talent.talentId, attackerId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
                 client.send('trigger_talent', {
                     playerId: defender.playerId,
                     talentId: TalentType.JUST_A_SCRATCH,

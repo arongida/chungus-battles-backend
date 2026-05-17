@@ -18,6 +18,21 @@ export class Talent extends Schema {
     @type(['string']) triggerTypes: ArraySchema<string>;
     @type(AffectedStats) affectedStats: AffectedStats;
     @type(AffectedStats) affectedEnemyStats: AffectedStats;
+    @type('number') statActivations: number = 0;
+    @type('number') statDamageDealt: number = 0;
+    @type('number') statHealingDone: number = 0;
+    @type('number') statGoldGained: number = 0;
+    @type('number') totalActivations: number = 0;
+    @type('number') totalDamageDealt: number = 0;
+    @type('number') totalHealingDone: number = 0;
+    @type('number') totalGoldGained: number = 0;
+
+    resetCombatStats() {
+        this.statActivations = 0;
+        this.statDamageDealt = 0;
+        this.statHealingDone = 0;
+        this.statGoldGained = 0;
+    }
 
     executeBehavior(context: BehaviorContext) {
         const behaviorKey = this.talentId as keyof typeof TalentBehaviors;
