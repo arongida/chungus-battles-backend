@@ -34,7 +34,7 @@ export class FightRoom extends Room {
 
         this.onMessage('continue_run', () => {
             this.state.versionWinPending = false;
-            this.broadcast('end_battle', 'The battle has ended!');
+            this.broadcast('end_battle', { result: 'win' });
         });
 
         this.onMessage('accept_win', () => {
@@ -110,7 +110,7 @@ export class FightRoom extends Room {
         } else if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');
         } else {
-            this.broadcast('end_battle', 'The battle has ended!');
+            this.broadcast('end_battle', { result: this.state.fightResult ?? 'win' });
         }
     }
 
@@ -400,7 +400,7 @@ export class FightRoom extends Room {
             }
         }
 
-        this.broadcast('end_battle', 'The battle has ended!');
+        this.broadcast('end_battle', { result: 'win' });
     }
 
     private handleLoose() {
@@ -410,13 +410,13 @@ export class FightRoom extends Room {
         if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');
         } else {
-            this.broadcast('end_battle', 'The battle has ended!');
+            this.broadcast('end_battle', { result: 'lose' });
         }
     }
 
     private handleDraw() {
         console.log('[FightRoom]', 'draw!');
         this.broadcast('combat_log', "It's a draw!");
-        this.broadcast('end_battle', 'The battle has ended!');
+        this.broadcast('end_battle', { result: 'draw' });
     }
 }
