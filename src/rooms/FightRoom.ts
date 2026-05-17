@@ -18,6 +18,8 @@ import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
 import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
+import { CombatLogMessage, fmt } from '../common/MessageTypes';
+import { track } from '../talents/behavior/TalentBehaviors';
 
 export class FightRoom extends Room {
     declare state: FightState;
@@ -87,12 +89,12 @@ export class FightRoom extends Room {
         //start battle after 5 seconds
         let countdown = 5;
         const countdownTimer = this.clock.setInterval(() => {
-            this.broadcast('combat_log', `The battle will begin in ${countdown--} second(s)...`);
+            this.logCombat('broadcast', { text: `The battle will begin in ${countdown--} second(s)...`, kind: 'countdown' });
         }, 1000);
 
         this.clock.setTimeout(async () => {
             countdownTimer.clear();
-            this.broadcast('combat_log', 'The battle begins!');
+            this.logCombat('broadcast', { text: 'The battle begins!', kind: 'fight_start' });
             console.log('[FightRoom]', 'battle started!');
             console.log('[FightRoom]', 'player', this.state.player.name);
             console.log('[FightRoom]', 'enemy', this.state.enemy.name);
@@ -140,6 +142,11 @@ export class FightRoom extends Room {
         console.log('[FightRoom]', 'room', this.roomId, 'disposing...');
     }
 
+    private logCombat(target: Client | 'broadcast', entry: CombatLogMessage) {
+        if (target === 'broadcast') this.broadcast('combat_log', entry);
+        else target.send('combat_log', entry);
+    }
+
     //this is running all the time
     update() {
 
@@ -171,7 +178,7 @@ export class FightRoom extends Room {
                 this.state.skillsTimers.forEach((timer) => timer.clear());
                 this.state.player.regenTimer?.clear();
                 this.state.enemy.regenTimer?.clear();
-                this.broadcast('combat_log', 'The battle has ended!');
+                this.logCombat('broadcast', { text: 'The battle has ended!', kind: 'fight_end' });
                 this.handleFightEnd();
             }
         }
@@ -183,7 +190,7 @@ export class FightRoom extends Room {
             const burnDamage = this.state.endBurnDamage++;
             this.state.player.hp -= burnDamage;
             this.state.enemy.hp -= burnDamage;
-            this.broadcast('combat_log', `The battle is dragging on! Both players burned for ${burnDamage} damage!`);
+            this.logCombat('broadcast', { text: `The battle is dragging on! Both players burned for ${burnDamage} damage!`, kind: 'end_burn', damage: burnDamage, attackerId: this.state.player.playerId, defenderId: this.state.enemy.playerId });
             this.broadcast('damage', {
                 playerId: this.state.player.playerId,
                 damage: burnDamage,
@@ -240,7 +247,7 @@ export class FightRoom extends Room {
             player.regenTimer = this.clock.setInterval(() => {
                 player.hp += player.hpRegen;
                 const isMinusRegen = player.hpRegen < 0;
-                this.state.playerClient.send('combat_log', `${player.name} regenerates ${player.hpRegen} hp!`);
+                this.logCombat(this.state.playerClient, { text: `${player.name} regenerates ${fmt(player.hpRegen)} hp!`, kind: 'regen', attackerId: player.playerId, healing: player.hpRegen });
                 this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {
                     playerId: player.playerId,
                     healing: player.hpRegen,
@@ -253,6 +260,9 @@ export class FightRoom extends Room {
     checkPoison(attacker: Player, defender: Player) {
         if (defender.poisonStack <= 0) return;
         const poisonTalent = attacker.talents.find((talent) => talent.talentId === TalentType.POISON);
+        const poisonTalents = attacker.talents.filter(t =>
+            t.talentId === TalentType.POISON || t.talentId === TalentType.ROGUE_3
+        );
 
         const activationRate = poisonTalent ? poisonTalent.activationRate : 0.015;
         if (!defender.poisonTimer) {
@@ -266,7 +276,8 @@ export class FightRoom extends Room {
                 });
 
                 defender.takeDamage(poisonDamage, this.state.playerClient);
-                this.state.playerClient.send('combat_log', `${defender.name} takes ${poisonDamage} poison damage!`);
+                poisonTalents.forEach(t => track(t, 0, poisonDamage));
+                this.logCombat(this.state.playerClient, { text: `${defender.name} takes ${fmt(poisonDamage)} poison damage!`, kind: 'poison_tick', defenderId: defender.playerId, damage: poisonDamage, poisonStacks: defender.poisonStack });
             }, 1000);
         }
     }
@@ -282,7 +293,7 @@ export class FightRoom extends Room {
             const dodgeChance = 1 - 100 / (100 + defender.dodgeRate);
 
             if (Math.random() < dodgeChance) {
-                this.state.playerClient.send('combat_log', `${defender.name} dodged ${attacker.name}'s ${weapon.name}!`);
+                this.logCombat(this.state.playerClient, { text: `${defender.name} dodged ${attacker.name}'s ${weapon.name}!`, kind: 'dodge', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId });
                 this.dispatcher.dispatch(new OnDodgeTriggerCommand(), {
                     attacker: attacker,
                     defender: defender,
@@ -312,12 +323,15 @@ export class FightRoom extends Room {
         defender.takeDamage(damage, this.state.playerClient);
 
         this.state.playerClient.send('trigger_item', { playerId: attacker.playerId, itemId: weapon.itemId, slot });
-        this.state.playerClient.send('combat_log', `${attacker.name}'s ${weapon.name} hits ${defender.name} for ${damage} damage!`);
+        this.logCombat(this.state.playerClient, { text: `${attacker.name}'s ${weapon.name} hits ${defender.name} for ${fmt(damage)} damage!`, kind: 'attack', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId, slot, damage, rolledDamage: attackRoll, mitigatedDamage: attackRoll - damage, defenderHpAfter: defender.hp });
         this.state.playerClient.send('attack', attacker.playerId);
     }
 
     //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
     startBattle() {
+        this.state.player.talents.forEach(t => t.resetCombatStats());
+        this.state.enemy.talents.forEach(t => t.resetCombatStats());
+
         //start attack timers
         this.startWeaponAttackTimers(this.state.player, this.state.enemy);
         this.startWeaponAttackTimers(this.state.enemy, this.state.player);
@@ -375,12 +389,12 @@ export class FightRoom extends Room {
         this.state.player.gold += goldToGet;
         this.state.player.xp += this.state.player.rewardRound * 2;
 
-        this.broadcast('combat_log', `You gained ${goldToGet} gold!`);
-        this.broadcast('combat_log', `You gained ${this.state.player.rewardRound * 2} xp!`);
+        this.logCombat('broadcast', { text: `You gained ${goldToGet} gold!`, kind: 'reward', goldDelta: goldToGet });
+        this.logCombat('broadcast', { text: `You gained ${this.state.player.rewardRound * 2} xp!`, kind: 'reward' });
     }
 
     private async handleWin() {
-        this.broadcast('combat_log', 'You win!');
+        this.logCombat('broadcast', { text: 'You win!', kind: 'result', result: 'win' });
         console.log(`'[FightRoom]' ${this.state.player.name} wins!`);
         this.state.player.wins++;
 
@@ -404,7 +418,7 @@ export class FightRoom extends Room {
     }
 
     private handleLoose() {
-        this.broadcast('combat_log', 'You loose!');
+        this.logCombat('broadcast', { text: 'You loose!', kind: 'result', result: 'lose' });
         console.log(`[FightRoom]' ${this.state.player.name} looses!`);
         this.state.player.lives--;
         if (this.state.player.lives <= 0) {
@@ -416,7 +430,7 @@ export class FightRoom extends Room {
 
     private handleDraw() {
         console.log('[FightRoom]', 'draw!');
-        this.broadcast('combat_log', "It's a draw!");
+        this.logCombat('broadcast', { text: "It's a draw!", kind: 'result', result: 'draw' });
         this.broadcast('end_battle', { result: 'draw' });
     }
 }

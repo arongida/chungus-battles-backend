@@ -3,6 +3,7 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {Item} from '../../items/schema/ItemSchema';
 import {IStats} from '../../common/types';
 import {TalentType} from '../../talents/types/TalentTypes';
+import { CombatLogMessage } from '../../common/MessageTypes';
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
@@ -165,7 +166,7 @@ export class Player extends Schema implements IStats {
 
     addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {
         this.poisonStack += stack;
-        playerClient.send('combat_log', `${this.name} is poisoned! ${this.poisonStack} stacks!`);
+        playerClient.send('combat_log', { text: `${this.name} is poisoned! ${this.poisonStack} stacks!`, kind: 'poison_apply', defenderId: this.playerId, poisonStacks: this.poisonStack } as CombatLogMessage);
 
         clock.setTimeout(() => {
             this.poisonStack -= stack;
