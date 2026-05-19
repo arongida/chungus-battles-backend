@@ -1,6 +1,5 @@
 import { Client, Room } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
-import { Item } from '../items/schema/ItemSchema';
 import { copyPlayer, createNewPlayer, getPlayer, updatePlayer } from '../players/db/Player';
 import { getNumberOfItems, getQuestItems, getItemById } from '../items/db/Item';
 import { applyRarityUpgrade, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
@@ -14,8 +13,7 @@ import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRe
 import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCommand';
 import { EquipSlot } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
-import { UpdateActiveSets } from "../commands/UpdateActiveSets";
-import { ArraySchema } from "@colyseus/schema";
+import { UpdateActiveSets } from "../commands/UpdateActiveSets"; import { ArraySchema } from "@colyseus/schema";
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -34,7 +32,7 @@ export class DraftRoom extends Room {
             await this.sellItem(message.itemId);
         });
         this.onMessage('equip', async (client, message) => {
-            await this.equipItem(message.itemId, message.slot);
+            await this.equipItem(message.itemId, message.slot, client);
         });
         this.onMessage('unequip', async (client, message) => {
             await this.unequipItem(message.itemId, message.slot);
@@ -110,12 +108,12 @@ export class DraftRoom extends Room {
         (await getQuestItems()).forEach(item => this.state.questItems.push(item));
 
 
-        
+
         //start auras
         this.clock.setInterval(() => {
             this.dispatcher.dispatch(new DraftAuraTriggerCommand());
         }, 1000)
-        
+
         //shop start trigger - wait a bit for client to load
         await delay(500, this.clock);
         this.dispatcher.dispatch(new ShopStartTriggerCommand());
@@ -144,7 +142,8 @@ export class DraftRoom extends Room {
     }
 
     private async updateShop(newShopSize: number) {
-        const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level);
+        const excludeTypes = this.state.player.lives > 2 ? ['potion'] : [];
+        const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level, excludeTypes);
         const lockedShop = this.state.player.lockedShop;
         if (lockedShop.length > 0) {
             this.state.shop.clear();
@@ -153,6 +152,10 @@ export class DraftRoom extends Room {
         } else if (this.state.shop.length < 6) {
             this.state.shop.clear();
             for (const rolledItem of shopFromDb) {
+                if (rolledItem.type === 'potion') {
+                    rolledItem.price = this.calculatePotionPrice(this.state.player);
+                    rolledItem.sellPrice = Math.floor(rolledItem.price * 0.7);
+                }
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
                 if (ownedTarget) {
                     const preview = await getItemById(rolledItem.itemId);
@@ -268,10 +271,14 @@ export class DraftRoom extends Room {
         }
     }
 
-    private async equipItem(itemId: number, slot: EquipSlot) {
+    private async equipItem(itemId: number, slot: EquipSlot | string, client: Client) {
+        if (slot === 'drink') {
+            await this.drinkItem(itemId, client);
+            return;
+        }
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
-        this.state.player.setItemEquipped(item, slot);
+        this.state.player.setItemEquipped(item, slot as EquipSlot);
     }
 
     private async unequipItem(itemId: number, slot: EquipSlot) {
@@ -302,6 +309,29 @@ export class DraftRoom extends Room {
         client.send('message', 'shop unlocked');
     }
 
+    private calculatePotionPrice(player: Player): number {
+        const base = 10 * player.level;
+        const discountFactor = player.lives === 1 ? 0.5 : player.lives === 2 ? 0.75 : 1;
+        const goldFactor = 1 + player.gold * 0.01;
+        return Math.max(1, Math.round(base * discountFactor * goldFactor));
+    }
+
+    private async drinkItem(itemId: number, client: Client) {
+        const item = this.state.player.inventory.find((item) => item.itemId === itemId);
+        if (!item) {
+            return;
+        }
+        const equipOptions = Array.from(item.equipOptions as any as Iterable<string>);
+        if (!equipOptions.includes('drink')) {
+            return;
+        }
+        const idx = this.state.player.inventory.indexOf(item);
+        this.state.player.inventory.splice(idx, 1);
+        this.state.player.lives += 1 * item.rarity;
+        await this.resetStaleUpgradePreviews(itemId);
+        client.send('draft_log', `You drank the ${item.name} and regained a life! Lives: ${this.state.player.lives} ❤️`);
+    }
+
     private async selectTalent(talentId: number) {
         const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
         if (talent) {
@@ -325,9 +355,12 @@ export class DraftRoom extends Room {
 
     public async checkLevelUp() {
         let leveled = false;
-        while (this.state.player.level < 5 && this.state.player.xp >= this.state.player.maxXp) {
+        while (this.state.player.xp >= this.state.player.maxXp) {
+            const grantsTalentPoint = this.state.player.level < 5;
             await this.levelUp(this.state.player.xp - this.state.player.maxXp);
-            this.state.remainingTalentPoints++;
+            if (grantsTalentPoint) {
+                this.state.remainingTalentPoints++;
+            }
             leveled = true;
         }
         if (leveled) {
@@ -339,8 +372,19 @@ export class DraftRoom extends Room {
 
     private async levelUp(leftoverXp: number = 0) {
         this.state.player.level++;
-        this.state.player.maxXp += this.state.player.level * 4;
+        this.state.player.maxXp += this.state.player.level * 4 + 2;
         this.state.player.xp = leftoverXp;
+
+        // Levels past 5 grant no talent points but give increasingly stronger stat bonuses
+        if (this.state.player.level > 5) {
+            const bonusRank = this.state.player.level - 5;
+            const base = this.state.player.baseStats;
+            base.strength += bonusRank * 4;
+            base.accuracy += bonusRank * 2;
+            base.maxHp += bonusRank * 40;
+            base.defense += bonusRank * 4;
+            base.attackSpeed += bonusRank * 0.2;
+        }
 
         this.dispatcher.dispatch(new LevelUpTriggerCommand());
     }

@@ -287,7 +287,7 @@ export const TalentBehaviors = {
         const attackSpeedBonus = attacker.income * talent.activationRate;
 
         talent.affectedStats.attackSpeed = 1 + attackSpeedBonus;
-        talent.affectedEnemyStats.attackSpeed = 1 - attackSpeedBonus;
+        talent.affectedEnemyStats.attackSpeed = Math.max(1 - attackSpeedBonus, 0.5);
 
         client.send('trigger_talent', {
             playerId: attacker.playerId,
@@ -311,7 +311,7 @@ export const TalentBehaviors = {
     [TalentType.ZEALOT]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent, attackerSnapshot } = context;
         const base = attackerSnapshot ?? attacker;
-        talent.affectedStats.attackSpeed = 1 + (base.defense * talent.activationRate * 0.01);
+        talent.affectedStats.attackSpeed = 1 + (base.defense * talent.activationRate * 0.01) + (base.dodgeRate * talent.activationRate * 0.01);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.ZEALOT,
@@ -361,7 +361,6 @@ export const TalentBehaviors = {
                 damage: damage,
                 attacker: defender,
             });
-
             attacker.takeDamage(damage, client);
             track(talent, 1, damage);
             client.send('combat_log', { text: `${defender.name} reflects ${fmt(damage)} damage to ${attacker.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId, defenderId: attacker.playerId, damage } as CombatLogMessage);
@@ -397,20 +396,27 @@ export const TalentBehaviors = {
 
     [TalentType.FUTURE_NOW]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
-        client.send('combat_log', { text: 'You are in the future now! You gain extra gold and xp!', kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
+
+        const extraXp = attacker.round * 2;
+        attacker.xp += extraXp;
+
+        talent.affectedStats.income += 1;
+
+        client.send('combat_log', { text: `FUTURE NOW! +${extraXp} XP, income grows an extra +1!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: talent.talentId,
         });
-        attacker.rewardRound += talent.activationRate;
     },
 
     [TalentType.SMART_INVESTMENT]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
-        const goldBonus = Math.max(Math.round(attacker.gold * talent.activationRate), 5);
-        attacker.gold += goldBonus;
-        track(talent, 1, 0, 0, goldBonus);
-        client.send('combat_log', { text: `You gained ${goldBonus} gold from selling loot!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldBonus } as CombatLogMessage);
+        const rate = -0.05 + Math.random() * 0.20; // -5% to +15%
+        const goldDelta = Math.round(attacker.gold * rate);
+        attacker.gold += goldDelta;
+        track(talent, 1, 0, 0, goldDelta);
+        const sign = goldDelta >= 0 ? '+' : '';
+        client.send('combat_log', { text: `${attacker.name} earns ${sign}${goldDelta} gold interest (${fmt(rate * 100)}%)!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldDelta } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.SMART_INVESTMENT,
@@ -479,8 +485,8 @@ export const TalentBehaviors = {
 
 
             talent.affectedStats.accuracy = attacker.level;
-            talent.affectedStats.strength = attacker.level;
-            talent.affectedStats.attackSpeed = 1 + attacker.level * 0.2;
+            talent.affectedStats.strength = attacker.level * 2;
+            talent.affectedStats.attackSpeed = 1 + attacker.level * 0.3;
 
 
             // client.send(
@@ -557,7 +563,7 @@ export const TalentBehaviors = {
                 const ringWeapon = questItems.find((item) => item.itemId === 702);
                 if (ringWeapon) {
                     ringWeapon.rarity = 2;
-                    ringWeapon.description = 'Gains +0.03 x level strength per attack.';
+                    ringWeapon.description = 'Gains +0.1 x level strength per attack.';
                     attacker.getItem(ringWeapon);
                     client.send('draft_log', `${attacker.name} found a ring weapon!`);
                     client.send('trigger_talent', {
@@ -628,9 +634,9 @@ export const TalentBehaviors = {
 
             const upgradeShield = (item: Item) => {
                 if (item.type !== ItemType.SHIELD) return;
-                item.baseAttackSpeed = 0.6;
-                item.baseMinDamage = 1;
-                item.baseMaxDamage = 2;
+                item.baseAttackSpeed = 0.6 * item.rarity;
+                item.baseMinDamage = item.tier * item.rarity - 1;
+                item.baseMaxDamage = item.tier * item.rarity + 1;
                 const equipOpts = item.equipOptions as any;
                 if (equipOpts && !equipOpts.includes(EquipSlot.MAIN_HAND)) {
                     equipOpts.push(EquipSlot.MAIN_HAND);
@@ -814,6 +820,7 @@ export const TalentBehaviors = {
             const { attacker, defender, client, talent } = context;
             if (defender) {
                 talent.affectedStats.defense = defender.defense * talent.scaling;
+                talent.affectedStats.dodgeRate = defender.dodgeRate * talent.scaling;
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     talentId: TalentType.WARRIOR_3,
@@ -857,9 +864,9 @@ export const TalentBehaviors = {
     [TalentType.MERCHANT_3]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent, attackerSnapshot } = context;
+            talent.affectedStats.income = talent.base;
             const base = attackerSnapshot ?? attacker;
-            const bonusCoefficent = (base.income * talent.scaling + talent.base) / 100;
-
+            const bonusCoefficent = (base.income * talent.scaling) / 100;
             talent.affectedStats.strength = Math.ceil(base.strength * bonusCoefficent);
             talent.affectedStats.accuracy = Math.ceil(base.accuracy * bonusCoefficent);
             talent.affectedStats.attackSpeed = 1 + bonusCoefficent;
@@ -868,8 +875,6 @@ export const TalentBehaviors = {
             talent.affectedStats.dodgeRate = Math.ceil(base.dodgeRate * bonusCoefficent);
             talent.affectedStats.hpRegen = Math.ceil(base.hpRegen * bonusCoefficent);
             talent.affectedStats.flatDmgReduction = Math.ceil(base.flatDmgReduction * bonusCoefficent);
-
-
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.MERCHANT_3,
@@ -921,7 +926,7 @@ export const TalentBehaviors = {
             snapshot.baseAttackSpeed = item.baseAttackSpeed;
             snapshot.baseMinDamage = item.baseMinDamage;
             snapshot.baseMaxDamage = item.baseMaxDamage;
-            while (item.rarity < ItemRarity.LEGENDARY) {
+            while (item.rarity < ItemRarity.MYTHIC) {
                 applyRarityUpgrade(item, snapshot, attacker, false);
             }
             item.price = originalPrice;
@@ -965,5 +970,3 @@ function clonedAsGhost(source: Item): Item {
 
     return ghost;
 }
-
-

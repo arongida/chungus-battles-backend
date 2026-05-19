@@ -3,8 +3,9 @@ import { Player } from '../players/schema/PlayerSchema';
 import { ItemRarity, ItemSet, ItemType } from '../items/types/ItemTypes';
 
 const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Player) => string>> = {
+  6: (item) => `Drink it to regain ${item.rarity} lives!`,
   18: (item) => {
-    const stacks = item.rarity - 1;
+    const stacks = item.rarity;
     return `Applies ${stacks} poison stack${stacks > 1 ? 's' : ''} on hit.`;
   },
   29: (item) => `Each hit slows enemy attack speed by ${item.rarity}%, down to 50%.`,

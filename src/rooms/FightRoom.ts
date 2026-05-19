@@ -379,18 +379,17 @@ export class FightRoom extends Room {
                 break;
         }
 
-        this.state.player.rewardRound = this.state.player.round;
+        const goldToGet = this.state.player.income;
+        this.state.player.baseStats.income += 1;
+
+        this.state.player.gold += goldToGet;
+        this.state.player.xp += this.state.player.round * 2;
+
+        this.logCombat('broadcast', { text: `You gained ${goldToGet} gold! (Income grows to ${goldToGet + 1} next fight)`, kind: 'reward', goldDelta: goldToGet });
+        this.logCombat('broadcast', { text: `You gained ${this.state.player.round * 2} xp!`, kind: 'reward' });
 
         //trigger fight-end effects
         this.dispatcher.dispatch(new FightEndTriggerCommand());
-
-        const goldToGet = this.state.player.rewardRound + 3 + this.state.player.income;
-
-        this.state.player.gold += goldToGet;
-        this.state.player.xp += this.state.player.rewardRound * 2;
-
-        this.logCombat('broadcast', { text: `You gained ${goldToGet} gold!`, kind: 'reward', goldDelta: goldToGet });
-        this.logCombat('broadcast', { text: `You gained ${this.state.player.rewardRound * 2} xp!`, kind: 'reward' });
     }
 
     private async handleWin() {

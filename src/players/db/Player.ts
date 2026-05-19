@@ -54,7 +54,13 @@ function buildItemSchema(itemFromDb: any): Item {
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
     item.tags = tagsArr;
     const equipOptionsArr = new ArraySchema<string>();
-    if (equipOptions?.length) (equipOptions as string[]).forEach(e => equipOptionsArr.push(e));
+    let equipOptionsList: string[] = [];
+    if (typeof equipOptions === 'string') {
+        try { equipOptionsList = JSON.parse(equipOptions); } catch {}
+    } else if (Array.isArray(equipOptions)) {
+        equipOptionsList = equipOptions;
+    }
+    equipOptionsList.forEach(e => equipOptionsArr.push(e));
     (item as any).equipOptions = equipOptionsArr;
     const itemCollectionsArr = new ArraySchema<number>();
     if (itemCollections?.length) (itemCollections as number[]).forEach(c => itemCollectionsArr.push(c));
@@ -118,7 +124,7 @@ function getNewPlayer(playerId: number,
         xp: 0,
         level: 1,
         sessionId: sessionId,
-        maxXp: 12,
+        maxXp: 10,
         round: 1,
         lives: 3,
         wins: 0,
@@ -136,7 +142,7 @@ function getNewPlayer(playerId: number,
             attackSpeed: 1,
             flatDmgReduction: 0,
             dodgeRate: 0,
-            income: 0,
+            income: 4,
             hpRegen: 0,
         }
     });

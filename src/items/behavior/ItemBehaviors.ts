@@ -24,7 +24,7 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
 
     // Frozen Blade (29) — rarity 2+: each hit slows enemy attack speed by rarity%, down to 50%.
     29: ({ item, trigger }) => {
-        if (!item || item.rarity <= 1) return;
+        if (!item) return;
         if (trigger === TriggerType.ON_ATTACK) {
             const current = item.affectedEnemyStats?.attackSpeed ?? 1;
             item.affectedEnemyStats.attackSpeed = Math.max(0.5, current * (1 - item.rarity * 0.01));
@@ -45,7 +45,9 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
     // Magic Ring Weapon (702) — rarity 2+: gains +(rarity*0.01+0.01) strength per attack.
     702: ({ attacker, item }) => {
         if (!attacker || !item || item.rarity <= 1) return;
-        item.affectedStats.strength +=  attacker.level * item.rarity * 0.01 + 0.01;
+        const bonusStrength = attacker.level * item.rarity * 0.05;
+        item.affectedStats.strength +=  bonusStrength;
+        item.description = `Gains +${bonusStrength} strength per attack.`
         attacker.equippedItems.forEach((equipped, slot) => {
             if (equipped === item) attacker.equippedItems.set(slot, equipped);
         });

@@ -39,7 +39,6 @@ export class Player extends Schema implements IStats {
     invincibleTimer: Delayed;
     talentsOnCooldown: TalentType[] = [];
     invincible: boolean = false;
-    rewardRound: number;
     attackSpeedMultiplier: number = 1;
     hasVersionWin: boolean = false;
 
@@ -89,7 +88,7 @@ export class Player extends Schema implements IStats {
     }
 
     set level(value: number) {
-        this._level = value > 5 ? 5 : value;
+        this._level = value < 1 ? 1 : value;
     }
 
     @type('number') private _defense: number = 0;
