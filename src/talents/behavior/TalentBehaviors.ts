@@ -410,11 +410,11 @@ export const TalentBehaviors = {
 
     [TalentType.SMART_INVESTMENT]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
-        const rate = -0.05 + Math.random() * 0.20; // -5% to +15%
+        const rate = -0.05 + Math.random() * 0.2;
         const goldDelta = Math.round(attacker.gold * rate);
         attacker.gold += goldDelta;
         track(talent, 1, 0, 0, goldDelta);
-        const sign = goldDelta >= 0 ? '+' : '';
+        const sign = goldDelta >= 0 ? '+' : '-';
         client.send('combat_log', { text: `${attacker.name} earns ${sign}${goldDelta} gold interest (${fmt(rate * 100)}%)!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldDelta } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
