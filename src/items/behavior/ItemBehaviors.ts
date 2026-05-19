@@ -18,7 +18,7 @@ export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => voi
     },
     // Dagger of Poison (18) — rarity 2+: applies (rarity-1) poison stacks on hit.
     18: ({ defender, client, clock, item }) => {
-        if (!defender || !client || !clock || !item || item.rarity <= 1) return;
+        if (!defender || !client || !clock || !item) return;
         defender.addPoisonStacks(clock, client, item.rarity - 1);
     },
 
