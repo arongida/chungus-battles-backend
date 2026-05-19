@@ -263,7 +263,7 @@ export class DraftRoom extends Room {
     private async resetStaleUpgradePreviews(soldItemId: number) {
         for (let i = 0; i < this.state.shop.length; i++) {
             const shopItem = this.state.shop[i];
-            if (shopItem.itemId !== soldItemId) continue;
+            if (shopItem.itemId !== soldItemId || shopItem.sold) continue;
             if (!findOwnedUpgradeTarget(this.state.player, soldItemId)) {
                 const baseItem = await getItemById(soldItemId);
                 if (baseItem) this.state.shop.splice(i, 1, baseItem);
