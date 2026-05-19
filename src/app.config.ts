@@ -10,6 +10,8 @@ import {FightRoom} from './rooms/FightRoom';
 import {DraftRoom} from './rooms/DraftRoom';
 import {getNextPlayerId, getPlayer, getPlayerRank, getTopPlayers, getTopPlayersByVersion, playerToPlainObject} from './players/db/Player';
 import {GAME_VERSION} from './common/types';
+import { getAllItems } from "./items/db/Item";
+import { getAllTalents } from "./talents/db/Talent";
 
 export const server = defineServer({
 
@@ -57,6 +59,16 @@ export const server = defineServer({
             const rank = await getPlayerRank(playerId);
             const player = await getPlayer(playerId);
             res.status(200).send({rank: rank, name: player.name, wins: player.wins});
+        });
+
+        app.get('/items', async (req, res)=>{
+            const items = await getAllItems();
+            res.status(200).send(items);
+        });
+
+        app.get('/talents', async (req, res)=> {
+            const talents = await getAllTalents();
+            res.status(200).send(talents);
         });
 
         /**
