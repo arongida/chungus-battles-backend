@@ -309,9 +309,8 @@ export const TalentBehaviors = {
     },
 
     [TalentType.ZEALOT]: (context: TalentBehaviorContext) => {
-        const { attacker, client, talent, attackerSnapshot } = context;
-        const base = attackerSnapshot ?? attacker;
-        talent.affectedStats.attackSpeed = 1 + (base.defense * talent.activationRate * 0.01) + (base.dodgeRate * talent.activationRate * 0.01);
+        const { attacker, client, talent } = context;
+        talent.affectedStats.attackSpeed = 1 + (attacker.defense * talent.activationRate * 0.01) + (attacker.dodgeRate * talent.activationRate * 0.01);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.ZEALOT,
