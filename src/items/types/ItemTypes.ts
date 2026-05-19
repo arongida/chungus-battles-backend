@@ -20,7 +20,8 @@ export enum ItemRarity {
   COMMON = 1,
   RARE = 2,
   EPIC = 3,
-  LEGENDARY = 4
+  LEGENDARY = 4,
+  MYTHIC = 5
 }
 
 export enum ItemSet {

@@ -33,18 +33,20 @@ export const itemModel = mongoose.model('Item', ItemSchema);
 
 export async function getNumberOfItems(
     numberOfItems: number,
-    levelRequirement: number
+    levelRequirement: number,
+    excludeTypes: string[] = []
 ): Promise<Item[]> {
+    const match: any = {
+        $or: [
+            {tier: {$lte: levelRequirement}},
+            {levelRequirement: {$lte: levelRequirement}},
+        ],
+        tags: {$ne: 'quest'},
+    };
+    if (excludeTypes.length > 0) match.type = {$nin: excludeTypes};
+
     const itemArrayFromDb = await itemModel.aggregate([
-        {
-            $match: {
-                $or: [
-                    {tier: {$lte: levelRequirement}},
-                    {levelRequirement: {$lte: levelRequirement}},
-                ],
-                tags: {$ne: 'quest'},
-            },
-        },
+        {$match: match},
         {$sample: {size: numberOfItems}},
     ]);
 
@@ -64,7 +66,13 @@ function getItemSchemaObject(itemFromDb: any): Item {
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
     newItemSchemaObject.tags = tagsArr;
     const equipOptionsArr = new ArraySchema<string>();
-    if (equipOptions?.length) (equipOptions as string[]).forEach(e => equipOptionsArr.push(e));
+    let equipOptionsList: string[] = [];
+    if (typeof equipOptions === 'string') {
+        try { equipOptionsList = JSON.parse(equipOptions); } catch {}
+    } else if (Array.isArray(equipOptions)) {
+        equipOptionsList = equipOptions;
+    }
+    equipOptionsList.forEach(e => equipOptionsArr.push(e));
     (newItemSchemaObject as any).equipOptions = equipOptionsArr;
     const itemCollectionsArr = new ArraySchema<number>();
     if (itemCollections?.length) (itemCollections as number[]).forEach(c => itemCollectionsArr.push(c));

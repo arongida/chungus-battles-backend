@@ -10,7 +10,7 @@ export class OnDamageTriggerCommand extends Command<
     FightRoom,
     { defender: Player; attacker: Player; damage: number }
 > {
-    execute({defender, damage, attacker} = this.payload) {
+    execute({defender, damage, attacker } = this.payload) {
         const onDamageTalentBehaviorContext: BehaviorContext = {
             client: this.state.playerClient,
             attacker: attacker,

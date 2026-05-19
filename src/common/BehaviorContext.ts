@@ -25,4 +25,5 @@ export interface BehaviorContext {
     trigger: TriggerType;
     weapon?: Item;
     attackerSnapshot?: StatsSnapshot;
+    isReflectedDamage?: boolean;
 }
