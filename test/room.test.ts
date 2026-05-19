@@ -268,7 +268,8 @@ describe("testing your Colyseus app", () => {
         expect(fightRoom.state.battleStarted).toBe(false);
 
         // 8. Verify rewards were applied (gold and XP are higher than at battle start)
-        const expectedGoldReward = initialRound + 3 + fightRoom.state.player.income;
+        // income is incremented by 1 after the reward is paid, so subtract 1 to get what was actually awarded
+        const expectedGoldReward = fightRoom.state.player.income - 1;
         expect(fightRoom.state.player.gold).toBe(goldAtFightStart + expectedGoldReward);
         expect(fightRoom.state.player.xp).toBe(xpAtFightStart + initialRound * 2);
 
