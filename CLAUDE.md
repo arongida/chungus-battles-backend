@@ -382,7 +382,7 @@ PM2 config in `ecosystem.config.js` runs `build/index.js` with one process per C
    attacker.equippedItems.set(EquipSlot.MAIN_HAND, item);
    ```
 
-2. **`attackSpeed` is multiplicative**: The `increaseStats` function treats `attackSpeed` as a multiplier relative to `baseStats.attackSpeed`. An `affectedStats.attackSpeed` of `1.5` means +50% of base speed, not +1.5 flat.
+2. **`attackSpeed` is additive**: The `increaseStats` function accumulates attack-speed bonuses by adding `(affectedStats.attackSpeed - 1)` to `player.attackSpeedMultiplier`. An `affectedStats.attackSpeed` of `1.5` contributes exactly +50%, and two such bonuses total +100% — matching the in-game tooltips. This mirrors `AffectedStats.mergeInto`.
 
 3. **`AffectedStats.attackSpeed` default is `1`** (not `0`): This is intentional — a value of `1` means "no change". Check for `!== 0` before applying.
 
