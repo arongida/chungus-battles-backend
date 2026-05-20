@@ -100,3 +100,8 @@ export async function getQuestItems(): Promise<Item[]> {
 
     return itemArrayFromDb.map(item => getItemSchemaObject(item));
 }
+
+export async function getAllItems(): Promise<Item[]>{
+    const allItemsFromDb = await itemModel.find({}).lean();
+    return allItemsFromDb.map(item => getItemSchemaObject(item));
+}
