@@ -55,7 +55,7 @@ export class UpdateStatsCommand extends Command<
         try {
             addStats(player, affectedStats);
             if (affectedStats.attackSpeed !== 0 && affectedStats.attackSpeed !== 1) {
-                player.attackSpeedMultiplier *= affectedStats.attackSpeed;
+                player.attackSpeedMultiplier += affectedStats.attackSpeed - 1;
             }
         } catch (e) {
             console.error('Failed to increase stats for player: ', player?.name)
