@@ -12,11 +12,12 @@ import { applyRarityUpgrade } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, fmt } from "../../common/MessageTypes";
 import { Talent } from "../schema/TalentSchema";
 
-export function track(talent: Talent, activations: number, damage = 0, healing = 0, gold = 0) {
+export function track(talent: Talent, activations: number, damage = 0, healing = 0, gold = 0, xp = 0) {
     talent.statActivations  += activations;  talent.totalActivations  += activations;
     talent.statDamageDealt  += damage;       talent.totalDamageDealt  += damage;
     talent.statHealingDone  += healing;      talent.totalHealingDone  += healing;
     talent.statGoldGained   += gold;         talent.totalGoldGained   += gold;
+    talent.statXpGained     += xp;           talent.totalXpGained     += xp;
 }
 
 export const TalentBehaviors = {
@@ -398,10 +399,11 @@ export const TalentBehaviors = {
 
         const extraXp = attacker.round * 2;
         attacker.xp += extraXp;
+        track(talent, 1, 0, 0, 0, extraXp);
 
         talent.affectedStats.income += 1;
 
-        client.send('combat_log', { text: `FUTURE NOW! +${extraXp} XP, income grows an extra +1!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
+        client.send('combat_log', { text: `FUTURE NOW! +${extraXp} XP, income grows an extra +1!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: extraXp } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: talent.talentId,
@@ -409,13 +411,18 @@ export const TalentBehaviors = {
     },
 
     [TalentType.SMART_INVESTMENT]: (context: TalentBehaviorContext) => {
-        const { attacker, client, talent } = context;
-        const rate = -0.05 + Math.random() * 0.2;
-        const goldDelta = Math.round(attacker.gold * rate);
-        attacker.gold += goldDelta;
-        track(talent, 1, 0, 0, goldDelta);
-        const sign = goldDelta >= 0 ? '+' : '-';
-        client.send('combat_log', { text: `${attacker.name} earns ${sign}${goldDelta} gold interest (${fmt(rate * 100)}%)!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldDelta } as CombatLogMessage);
+        const { attacker, client, talent, weapon } = context;
+        if (!weapon?.tags?.includes("merchant")) return;
+
+        if (Math.random() < talent.activationRate) {
+            talent.affectedStats.income += 1;
+            track(talent, 1);
+            client.send('combat_log', { text: `${attacker.name}'s merchant weapon brings in +1 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
+        } else {
+            attacker.xp += 1;
+            track(talent, 1, 0, 0, 0, 1);
+            client.send('combat_log', { text: `${attacker.name} gains +1 XP from the merchant's experience!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: 1 } as CombatLogMessage);
+        }
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.SMART_INVESTMENT,
@@ -684,7 +691,7 @@ export const TalentBehaviors = {
             talent.affectedStats.attackSpeed = 1 + mainHand.tier * talent.scaling;
         },
 
-    [TalentType.WARRIOR_1]:
+    [TalentType.SHARPENING_STONE]:
         (context: TalentBehaviorContext) => {
             const { attacker, talent } = context;
 
@@ -710,7 +717,7 @@ export const TalentBehaviors = {
                 }
             });
 
-            talent.affectedStats.strength += 2;
+            talent.affectedStats.strength += talent.base;
         },
 
     [TalentType.MERCHANT_1]:
@@ -830,7 +837,9 @@ export const TalentBehaviors = {
     [TalentType.MERCHANT_4]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
-            talent.affectedStats.income += 1;
+            attacker.xp += 2;
+            track(talent, 1, 0, 0, 0, 2);
+            client.send('combat_log', { text: `${attacker.name} gains +2 XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: 2 } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.MERCHANT_4,

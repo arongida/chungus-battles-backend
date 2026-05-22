@@ -23,7 +23,7 @@ export type CombatLogKind =
   | 'regen' | 'poison_apply' | 'poison_tick'
   | 'heal' | 'leech'
   | 'talent' | 'item'
-  | 'reward' | 'result';
+  | 'reward' | 'xp' | 'result';
 
 export type CombatLogMessage = {
   text: string;
@@ -41,6 +41,7 @@ export type CombatLogMessage = {
   healing?: number;
   poisonStacks?: number;
   goldDelta?: number;
+  xpDelta?: number;
   result?: 'win' | 'lose' | 'draw';
 };
 
