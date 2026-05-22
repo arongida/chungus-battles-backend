@@ -14,6 +14,7 @@ import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCo
 import { EquipSlot } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { UpdateActiveSets } from "../commands/UpdateActiveSets"; import { ArraySchema } from "@colyseus/schema";
+import { PlayerAvatar } from '../players/types/PlayerTypes';
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -95,7 +96,7 @@ export class DraftRoom extends Room {
             await this.checkLevelUp();
         } else {
             const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId, options.avatarUrl);
-            this.state.remainingTalentPoints = 1;
+            this.state.remainingTalentPoints = options.avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
             await this.setUpState(newPlayer, client);
         }
 

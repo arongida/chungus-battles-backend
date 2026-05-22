@@ -22,16 +22,19 @@ export class Talent extends Schema {
     @type('number') statDamageDealt: number = 0;
     @type('number') statHealingDone: number = 0;
     @type('number') statGoldGained: number = 0;
+    @type('number') statXpGained: number = 0;
     @type('number') totalActivations: number = 0;
     @type('number') totalDamageDealt: number = 0;
     @type('number') totalHealingDone: number = 0;
     @type('number') totalGoldGained: number = 0;
+    @type('number') totalXpGained: number = 0;
 
     resetCombatStats() {
         this.statActivations = 0;
         this.statDamageDealt = 0;
         this.statHealingDone = 0;
         this.statGoldGained = 0;
+        this.statXpGained = 0;
     }
 
     executeBehavior(context: BehaviorContext) {

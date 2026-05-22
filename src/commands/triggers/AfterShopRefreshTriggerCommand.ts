@@ -28,5 +28,7 @@ export class AfterShopRefreshTriggerCommand extends Command<
         });
 
         triggerEquippedItems(this.state.player, onShopRefreshTalentContext, TriggerType.AFTER_REFRESH);
+
+        this.room.checkLevelUp();
     }
 }
