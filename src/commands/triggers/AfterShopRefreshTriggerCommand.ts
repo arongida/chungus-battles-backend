@@ -19,9 +19,9 @@ export class AfterShopRefreshTriggerCommand extends Command<
             shop: this.state.shop,
             trigger: TriggerType.AFTER_REFRESH
         };
-        onShopRefreshTalents.forEach((itemCollection) => {
+        onShopRefreshTalents.forEach((talent) => {
             try {
-                itemCollection.executeBehavior(onShopRefreshTalentContext);
+                talent.executeBehavior(onShopRefreshTalentContext);
             } catch (e) {
                 console.error(e);
             }
