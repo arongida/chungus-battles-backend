@@ -284,7 +284,8 @@ export class FightRoom extends Room {
 
     tryWeaponAttack(attacker: Player, defender: Player, weapon: Item, slot: string) {
         const minDmg = weapon.baseMinDamage + attacker.accuracy;
-        const maxDmg = weapon.baseMaxDamage + attacker.strength;
+        const strengthMultiplier = weapon.strengthScaling;
+        const maxDmg = weapon.baseMaxDamage + attacker.strength * strengthMultiplier;
         const attackRoll = Math.random() * (maxDmg - minDmg) + minDmg;
 
         const damage = defender.getDamageAfterDefense(attackRoll);

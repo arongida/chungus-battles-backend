@@ -1,5 +1,4 @@
 import mongoose, {Schema} from 'mongoose';
-import {ItemTier} from '../types/ItemTypes';
 import {StatsSchema} from "../../common/db/Stats";
 import {Item} from "../schema/ItemSchema";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
@@ -25,6 +24,7 @@ export const ItemSchema = new Schema({
     baseMinDamage: Number,
     baseMaxDamage: Number,
     baseAttackSpeed: Number,
+    strengthScaling: Number,
     triggerTypes: [String],
     affectedEnemyStats: StatsSchema,
 });
