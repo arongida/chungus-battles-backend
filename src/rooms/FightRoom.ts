@@ -1,10 +1,13 @@
 import { Client, Room } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import { getHighestWin, getHighestWinByVersion, getPlayer, getSameRoundPlayer, updatePlayer } from '../players/db/Player';
+import { getHighestWin, getHighestWinByVersion, getPlayer, getSameRoundPlayer, snapshotPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
 import { FightResultType, GAME_VERSION } from '../common/types';
 import { Dispatcher } from '@colyseus/command';
+import { ReplayRecorder } from '../replay/ReplayRecorder';
+import { saveReplay } from '../replay/db/Replay';
+import { randomUUID } from 'crypto';
 import { ActiveTriggerCommand } from '../commands/triggers/ActiveTriggerCommand';
 import { FightStartTriggerCommand } from '../commands/triggers/FightStartTriggerCommand';
 import { FightEndTriggerCommand } from '../commands/triggers/FightEndTriggerCommand';
@@ -26,9 +29,17 @@ export class FightRoom extends Room {
     maxClients = 1;
 
     dispatcher = new Dispatcher(this);
+    private recorder = new ReplayRecorder();
 
     onCreate() {
         this.state = new FightState();
+
+        // Wrap broadcast so every outbound event is captured by the recorder.
+        const origBroadcast = this.broadcast.bind(this);
+        (this as any).broadcast = (type: string, message?: any, options?: any) => {
+            this.recorder.record('broadcast', type, message);
+            return origBroadcast(type, message, options);
+        };
 
         this.onMessage('chat', (client, message) => {
             this.broadcast('messages', `${client.sessionId}: ${message}`);
@@ -79,6 +90,7 @@ export class FightRoom extends Room {
         if (this.state.player.sessionId !== '') throw new Error('Player already playing!');
         if (this.state.player.lives <= 0) throw new Error('Player has no lives left!');
         this.state.playerClient = client;
+        this.wrapPlayerClient(client);
         this.state.player.sessionId = client.sessionId;
 
         //set up initial room state
@@ -121,7 +133,20 @@ export class FightRoom extends Room {
         // allow disconnected client to reconnect into this room until 60 seconds
         this.allowReconnection(client, 30);
         console.log(`[FightRoom] reconnected  sid=${client.sessionId} fightResult=${!!this.state.fightResult}`);
+        // Re-wrap the reconnected client so sendFightEndToClient events are still captured.
+        this.state.playerClient = client;
+        this.wrapPlayerClient(client);
         this.sendFightEndToClient();
+    }
+
+    private wrapPlayerClient(client: Client): void {
+        if ((client.send as any).__replayWrapped) return;
+        const origSend = client.send.bind(client);
+        (client as any).send = (type: string, message?: any) => {
+            this.recorder.record('send', type, message);
+            return origSend(type, message);
+        };
+        (client.send as any).__replayWrapped = true;
     }
 
     async onLeave(client: Client, code: number) {
@@ -330,6 +355,13 @@ export class FightRoom extends Room {
 
     //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
     startBattle() {
+        this.recorder.start({
+            player: snapshotPlayer(this.state.player),
+            enemy: snapshotPlayer(this.state.enemy),
+            round: this.state.player.round,
+            gameVersion: GAME_VERSION,
+        });
+
         this.state.player.talents.forEach(t => t.resetCombatStats());
         this.state.enemy.talents.forEach(t => t.resetCombatStats());
 
@@ -391,6 +423,24 @@ export class FightRoom extends Room {
 
         //trigger fight-end effects
         this.dispatcher.dispatch(new FightEndTriggerCommand());
+
+        this.recorder.finalize();
+        if (this.recorder.initialState) {
+            saveReplay({
+                replayId: randomUUID(),
+                originalPlayerId: this.state.player.originalPlayerId,
+                playerId: this.state.player.playerId,
+                round: this.state.player.round,
+                playerName: this.state.player.name,
+                enemyName: this.state.enemy.name,
+                result: this.state.fightResult,
+                gameVersion: GAME_VERSION,
+                durationMs: this.recorder.durationMs(),
+                initialState: this.recorder.initialState,
+                events: this.recorder.events,
+                truncated: this.recorder.truncated,
+            }).catch(err => console.error('[FightRoom] replay save failed:', err));
+        }
     }
 
     private async handleWin() {

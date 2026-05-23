@@ -289,6 +289,44 @@ export function playerToPlainObject(player: Player): Record<string, any> {
     };
 }
 
+export function snapshotPlayer(player: Player): Record<string, any> {
+    const equippedItems: Record<string, any> = {};
+    player.equippedItems.forEach((item, slot) => {
+        equippedItems[slot] = item.toJSON();
+    });
+    return {
+        playerId: player.playerId,
+        originalPlayerId: player.originalPlayerId,
+        name: player.name,
+        avatarUrl: player.avatarUrl,
+        gold: player.gold,
+        level: player.level,
+        xp: player.xp,
+        maxXp: player.maxXp,
+        round: player.round,
+        lives: player.lives,
+        wins: player.wins,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        strength: player.strength,
+        accuracy: player.accuracy,
+        defense: player.defense,
+        attackSpeed: player.attackSpeed,
+        flatDmgReduction: player.flatDmgReduction,
+        dodgeRate: player.dodgeRate,
+        hpRegen: player.hpRegen,
+        income: player.income,
+        refreshShopCost: player.refreshShopCost,
+        gameVersion: player.gameVersion,
+        hasVersionWin: player.hasVersionWin,
+        baseStats: player.baseStats?.toJSON() || {},
+        equippedItems,
+        inventory: player.inventory.map(item => item.toJSON()),
+        talents: player.talents.map(talent => talent.toJSON()),
+        lockedShop: player.lockedShop.map(item => item.toJSON()),
+    };
+}
+
 const TOP_PLAYERS_AGGREGATION: PipelineStage[] = [
     {$sort: {wins: -1, originalPlayerId: -1, playerId: 1}},
     {$group: {_id: '$originalPlayerId', doc: {$first: '$$ROOT'}}},
@@ -296,18 +334,73 @@ const TOP_PLAYERS_AGGREGATION: PipelineStage[] = [
     {$sort: {wins: -1, originalPlayerId: -1, playerId: 1}},
 ];
 
-export async function getTopPlayers(number: number): Promise<Record<string, any>[]> {
-    const topPlayers = await playerModel
-        .aggregate([...TOP_PLAYERS_AGGREGATION, {$limit: number}])
-        .exec();
-    return topPlayers.map(cleanRawPlayerDoc);
+export interface LeaderboardFilters {
+    limit?: number;
+    skip?: number;
+    gameVersion?: number;
+    name?: string;
+    avatar?: string;
+    minRound?: number;
+    rankForOriginalPlayerId?: number;
 }
 
-export async function getTopPlayersByVersion(number: number, gameVersion: number): Promise<Record<string, any>[]> {
-    const topPlayers = await playerModel
-        .aggregate([{$match: {gameVersion}}, ...TOP_PLAYERS_AGGREGATION, {$limit: number}])
-        .exec();
-    return topPlayers.map(cleanRawPlayerDoc);
+function buildMatchConditions(filters: LeaderboardFilters): Record<string, any> {
+    const match: Record<string, any> = {};
+    if (filters.gameVersion !== undefined) match.gameVersion = filters.gameVersion;
+    if (filters.name) match.name = { $regex: filters.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    if (filters.avatar) match.avatarUrl = filters.avatar;
+    if (filters.minRound !== undefined) match.round = { $gte: filters.minRound };
+    return match;
+}
+
+export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<{ players: Record<string, any>[]; total: number; userRank: number | null }> {
+    const { limit = 20, skip = 0, rankForOriginalPlayerId } = filters;
+    const clampedLimit = Math.min(Math.max(1, limit), 100);
+
+    const matchConditions = buildMatchConditions(filters);
+    const matchStage = Object.keys(matchConditions).length ? [{ $match: matchConditions }] : [];
+
+    const pipeline: any[] = [
+        ...matchStage,
+        ...TOP_PLAYERS_AGGREGATION,
+        { $facet: {
+            players: [{ $skip: skip }, { $limit: clampedLimit }],
+            totalCount: [{ $count: 'n' }],
+        }},
+    ];
+
+    const [result] = await playerModel.aggregate(pipeline).exec();
+
+    let userRank: number | null = null;
+    if (rankForOriginalPlayerId) {
+        // Find this player's best snapshot in the filtered set (same selection as dedupe $first)
+        const [userDoc] = await playerModel.aggregate([
+            ...matchStage,
+            { $match: { originalPlayerId: rankForOriginalPlayerId } },
+            { $sort: { wins: -1, playerId: 1 } },
+            { $limit: 1 },
+        ]).exec();
+
+        if (userDoc) {
+            // Count deduped players that sort strictly above this player
+            const [countResult] = await playerModel.aggregate([
+                ...matchStage,
+                ...TOP_PLAYERS_AGGREGATION,
+                { $match: { $or: [
+                    { wins: { $gt: userDoc.wins } },
+                    { wins: userDoc.wins, originalPlayerId: { $gt: rankForOriginalPlayerId } },
+                ]}},
+                { $count: 'n' },
+            ]).exec();
+            userRank = (countResult?.n ?? 0) + 1;
+        }
+    }
+
+    return {
+        players: (result?.players ?? []).map(cleanRawPlayerDoc),
+        total: result?.totalCount?.[0]?.n ?? 0,
+        userRank,
+    };
 }
 
 export async function getHighestWinByVersion(gameVersion: number): Promise<number> {
