@@ -8,10 +8,11 @@ import cors from 'cors';
  */
 import {FightRoom} from './rooms/FightRoom';
 import {DraftRoom} from './rooms/DraftRoom';
-import {getNextPlayerId, getPlayer, getPlayerRank, getTopPlayers, getTopPlayersByVersion, playerToPlainObject} from './players/db/Player';
+import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, playerToPlainObject} from './players/db/Player';
 import {GAME_VERSION} from './common/types';
 import { getAllItems } from "./items/db/Item";
 import { getAllTalents } from "./talents/db/Talent";
+import { getReplaysByOriginalPlayer, getReplayById } from './replay/db/Replay';
 
 export const server = defineServer({
 
@@ -36,10 +37,16 @@ export const server = defineServer({
             res.status(200).send({playerId: playerId});
         });
 
-        //create get endpoint to get top players where number is how many of the top players we want to get
-        app.get('/topPlayers', async (req, res) => {
-            const players = await getTopPlayers(Number(req.query.numberOfPlayers));
-            res.status(200).send(players);
+        app.get('/leaderboard', async (req, res) => {
+            const limit = req.query.limit !== undefined ? Number(req.query.limit) : 20;
+            const skip = req.query.skip !== undefined ? Number(req.query.skip) : 0;
+            const currentVersion = req.query.currentVersion === 'true';
+            const name = req.query.name ? String(req.query.name) : undefined;
+            const avatar = req.query.avatar ? String(req.query.avatar) : undefined;
+            const minRound = req.query.minRound !== undefined ? Number(req.query.minRound) : undefined;
+            const rankForOriginalPlayerId = req.query.rankForOriginalPlayerId ? Number(req.query.rankForOriginalPlayerId) : undefined;
+            const result = await getLeaderboard({ limit, skip, gameVersion: currentVersion ? GAME_VERSION : undefined, name, avatar, minRound, rankForOriginalPlayerId });
+            res.status(200).json(result);
         });
 
         app.get('/playerBuild', async (req, res) => {
@@ -49,16 +56,11 @@ export const server = defineServer({
             res.status(200).json(playerToPlainObject(player));
         });
 
-        app.get('/topPlayersCurrentVersion', async (req, res) => {
-            const players = await getTopPlayersByVersion(Number(req.query.numberOfPlayers), GAME_VERSION);
-            res.status(200).send(players);
-        });
-
         app.get('/rank', async (req, res) => {
             const playerId = Number(req.query.playerId);
             const rank = await getPlayerRank(playerId);
             const player = await getPlayer(playerId);
-            res.status(200).send({rank: rank, name: player.name, wins: player.wins});
+            res.status(200).send({rank: rank, name: player.name, wins: player.wins, originalPlayerId: player.originalPlayerId});
         });
 
         app.get('/items', async (req, res)=>{
@@ -69,6 +71,19 @@ export const server = defineServer({
         app.get('/talents', async (req, res)=> {
             const talents = await getAllTalents();
             res.status(200).send(talents);
+        });
+
+        app.get('/replays', async (req, res) => {
+            const originalPlayerId = Number(req.query.originalPlayerId);
+            if (!originalPlayerId) return res.status(400).send({ error: 'originalPlayerId required' });
+            const replays = await getReplaysByOriginalPlayer(originalPlayerId);
+            res.status(200).json(replays);
+        });
+
+        app.get('/replays/:id', async (req, res) => {
+            const replay = await getReplayById(req.params.id);
+            if (!replay) return res.status(404).send({ error: 'Replay not found' });
+            res.status(200).json(replay);
         });
 
         /**

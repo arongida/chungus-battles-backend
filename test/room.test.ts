@@ -320,7 +320,7 @@ describe("testing your Colyseus app", () => {
         if (fightRoom.state.fightResult === FightResultType.WIN) {
             expect(fightRoom.state.player.wins).toBe(winsAtStart + 1);
             expect(fightRoom.state.player.lives).toBe(livesAtStart);
-        } else if (fightRoom.state.fightResult === FightResultType.LOSE) {
+        } else if (fightRoom.state.fightResult === FightResultType.LOOSE) {
             expect(fightRoom.state.player.lives).toBe(livesAtStart - 1);
             expect(fightRoom.state.player.wins).toBe(winsAtStart);
         } else {
