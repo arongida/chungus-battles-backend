@@ -4,6 +4,21 @@ import { EquipSlot } from '../types/ItemTypes';
 import { CombatLogMessage } from '../../common/MessageTypes';
 
 export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => void> = {
+    // Flowering Staff (8) — AURA: takes both hands; max damage equals attacker's max HP.
+    8: ({ attacker, trigger }) => {
+        if (trigger !== TriggerType.AURA || !attacker) return;
+        let staffSlot: EquipSlot | null = null;
+        attacker.equippedItems.forEach((equippedItem, slot) => {
+            if (equippedItem.itemId === 8) staffSlot = slot as EquipSlot;
+        });
+        if (!staffSlot) return;
+        const otherSlot = staffSlot === EquipSlot.MAIN_HAND ? EquipSlot.OFF_HAND : EquipSlot.MAIN_HAND;
+        const otherItem = attacker.equippedItems.get(otherSlot);
+        if (otherItem) attacker.setItemUnequipped(otherItem, otherSlot);
+        const staffItem = attacker.equippedItems.get(staffSlot);
+        if (staffItem) staffItem.baseMaxDamage = attacker.maxHp;
+    },
+
     // Zwei-Hander (4) — AURA: unequips any item in the other hand slot while equipped.
     4: ({ attacker, trigger }) => {
         if (trigger !== TriggerType.AURA || !attacker) return;
