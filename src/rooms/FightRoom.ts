@@ -479,7 +479,12 @@ export class FightRoom extends Room {
         if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');
         } else {
-            this.broadcast('end_battle', { result: 'lose' });
+            const lossBonus = this.state.player.lives === 1 ? 30
+                            : this.state.player.lives === 2 ? 20
+                            : 10;
+            this.state.player.gold += lossBonus;
+            this.logCombat('broadcast', { text: `You received ${lossBonus} bonus gold for losing!`, kind: 'reward', goldDelta: lossBonus });
+            this.broadcast('end_battle', { result: 'lose', lossBonus });
         }
     }
 
