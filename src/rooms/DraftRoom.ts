@@ -317,7 +317,7 @@ export class DraftRoom extends Room {
     }
 
     private calculatePotionPrice(player: Player): number {
-        const base = 5 * player.level;
+        const base = 8 * player.level;
         const discountFactor = player.lives === 1 ? 0.5 : player.lives === 2 ? 0.75 : 1;
         const goldFactor = 1 + player.gold * 0.01;
         return Math.max(1, Math.round(base * discountFactor * goldFactor));
