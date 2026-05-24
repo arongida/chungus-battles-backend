@@ -55,6 +55,11 @@ export class FightRoom extends Room {
             this.broadcast('game_over', 'You are the best of the current version!');
         });
 
+        this.onMessage('abandon_run', async (client) => {
+            this.state.player.lives = 0;
+            await updatePlayer(this.state.player);
+        });
+
         //start clock for timings
         this.clock.start();
 
