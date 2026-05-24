@@ -60,6 +60,12 @@ export class DraftRoom extends Room {
             this.handleUnlockShop(client);
         });
 
+        this.onMessage('abandon_run', async (client) => {
+            this.state.player.lives = 0;
+            await updatePlayer(this.state.player);
+            client.send('game_over', 'You abandoned your run.');
+        });
+
         //start clock for timings
         this.clock.start();
 
