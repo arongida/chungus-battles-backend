@@ -799,7 +799,7 @@ export const TalentBehaviors = {
 
             }
             if (!attacker.talentsOnCooldown.includes(TalentType.MERCHANT_2)) {
-                attacker.gold += 20;
+                attacker.gold += talent.activationRate;
                 track(talent, 1, 0, 0, 20);
                 attacker.talentsOnCooldown.push(TalentType.MERCHANT_2);
                 client.send('trigger_talent', {
