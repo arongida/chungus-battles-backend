@@ -791,23 +791,20 @@ export const TalentBehaviors = {
             });
         },
 
-    [TalentType.MERCHANT_2]:
+    [TalentType.BARGAIN_HUNTER]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
             if (attacker.refreshShopCost !== 1) {
                 attacker.refreshShopCost = 1;
-
             }
-            if (!attacker.talentsOnCooldown.includes(TalentType.MERCHANT_2)) {
+            if (talent.totalActivations === 0) {
                 attacker.gold += talent.activationRate;
                 track(talent, 1, 0, 0, 20);
-                attacker.talentsOnCooldown.push(TalentType.MERCHANT_2);
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
-                    talentId: TalentType.MERCHANT_2,
+                    talentId: TalentType.BARGAIN_HUNTER,
                 });
             }
-
         },
 
     [TalentType.ROGUE_3]:
