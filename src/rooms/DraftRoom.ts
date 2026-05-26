@@ -46,6 +46,13 @@ export class DraftRoom extends Room {
             await this.buyXp(4, 4, client);
         });
 
+        this.onMessage('level_up', async (client) => {
+            const player = this.state.player;
+            const xpNeeded = player.maxXp - player.xp;
+            const purchases = Math.ceil(xpNeeded / 4);
+            await this.buyXp(purchases * 4, purchases * 4, client);
+        });
+
         this.onMessage('select_talent', async (client, message) => {
             await this.selectTalent(message.talentId);
         });
