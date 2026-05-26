@@ -481,18 +481,17 @@ export const TalentBehaviors = {
 
             const mainHandItem = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
             const offHandItem = attacker.equippedItems.get(EquipSlot.OFF_HAND);
-            const mainHandWeapon = mainHandItem?.type === ItemType.WEAPON ? mainHandItem : null;
-            const offHandWeapon = offHandItem?.type === ItemType.WEAPON ? offHandItem : null;
-            if (mainHandWeapon || offHandWeapon) {
+            if (mainHandItem || offHandItem) {
                 client.send('combat_log', { text: `${attacker.name} is a martial artist and doesn't need a weapon!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
-                if (mainHandWeapon) attacker.setItemUnequipped(mainHandWeapon, EquipSlot.MAIN_HAND);
-                if (offHandWeapon) attacker.setItemUnequipped(offHandWeapon, EquipSlot.OFF_HAND);
+                if (mainHandItem) attacker.setItemUnequipped(mainHandItem, EquipSlot.MAIN_HAND);
+                if (offHandItem) attacker.setItemUnequipped(offHandItem, EquipSlot.OFF_HAND);
             }
 
 
-            talent.affectedStats.accuracy = attacker.level;
-            talent.affectedStats.strength = attacker.level * 2;
-            talent.affectedStats.attackSpeed = 1 + attacker.level * 0.3;
+            talent.affectedStats.accuracy = attacker.level * 2;
+            talent.affectedStats.strength = attacker.level * 4;
+            talent.affectedStats.dodgeRate = attacker.level * 20;
+            talent.affectedStats.attackSpeed = 1 + attacker.level;
 
 
             // client.send(
