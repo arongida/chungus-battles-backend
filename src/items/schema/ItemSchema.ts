@@ -12,8 +12,6 @@ export class Item extends Schema {
   @type('number') price: number = 0;
   @type('number') sellPrice: number = 0;
   @type(AffectedStats) affectedStats: AffectedStats;
-  @type(AffectedStats) setBonusStats: AffectedStats;
-  @type('boolean') setActive: boolean = false;
   @type('number') tier: number;
   @type('number') rarity: number = 1;
   @type('string') image: string;
@@ -22,7 +20,7 @@ export class Item extends Schema {
   @type('boolean') equipped: boolean = false;
   @type(['number']) itemCollections: number[];
   @type('string') type: string;
-  @type('string') set: string;
+  @type('string') class: string;
   @type(['string']) equipOptions: SetSchema<string>;
   @type('boolean') showDetails: boolean = false;
   @type('number') baseMinDamage: number = 0;
@@ -33,7 +31,7 @@ export class Item extends Schema {
   @type(AffectedStats) affectedEnemyStats: AffectedStats;
 
   executeBehavior(context: BehaviorContext) {
-    const behavior = ItemBehaviors[this.itemId];
+    const behavior = ItemBehaviors[this.itemId] ?? ItemBehaviors[this.type];
     if (behavior) {
       const itemContext: ItemBehaviorContext = { ...context, item: this };
       behavior(itemContext);

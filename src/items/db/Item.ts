@@ -3,6 +3,7 @@ import {StatsSchema} from "../../common/db/Stats";
 import {Item} from "../schema/ItemSchema";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {ArraySchema} from "@colyseus/schema";
+import {rollItemStats} from "../stats/itemStatRoller";
 
 export const ItemSchema = new Schema({
     itemId: Number,
@@ -11,9 +12,7 @@ export const ItemSchema = new Schema({
     price: Number,
     tier: {type: Number, alias: 'levelRequirement'},
     affectedStats: StatsSchema,
-    setBonusStats: StatsSchema,
-    setActive: Boolean,
-    set: String,
+    class: String,
     image: String,
     tags: [String],
     itemCollections: [Number],
@@ -50,16 +49,19 @@ export async function getNumberOfItems(
         {$sample: {size: numberOfItems}},
     ]);
 
-    return itemArrayFromDb.map(item => getItemSchemaObject(item));
+    return itemArrayFromDb.map(item => {
+        const schemaItem = getItemSchemaObject(item);
+        rollItemStats(schemaItem);
+        return schemaItem;
+    });
 }
 
 function getItemSchemaObject(itemFromDb: any): Item {
-    const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    const { affectedStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
     if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);
     newItemSchemaObject.affectedStats = new AffectedStats().assign(affectedStats || {});
-    newItemSchemaObject.setBonusStats = new AffectedStats().assign(setBonusStats || {});
     newItemSchemaObject.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
 
     const tagsArr = new ArraySchema<string>();
@@ -104,4 +106,13 @@ export async function getQuestItems(): Promise<Item[]> {
 export async function getAllItems(): Promise<Item[]>{
     const allItemsFromDb = await itemModel.find({}).lean();
     return allItemsFromDb.map(item => getItemSchemaObject(item));
+}
+
+/**
+ * Deep-clones a live Item schema object (preserving rolled stats, rarity,
+ * sellPrice) by round-tripping through the same DB→Colyseus reconstruction
+ * used when first loading from MongoDB.
+ */
+export function cloneItem(item: Item): Item {
+    return getItemSchemaObject(item.toJSON());
 }

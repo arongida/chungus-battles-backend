@@ -24,7 +24,7 @@ export enum ItemRarity {
   MYTHIC = 5
 }
 
-export enum ItemSet {
+export enum ItemClass {
   ROGUE = 'rogue',
   WARRIOR = 'warrior',
   MERCHANT = 'merchant'

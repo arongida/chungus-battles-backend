@@ -133,7 +133,6 @@ export class Player extends Schema implements IStats {
     }
 
     setInvincible(clock: ClockTimer, invincibleLenghtMS: number) {
-        console.log('set invincible');
         this.invincible = true;
         if (this.invincibleTimer) {
             const timeLeft = this.invincibleTimer.time - this.invincibleTimer.elapsedTime;
@@ -238,7 +237,6 @@ export class Player extends Schema implements IStats {
 
     setItemUnequipped(item: Item, slot: EquipSlot) {
         item.equipped = false;
-        item.setActive = false;
         this.inventory.push(item);
         this.equippedItems.delete(slot);
     }

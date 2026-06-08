@@ -2,7 +2,7 @@ import { TalentType } from '../types/TalentTypes';
 import { Item } from '../../items/schema/ItemSchema';
 import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerCommand';
 import { TriggerType } from "../../common/types";
-import { EquipSlot, ItemRarity, ItemSet, ItemType } from "../../items/types/ItemTypes";
+import { EquipSlot, ItemClass, ItemRarity, ItemType } from "../../items/types/ItemTypes";
 import { rollTheDice } from "../../common/utils";
 import { TalentBehaviorContext } from "./TalentBehaviorContext";
 import { ArraySchema } from "@colyseus/schema";
@@ -704,15 +704,15 @@ export const TalentBehaviors = {
             talent.affectedStats.hpRegen = 0;
 
             attacker.equippedItems.forEach((item) => {
-                if (item.set === ItemSet.WARRIOR && item.setActive) {
-                    talent.affectedStats.strength += item.setBonusStats.strength * talent.activationRate;
-                    talent.affectedStats.accuracy += item.setBonusStats.accuracy * talent.activationRate;
-                    talent.affectedStats.maxHp += item.setBonusStats.maxHp * talent.activationRate;
-                    talent.affectedStats.defense += item.setBonusStats.defense * talent.activationRate;
-                    talent.affectedStats.dodgeRate += item.setBonusStats.dodgeRate * talent.activationRate;
-                    talent.affectedStats.flatDmgReduction += item.setBonusStats.flatDmgReduction * talent.activationRate;
-                    talent.affectedStats.income += item.setBonusStats.income * talent.activationRate;
-                    talent.affectedStats.hpRegen += item.setBonusStats.hpRegen * talent.activationRate;
+                if (item.class === ItemClass.WARRIOR) {
+                    talent.affectedStats.strength         += item.affectedStats.strength         * talent.activationRate;
+                    talent.affectedStats.accuracy         += item.affectedStats.accuracy         * talent.activationRate;
+                    talent.affectedStats.maxHp            += item.affectedStats.maxHp            * talent.activationRate;
+                    talent.affectedStats.defense          += item.affectedStats.defense          * talent.activationRate;
+                    talent.affectedStats.dodgeRate        += item.affectedStats.dodgeRate        * talent.activationRate;
+                    talent.affectedStats.flatDmgReduction += item.affectedStats.flatDmgReduction * talent.activationRate;
+                    talent.affectedStats.income           += item.affectedStats.income           * talent.activationRate;
+                    talent.affectedStats.hpRegen          += item.affectedStats.hpRegen          * talent.activationRate;
                 }
             });
 
@@ -925,7 +925,6 @@ export const TalentBehaviors = {
             const originalPrice = item.price;
             const snapshot = new Item();
             snapshot.affectedStats = new AffectedStats().assign(item.affectedStats.toJSON());
-            snapshot.setBonusStats = new AffectedStats().assign(item.setBonusStats.toJSON());
             snapshot.sellPrice = item.sellPrice;
             snapshot.baseAttackSpeed = item.baseAttackSpeed;
             snapshot.baseMinDamage = item.baseMinDamage;
@@ -946,11 +945,10 @@ export const TalentBehaviors = {
 
 function clonedAsGhost(source: Item): Item {
     const raw = source.toJSON() as any;
-    const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
+    const { affectedStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
 
     const ghost = new Item().assign(primitives);
     ghost.affectedStats = new AffectedStats().assign(affectedStats || {});
-    ghost.setBonusStats = new AffectedStats().assign(setBonusStats || {});
     ghost.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
 
     const equipOptionsArr = new ArraySchema<string>();
@@ -969,7 +967,6 @@ function clonedAsGhost(source: Item): Item {
     ghost.sellPrice = 0;
     ghost.sold = false;
     ghost.equipped = false;
-    ghost.setActive = false;
     ghost.tags = new ArraySchema<string>('dual_wield_copy');
 
     return ghost;

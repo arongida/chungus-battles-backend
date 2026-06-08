@@ -1,9 +1,22 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
-import { EquipSlot } from '../types/ItemTypes';
+import { EquipSlot, ItemType } from '../types/ItemTypes';
 import { CombatLogMessage } from '../../common/MessageTypes';
 
-export const ItemBehaviors: Record<number, (context: ItemBehaviorContext) => void> = {
+export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContext) => void> = {
+    // All shields — FIGHT_START: grant invulnerability (500 + 500*tier ms).
+    [ItemType.SHIELD]: ({ attacker, clock, client, item }) => {
+        if (!attacker || !clock) return;
+        const durationMs = 500 + 500 * item.tier;
+        attacker.setInvincible(clock, durationMs);
+        const seconds = (durationMs / 1000).toFixed(1);
+        client?.send('combat_log', {
+            text: `${attacker.name}'s ${item.name}: ${seconds}s invulnerability!`,
+            kind: 'item',
+            attackerId: attacker.playerId,
+            itemId: item.itemId,
+        } as CombatLogMessage);
+    },
     // Flowering Staff (8) — AURA: takes both hands; max damage equals attacker's max HP.
     8: ({ attacker, trigger }) => {
         if (trigger !== TriggerType.AURA || !attacker) return;
