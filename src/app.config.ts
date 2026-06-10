@@ -11,6 +11,9 @@ import {DraftRoom} from './rooms/DraftRoom';
 import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, playerToPlainObject} from './players/db/Player';
 import {GAME_VERSION} from './common/types';
 import { getAllItems } from "./items/db/Item";
+import { getItemRollPreview } from "./items/stats/itemRollPreview";
+import { ItemType } from "./items/types/ItemTypes";
+import { shieldDescription } from "./commands/ShopUpgradeUtils";
 import { getAllTalents } from "./talents/db/Talent";
 import { getReplaysByOriginalPlayer, getReplayById } from './replay/db/Replay';
 
@@ -65,7 +68,12 @@ export const server = defineServer({
 
         app.get('/items', async (req, res)=>{
             const items = await getAllItems();
-            res.status(200).send(items);
+            res.status(200).send(items.map(item => ({
+                ...item.toJSON(),
+                // Shield descriptions are generated at roll time; the authored one is stale.
+                description: item.type === ItemType.SHIELD ? shieldDescription(item.tier) : item.description,
+                rollPreview: getItemRollPreview(item),
+            })));
         });
 
         app.get('/talents', async (req, res)=> {

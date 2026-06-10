@@ -16,7 +16,11 @@ const floweringStaffLastProcMs = new WeakMap<Item, number>();
 
 export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContext) => void> = {
     // All shields — FIGHT_START: grant invulnerability (500 + 500*tier ms).
-    [ItemType.SHIELD]: ({ attacker, clock, client, item }) => {
+    [ItemType.SHIELD]: ({ attacker, trigger, clock, client, item }) => {
+        // Old enemy snapshots may still carry shields with 'on-attacked'
+        // triggers; in that context `attacker` is the opponent, so firing
+        // would grant them the invulnerability.
+        if (trigger !== TriggerType.FIGHT_START) return;
         if (!attacker || !clock) return;
         const durationMs = 500 + 500 * item.tier;
         attacker.setInvincible(clock, durationMs, client);
