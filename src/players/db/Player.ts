@@ -9,6 +9,7 @@ import {StatsSchema} from "../../common/db/Stats";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollTheDice} from "../../common/utils";
+import {rollItemStats} from "../../items/stats/itemStatRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION} from "../../common/types";
 
@@ -165,6 +166,7 @@ export async function createNewPlayer(
     const playerSchema = getPlayerSchemaObject(newPlayer.toObject());
     const defaultWeapon = await getItemById(getDefaultWeaponId(avatarUrl));
     if (defaultWeapon) {
+        rollItemStats(defaultWeapon);
         playerSchema.inventory.push(defaultWeapon);
         playerSchema.setItemEquipped(defaultWeapon, EquipSlot.MAIN_HAND);
         if (defaultWeapon.itemId === 68) playerSchema.gold += 3;

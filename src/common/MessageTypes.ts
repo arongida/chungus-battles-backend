@@ -1,6 +1,19 @@
+export type DamageType = 'normal' | 'poison' | 'burn';
+
 export type DamageMessage = {
   playerId: number;
   damage: number;
+  type?: DamageType;
+};
+
+export type InvulnerableMessage = {
+  playerId: number;
+  damage: number;
+};
+
+export type InvulnerableStateMessage = {
+  playerId: number;
+  invincible: boolean;
 };
 
 export type HealingMessage = {
@@ -19,10 +32,12 @@ export type VersionWinMessage = {
 
 export type CombatLogKind =
   | 'countdown' | 'fight_start' | 'fight_end' | 'end_burn'
-  | 'attack' | 'dodge'
+  | 'attack' | 'dodge' | 'counter'
   | 'regen' | 'poison_apply' | 'poison_tick'
+  | 'burn_apply' | 'burn_tick'
   | 'heal' | 'leech'
   | 'talent' | 'item'
+  | 'invulnerable'
   | 'reward' | 'xp' | 'result';
 
 export type CombatLogMessage = {
@@ -40,6 +55,7 @@ export type CombatLogMessage = {
   defenderHpAfter?: number;
   healing?: number;
   poisonStacks?: number;
+  burnStacks?: number;
   goldDelta?: number;
   xpDelta?: number;
   result?: 'win' | 'lose' | 'draw';

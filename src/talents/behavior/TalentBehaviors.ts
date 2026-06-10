@@ -235,22 +235,22 @@ export const TalentBehaviors = {
     [TalentType.WEAPON_WHISPERER]: async (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
         const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
-        if (!weapon || weapon.rarity >= ItemRarity.LEGENDARY) return;
+        if (!weapon || weapon.rarity >= ItemRarity.MYTHIC) return;
 
         // Lock rarity immediately so subsequent aura ticks skip this while the DB fetch is in flight
         const originalRarity = weapon.rarity;
-        weapon.rarity = ItemRarity.LEGENDARY;
+        weapon.rarity = ItemRarity.MYTHIC;
 
         const baseItem = await getItemById(weapon.itemId);
         if (!baseItem) return;
 
         // Restore so applyRarityUpgrade can increment step by step
         weapon.rarity = originalRarity;
-        while (weapon.rarity < ItemRarity.LEGENDARY) {
+        while (weapon.rarity < ItemRarity.MYTHIC) {
             applyRarityUpgrade(weapon, baseItem, attacker, false);
         }
 
-        client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Legendary!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
+        client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Mythic!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.WEAPON_WHISPERER,
@@ -433,7 +433,7 @@ export const TalentBehaviors = {
         const { attacker, client, defender, clock, talent, damage } = context;
         if (defender.hp - damage <= 0 && !defender.talentsOnCooldown.includes(TalentType.GUARDIAN_ANGEL)) {
             defender.hp = 1;
-            defender.setInvincible(clock, talent.activationRate);
+            defender.setInvincible(clock, talent.activationRate, client);
             defender.talentsOnCooldown.push(TalentType.GUARDIAN_ANGEL);
 
             client.send('combat_log', { text: `You are invincible for ${talent.activationRate / 1000} seconds!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
@@ -918,7 +918,7 @@ export const TalentBehaviors = {
     [TalentType.MERCHANT_5B]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, shop } = context;
-            const upgradable = shop?.filter(item => item.rarity < ItemRarity.LEGENDARY);
+            const upgradable = shop?.filter(item => item.rarity < ItemRarity.MYTHIC);
             if (!upgradable?.length) return;
 
             const item = upgradable[Math.floor(Math.random() * upgradable.length)];
@@ -934,7 +934,7 @@ export const TalentBehaviors = {
             }
             item.price = originalPrice;
 
-            client.send('draft_log', `Black market contact: ${item.name} is now Legendary!`);
+            client.send('draft_log', `Black market contact: ${item.name} is now Mythic!`);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.MERCHANT_5B,

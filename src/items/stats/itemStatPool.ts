@@ -34,13 +34,13 @@ export const TYPE_STAT_POOL: Record<ItemType, RollableStat[]> = {
 };
 
 /**
- * Class-signature stat eligible on class items.
- * Added to the type pool as one possible draw — not guaranteed.
+ * Class-signature stats eligible on class items.
+ * Added to the type pool as possible draws — not guaranteed.
  */
-export const CLASS_STAT: Record<ItemClass, RollableStat> = {
-    [ItemClass.MERCHANT]: 'income',
-    [ItemClass.ROGUE]:    'dodgeRate',
-    [ItemClass.WARRIOR]:  'hpRegen',
+export const CLASS_STATS: Record<ItemClass, RollableStat[]> = {
+    [ItemClass.MERCHANT]: ['income'],
+    [ItemClass.ROGUE]:    ['dodgeRate', 'attackSpeed'],
+    [ItemClass.WARRIOR]:  ['hpRegen', 'strength'],
 };
 
 /** Number of affix rolls for a given tier (capped to pool size before drawing). */
@@ -84,11 +84,11 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
         5: { min: 1.48, max: 1.96, isFloat: true },
     },
     defense: {
-        1: { min: 3,  max: 6   },
-        2: { min: 6,  max: 12  },
-        3: { min: 12, max: 24  },
-        4: { min: 24, max: 48  },
-        5: { min: 48, max: 96  },
+        1: { min: 5,  max: 10   },
+        2: { min: 10,  max: 20  },
+        3: { min: 20, max: 40  },
+        4: { min: 40, max: 80  },
+        5: { min: 80, max: 160  },
     },
     maxHp: {
         1: { min: 10, max: 20  },
@@ -201,11 +201,14 @@ export function clampTier(tier: number): number {
 
 /**
  * Returns the full eligible stat pool for an item (type base pool + optional
- * class-signature stat for class items).
+ * class-signature stats for class items). Deduplicated so stats already in
+ * the type pool (e.g. strength on warrior weapons) aren't double-weighted.
  */
 export function getEligiblePool(type: ItemType, itemClass?: string): RollableStat[] {
     const base = [...(TYPE_STAT_POOL[type] ?? [])];
-    const classStat = itemClass ? CLASS_STAT[itemClass as ItemClass] : undefined;
-    if (classStat) base.push(classStat);
+    const classStats = itemClass ? CLASS_STATS[itemClass as ItemClass] ?? [] : [];
+    for (const stat of classStats) {
+        if (!base.includes(stat)) base.push(stat);
+    }
     return base;
 }

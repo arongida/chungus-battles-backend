@@ -26,4 +26,8 @@ export interface BehaviorContext {
     weapon?: Item;
     attackerSnapshot?: StatsSnapshot;
     isReflectedDamage?: boolean;
+    /** Executes a full weapon attack (FightRoom.tryWeaponAttack) — set on ON_DODGE for counter-attacks. */
+    performWeaponAttack?: (attacker: Player, defender: Player, weapon: Item, slot: string) => void;
+    /** True when this trigger chain originates from a counter-attack — prevents counter loops. */
+    isCounterAttack?: boolean;
 }

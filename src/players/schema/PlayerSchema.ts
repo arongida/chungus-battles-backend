@@ -3,10 +3,11 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {Item} from '../../items/schema/ItemSchema';
 import {IStats} from '../../common/types';
 import {TalentType} from '../../talents/types/TalentTypes';
-import { CombatLogMessage } from '../../common/MessageTypes';
+import { CombatLogMessage, DamageMessage, DamageType, InvulnerableMessage, InvulnerableStateMessage } from '../../common/MessageTypes';
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
+import {BURN_DURATION_MS} from "../../items/behavior/uniqueItemBalance";
 
 export class Player extends Schema implements IStats {
     @type('number') playerId: number;
@@ -35,10 +36,10 @@ export class Player extends Schema implements IStats {
     damage: number = 0;
     attackTimers: Map<string, Delayed> = new Map();
     poisonTimer: Delayed;
+    burnTimer: Delayed;
     regenTimer: Delayed;
     invincibleTimer: Delayed;
     talentsOnCooldown: TalentType[] = [];
-    invincible: boolean = false;
     attackSpeedMultiplier: number = 1;
     hasVersionWin: boolean = false;
 
@@ -111,6 +112,10 @@ export class Player extends Schema implements IStats {
         this._attackSpeed = value < 0.1 ? 0.1 : value;
     }
 
+    // Declared after all other @type fields so existing field indices stay stable
+    // (the frontend schema mirror relies on matching declaration order).
+    @type('boolean') invincible: boolean = false;
+
     private _poisonStack: number = 0;
 
     get poisonStack(): number {
@@ -127,34 +132,64 @@ export class Player extends Schema implements IStats {
         }
     }
 
+    private _burnStack: number = 0;
+
+    get burnStack(): number {
+        return this._burnStack;
+    }
+
+    set burnStack(value: number) {
+        if (value < 0) {
+            this._burnStack = 0;
+        } else if (value > 100) {
+            this._burnStack = 100;
+        } else {
+            this._burnStack = value;
+        }
+    }
+
     clearAllAttackTimers() {
         this.attackTimers.forEach((timer) => timer.clear());
         this.attackTimers.clear();
     }
 
-    setInvincible(clock: ClockTimer, invincibleLenghtMS: number) {
+    setInvincible(clock: ClockTimer, invincibleLenghtMS: number, playerClient?: Client) {
+        // State messages exist for the replay player, which has no schema sync.
+        if (!this.invincible) {
+            playerClient?.send('invulnerable_state', { playerId: this.playerId, invincible: true } as InvulnerableStateMessage);
+        }
         this.invincible = true;
+        const endInvincibility = () => {
+            this.invincible = false;
+            this.invincibleTimer = null;
+            playerClient?.send('invulnerable_state', { playerId: this.playerId, invincible: false } as InvulnerableStateMessage);
+        };
         if (this.invincibleTimer) {
             const timeLeft = this.invincibleTimer.time - this.invincibleTimer.elapsedTime;
             this.invincibleTimer.clear();
-            this.invincibleTimer = clock.setTimeout(() => {
-                this.invincible = false;
-            }, timeLeft + invincibleLenghtMS);
+            this.invincibleTimer = clock.setTimeout(endInvincibility, timeLeft + invincibleLenghtMS);
+            return;
         }
-        this.invincibleTimer = clock.setTimeout(() => {
-            this.invincible = false;
-        }, invincibleLenghtMS);
+        this.invincibleTimer = clock.setTimeout(endInvincibility, invincibleLenghtMS);
     }
 
-    takeDamage(damage: number, playerClient: Client) {
-        if (this.invincible) return;
+    takeDamage(damage: number, playerClient: Client, damageType: DamageType = 'normal') {
         if (this.hp <= 0) return;
         if (damage <= 0) return;
+        if (this.invincible) {
+            playerClient.send('invulnerable', {
+                playerId: this.playerId,
+                damage: damage,
+            } as InvulnerableMessage);
+            playerClient.send('combat_log', { text: `${this.name} is invulnerable and takes no damage!`, kind: 'invulnerable', defenderId: this.playerId, damage: damage } as CombatLogMessage);
+            return;
+        }
         this.hp -= damage;
         playerClient.send('damage', {
             playerId: this.playerId,
             damage: damage,
-        });
+            type: damageType,
+        } as DamageMessage);
     }
 
     getDamageAfterDefense(initialDamage: number): number {
@@ -173,6 +208,19 @@ export class Player extends Schema implements IStats {
                 this.poisonTimer = null;
             }
         }, 10000);
+    }
+
+    addBurnStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {
+        this.burnStack += stack;
+        playerClient.send('combat_log', { text: `${this.name} is burning! ${this.burnStack} stacks!`, kind: 'burn_apply', defenderId: this.playerId, burnStacks: this.burnStack } as CombatLogMessage);
+
+        clock.setTimeout(() => {
+            this.burnStack -= stack;
+            if (this.burnStack === 0 && this.burnTimer) {
+                this.burnTimer.clear();
+                this.burnTimer = null;
+            }
+        }, BURN_DURATION_MS);
     }
 
     getItem(item: Item) {
@@ -203,10 +251,10 @@ export class Player extends Schema implements IStats {
     private findUpgradeTarget(itemId: number): Item | null {
         const candidates: Item[] = [];
         this.equippedItems.forEach((item) => {
-            if (item.itemId === itemId && item.rarity < ItemRarity.LEGENDARY) candidates.push(item);
+            if (item.itemId === itemId && item.rarity < ItemRarity.MYTHIC) candidates.push(item);
         });
         this.inventory.forEach((item) => {
-            if (item.itemId === itemId && item.rarity < ItemRarity.LEGENDARY) candidates.push(item);
+            if (item.itemId === itemId && item.rarity < ItemRarity.MYTHIC) candidates.push(item);
         });
         if (candidates.length === 0) return null;
         candidates.sort((a, b) => b.rarity - a.rarity);

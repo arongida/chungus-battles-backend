@@ -13,6 +13,7 @@ import {
     WEAPON_BASE_RANGES,
 } from './itemStatPool';
 import { shieldDescription } from '../../commands/ShopUpgradeUtils';
+import { TWO_HANDED_WEAPON_IDS } from '../behavior/uniqueItemBalance';
 
 // ── Float roller (2-decimal precision) ───────────────────────────────────────
 
@@ -37,25 +38,32 @@ function rollStat(stat: RollableStat, tier: number): number {
  *
  * Rules:
  * - Items with active behaviors (`ItemBehaviors` map), `triggerTypes`, or
- *   the `'unique'` tag keep their hand-authored stats.
+ *   the `'unique'` tag keep their hand-authored stats, unless they're in
+ *   `TWO_HANDED_WEAPON_IDS` (double affix rolls, authored base damage).
  * - Items of unknown / non-standard type (potions, quest-only) are skipped
  *   because `getEligiblePool` returns an empty array for them.
  * - Only `affectedStats` and (for weapons) base damage are rewritten;
  *   `affectedEnemyStats`, behaviors, name, and description are never touched.
  */
 export function rollItemStats(item: Item): void {
+    const twoHanded = TWO_HANDED_WEAPON_IDS.has(item.itemId);
+
     // Guard: hand-authored behavior / unique items keep their stats.
     // Shields are exempt from the triggerTypes guard — they have FIGHT_START wired
     // via the type-based behavior but still need rolled defensive stats.
-    if (ItemBehaviors[item.itemId]) return;
-    if (item.type !== ItemType.SHIELD && item.triggerTypes?.length > 0) return;
-    if (item.tags && Array.from(item.tags).includes('unique')) return;
+    if (!twoHanded) {
+        if (ItemBehaviors[item.itemId]) return;
+        if (item.type !== ItemType.SHIELD && item.triggerTypes?.length > 0) return;
+        if (item.tags && Array.from(item.tags).includes('unique')) return;
+    }
 
     const pool = getEligiblePool(item.type as ItemType, item.class);
     if (pool.length === 0) return; // potions, unknown types — skip
 
     const tier = clampTier(item.tier);
-    const n = Math.min(AFFIX_COUNT_BY_TIER[tier] ?? 1, pool.length);
+    // Two-handers roll double affixes to make up for the blocked off-hand.
+    const affixCount = (AFFIX_COUNT_BY_TIER[tier] ?? 1) * (twoHanded ? 2 : 1);
+    const n = Math.min(affixCount, pool.length);
 
     // Shuffle pool and take n distinct stats.
     const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, n);
@@ -71,7 +79,8 @@ export function rollItemStats(item: Item): void {
     }
 
     // Weapon base damage — archetype-specific per-tier ranges.
-    if (item.type === ItemType.WEAPON) {
+    // Two-handers keep their authored damage profile.
+    if (item.type === ItemType.WEAPON && !twoHanded) {
         const arc = getWeaponArchetype(item.class);
         const r   = WEAPON_BASE_RANGES[arc][tier];
         const minDmgRange = r.minDamage;
