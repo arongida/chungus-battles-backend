@@ -34,6 +34,21 @@ function rollStat(stat: RollableStat, tier: number): number {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
+ * Whether an item keeps its hand-authored stats instead of rolling.
+ *
+ * Shields are exempt from the triggerTypes guard — they have FIGHT_START wired
+ * via the type-based behavior but still need rolled defensive stats.
+ * Two-handed weapons always roll (double affixes, authored base damage).
+ */
+export function keepsAuthoredStats(item: Item): boolean {
+    if (TWO_HANDED_WEAPON_IDS.has(item.itemId)) return false;
+    if (ItemBehaviors[item.itemId]) return true;
+    if (item.type !== ItemType.SHIELD && item.triggerTypes?.length > 0) return true;
+    if (item.tags && Array.from(item.tags).includes('unique')) return true;
+    return false;
+}
+
+/**
  * Rolls randomized stats onto a shop `Item` in-place.
  *
  * Rules:
@@ -48,14 +63,7 @@ function rollStat(stat: RollableStat, tier: number): number {
 export function rollItemStats(item: Item): void {
     const twoHanded = TWO_HANDED_WEAPON_IDS.has(item.itemId);
 
-    // Guard: hand-authored behavior / unique items keep their stats.
-    // Shields are exempt from the triggerTypes guard — they have FIGHT_START wired
-    // via the type-based behavior but still need rolled defensive stats.
-    if (!twoHanded) {
-        if (ItemBehaviors[item.itemId]) return;
-        if (item.type !== ItemType.SHIELD && item.triggerTypes?.length > 0) return;
-        if (item.tags && Array.from(item.tags).includes('unique')) return;
-    }
+    if (keepsAuthoredStats(item)) return;
 
     const pool = getEligiblePool(item.type as ItemType, item.class);
     if (pool.length === 0) return; // potions, unknown types — skip
