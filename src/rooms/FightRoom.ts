@@ -190,8 +190,8 @@ export class FightRoom extends Room {
         if (this.state.battleStarted) {
             this.checkPoison(this.state.player, this.state.enemy);
             this.checkPoison(this.state.enemy, this.state.player);
-            this.checkBurn(this.state.player);
-            this.checkBurn(this.state.enemy);
+            this.checkBurn(this.state.player, this.state.enemy);
+            this.checkBurn(this.state.enemy, this.state.player);
 
             if (this.clock.elapsedTime > 65000 && !this.state.endBurnTimer) {
                 this.startEndBurnTimer();
@@ -320,8 +320,9 @@ export class FightRoom extends Room {
         }
     }
 
-    checkBurn(defender: Player) {
+    checkBurn(attacker: Player, defender: Player) {
         if (defender.burnStack <= 0) return;
+        const burnTalents = attacker.talents.filter(t => t.talentId === TalentType.BURNING_BLOOD);
         if (!defender.burnTimer) {
             defender.burnTimer = this.clock.setInterval(() => {
                 const burnDamage = defender.burnStack * BURN_DAMAGE_PER_STACK;
@@ -333,6 +334,7 @@ export class FightRoom extends Room {
                 });
 
                 defender.takeDamage(burnDamage, this.state.playerClient, 'burn');
+                burnTalents.forEach(t => track(t, 0, burnDamage));
                 this.logCombat(this.state.playerClient, { text: `${defender.name} takes ${fmt(burnDamage)} burn damage!`, kind: 'burn_tick', defenderId: defender.playerId, damage: burnDamage, burnStacks: defender.burnStack });
             }, 1000);
         }

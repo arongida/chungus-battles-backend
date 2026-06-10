@@ -7,7 +7,8 @@ import { rollTheDice } from "../../common/utils";
 import { TalentBehaviorContext } from "./TalentBehaviorContext";
 import { ArraySchema } from "@colyseus/schema";
 import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
-import { getItemById } from "../../items/db/Item";
+import { cloneItem, getItemById } from "../../items/db/Item";
+import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { applyRarityUpgrade } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, fmt } from "../../common/MessageTypes";
 import { Talent } from "../schema/TalentSchema";
@@ -178,19 +179,14 @@ export const TalentBehaviors = {
         });
     },
 
-    [TalentType.BANDAGE]: (context: TalentBehaviorContext) => {
-        const { attacker, client } = context;
-        const healing = 2 + attacker.level;
-        attacker.hp += healing;
-        track(context.talent, 1, 0, healing);
-        client.send('combat_log', { text: `${attacker.name} restores ${fmt(healing)} health!`, kind: 'heal', talentId: context.talent.talentId, attackerId: attacker.playerId, healing } as CombatLogMessage);
+    [TalentType.BURNING_BLOOD]: (context: TalentBehaviorContext) => {
+        const { attacker, defender, client, clock, talent } = context;
+        const stacks = Math.max(1, Math.floor(1 + attacker.hpRegen));
+        defender.addBurnStacks(clock, client, stacks);
+        track(talent, 1);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
-            talentId: TalentType.BANDAGE,
-        });
-        client.send('healing', {
-            playerId: attacker.playerId,
-            healing: healing,
+            talentId: TalentType.BURNING_BLOOD,
         });
     },
 
@@ -244,10 +240,14 @@ export const TalentBehaviors = {
         const baseItem = await getItemById(weapon.itemId);
         if (!baseItem) return;
 
-        // Restore so applyRarityUpgrade can increment step by step
+        // Restore so applyRarityUpgrade can increment step by step.
+        // Each step merges a freshly rolled copy — like buying shop duplicates —
+        // so the mythic ends up with varied affixes, not one stat multiplied.
         weapon.rarity = originalRarity;
         while (weapon.rarity < ItemRarity.MYTHIC) {
-            applyRarityUpgrade(weapon, baseItem, attacker, false);
+            const rolledSource = cloneItem(baseItem);
+            rollItemStats(rolledSource);
+            applyRarityUpgrade(weapon, rolledSource, attacker, false);
         }
 
         client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Mythic!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
@@ -916,21 +916,30 @@ export const TalentBehaviors = {
         },
 
     [TalentType.MERCHANT_5B]:
-        (context: TalentBehaviorContext) => {
+        async (context: TalentBehaviorContext) => {
             const { attacker, client, shop } = context;
             const upgradable = shop?.filter(item => item.rarity < ItemRarity.MYTHIC);
             if (!upgradable?.length) return;
 
             const item = upgradable[Math.floor(Math.random() * upgradable.length)];
             const originalPrice = item.price;
-            const snapshot = new Item();
-            snapshot.affectedStats = new AffectedStats().assign(item.affectedStats.toJSON());
-            snapshot.sellPrice = item.sellPrice;
-            snapshot.baseAttackSpeed = item.baseAttackSpeed;
-            snapshot.baseMinDamage = item.baseMinDamage;
-            snapshot.baseMaxDamage = item.baseMaxDamage;
+
+            // Lock rarity so re-triggers skip this item while the DB fetch is in flight
+            const originalRarity = item.rarity;
+            item.rarity = ItemRarity.MYTHIC;
+            const baseItem = await getItemById(item.itemId);
+            if (!baseItem) {
+                item.rarity = originalRarity;
+                return;
+            }
+
+            // Each step merges a freshly rolled copy — like buying shop duplicates —
+            // so the mythic ends up with varied affixes, not one stat multiplied.
+            item.rarity = originalRarity;
             while (item.rarity < ItemRarity.MYTHIC) {
-                applyRarityUpgrade(item, snapshot, attacker, false);
+                const rolledSource = cloneItem(baseItem);
+                rollItemStats(rolledSource);
+                applyRarityUpgrade(item, rolledSource, attacker, false);
             }
             item.price = originalPrice;
 

@@ -21,6 +21,7 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
             client: this.state.playerClient,
             attacker: player,
             defender: enemy,
+            clock: this.clock,
             commandDispatcher: this.room.dispatcher,
             trigger: TriggerType.ACTIVE
         };
@@ -41,6 +42,7 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
             client: this.state.playerClient,
             attacker: player,
             defender: enemy,
+            clock: this.clock,
             commandDispatcher: this.room.dispatcher,
             trigger: TriggerType.ACTIVE
         };
