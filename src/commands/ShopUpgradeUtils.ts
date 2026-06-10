@@ -1,6 +1,8 @@
 import { Item } from '../items/schema/ItemSchema';
 import { Player } from '../players/schema/PlayerSchema';
 import { ItemRarity, ItemType } from '../items/types/ItemTypes';
+import { cloneItem } from '../items/db/Item';
+import { rollItemStats } from '../items/stats/itemStatRoller';
 import {
   BURN_DAMAGE_PER_STACK,
   BURN_DURATION_MS,
@@ -59,6 +61,37 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
     target.baseMaxDamage   += source.baseMaxDamage   * maxDamageScale;
     target.baseAttackSpeed += source.baseAttackSpeed * 0.5;
   }
+}
+
+/**
+ * Lucky shop rolls: each shop slot has a level-scaled chance to arrive at a
+ * higher rarity. Every successful step re-rolls the chance, so an item can
+ * chain up to MYTHIC. Each step merges a freshly rolled copy of the item
+ * template — same mechanic as the tier-5 instant-mythic talents.
+ *
+ * `source` must be the template-shaped roll for this slot (not the upgraded
+ * target) so authored-stat items don't compound their already-merged stats.
+ * Price grows by 50% of the slot's pre-upgrade price per step.
+ *
+ * Returns the number of rarity steps applied.
+ */
+export function applyLuckyShopUpgrades(target: Item, source: Item, player: Player): number {
+  const pristine = cloneItem(source);
+  const chance = 0.10 + 0.02 * (player.level - 1);
+  const basePrice = target.price;
+
+  let steps = 0;
+  while (target.rarity < ItemRarity.MYTHIC && Math.random() < chance) {
+    const rolled = cloneItem(pristine);
+    rollItemStats(rolled);
+    applyRarityUpgrade(target, rolled, player, false);
+    steps++;
+  }
+  if (steps > 0) {
+    target.price = Math.round(basePrice * (1 + 0.5 * steps));
+    target.sellPrice = Math.floor(target.price * 0.7);
+  }
+  return steps;
 }
 
 export function findOwnedUpgradeTarget(player: Player, itemId: number): Item | null {
