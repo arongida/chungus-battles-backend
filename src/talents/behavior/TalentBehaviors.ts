@@ -2,12 +2,13 @@ import { TalentType } from '../types/TalentTypes';
 import { Item } from '../../items/schema/ItemSchema';
 import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerCommand';
 import { TriggerType } from "../../common/types";
-import { EquipSlot, ItemRarity, ItemSet, ItemType } from "../../items/types/ItemTypes";
+import { EquipSlot, ItemClass, ItemRarity, ItemType } from "../../items/types/ItemTypes";
 import { rollTheDice } from "../../common/utils";
 import { TalentBehaviorContext } from "./TalentBehaviorContext";
 import { ArraySchema } from "@colyseus/schema";
 import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
-import { getItemById } from "../../items/db/Item";
+import { cloneItem, getItemById } from "../../items/db/Item";
+import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { applyRarityUpgrade } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, fmt } from "../../common/MessageTypes";
 import { Talent } from "../schema/TalentSchema";
@@ -178,19 +179,14 @@ export const TalentBehaviors = {
         });
     },
 
-    [TalentType.BANDAGE]: (context: TalentBehaviorContext) => {
-        const { attacker, client } = context;
-        const healing = 2 + attacker.level;
-        attacker.hp += healing;
-        track(context.talent, 1, 0, healing);
-        client.send('combat_log', { text: `${attacker.name} restores ${fmt(healing)} health!`, kind: 'heal', talentId: context.talent.talentId, attackerId: attacker.playerId, healing } as CombatLogMessage);
+    [TalentType.BURNING_BLOOD]: (context: TalentBehaviorContext) => {
+        const { attacker, defender, client, clock, talent } = context;
+        const stacks = Math.max(1, Math.floor(1 + attacker.hpRegen));
+        defender.addBurnStacks(clock, client, stacks);
+        track(talent, 1);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
-            talentId: TalentType.BANDAGE,
-        });
-        client.send('healing', {
-            playerId: attacker.playerId,
-            healing: healing,
+            talentId: TalentType.BURNING_BLOOD,
         });
     },
 
@@ -235,22 +231,26 @@ export const TalentBehaviors = {
     [TalentType.WEAPON_WHISPERER]: async (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
         const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
-        if (!weapon || weapon.rarity >= ItemRarity.LEGENDARY) return;
+        if (!weapon || weapon.rarity >= ItemRarity.MYTHIC) return;
 
         // Lock rarity immediately so subsequent aura ticks skip this while the DB fetch is in flight
         const originalRarity = weapon.rarity;
-        weapon.rarity = ItemRarity.LEGENDARY;
+        weapon.rarity = ItemRarity.MYTHIC;
 
         const baseItem = await getItemById(weapon.itemId);
         if (!baseItem) return;
 
-        // Restore so applyRarityUpgrade can increment step by step
+        // Restore so applyRarityUpgrade can increment step by step.
+        // Each step merges a freshly rolled copy — like buying shop duplicates —
+        // so the mythic ends up with varied affixes, not one stat multiplied.
         weapon.rarity = originalRarity;
-        while (weapon.rarity < ItemRarity.LEGENDARY) {
-            applyRarityUpgrade(weapon, baseItem, attacker, false);
+        while (weapon.rarity < ItemRarity.MYTHIC) {
+            const rolledSource = cloneItem(baseItem);
+            rollItemStats(rolledSource);
+            applyRarityUpgrade(weapon, rolledSource, attacker, false);
         }
 
-        client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Legendary!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
+        client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Mythic!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.WEAPON_WHISPERER,
@@ -433,7 +433,7 @@ export const TalentBehaviors = {
         const { attacker, client, defender, clock, talent, damage } = context;
         if (defender.hp - damage <= 0 && !defender.talentsOnCooldown.includes(TalentType.GUARDIAN_ANGEL)) {
             defender.hp = 1;
-            defender.setInvincible(clock, talent.activationRate);
+            defender.setInvincible(clock, talent.activationRate, client);
             defender.talentsOnCooldown.push(TalentType.GUARDIAN_ANGEL);
 
             client.send('combat_log', { text: `You are invincible for ${talent.activationRate / 1000} seconds!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
@@ -704,15 +704,15 @@ export const TalentBehaviors = {
             talent.affectedStats.hpRegen = 0;
 
             attacker.equippedItems.forEach((item) => {
-                if (item.set === ItemSet.WARRIOR && item.setActive) {
-                    talent.affectedStats.strength += item.setBonusStats.strength * talent.activationRate;
-                    talent.affectedStats.accuracy += item.setBonusStats.accuracy * talent.activationRate;
-                    talent.affectedStats.maxHp += item.setBonusStats.maxHp * talent.activationRate;
-                    talent.affectedStats.defense += item.setBonusStats.defense * talent.activationRate;
-                    talent.affectedStats.dodgeRate += item.setBonusStats.dodgeRate * talent.activationRate;
-                    talent.affectedStats.flatDmgReduction += item.setBonusStats.flatDmgReduction * talent.activationRate;
-                    talent.affectedStats.income += item.setBonusStats.income * talent.activationRate;
-                    talent.affectedStats.hpRegen += item.setBonusStats.hpRegen * talent.activationRate;
+                if (item.class === ItemClass.WARRIOR) {
+                    talent.affectedStats.strength         += item.affectedStats.strength         * talent.activationRate;
+                    talent.affectedStats.accuracy         += item.affectedStats.accuracy         * talent.activationRate;
+                    talent.affectedStats.maxHp            += item.affectedStats.maxHp            * talent.activationRate;
+                    talent.affectedStats.defense          += item.affectedStats.defense          * talent.activationRate;
+                    talent.affectedStats.dodgeRate        += item.affectedStats.dodgeRate        * talent.activationRate;
+                    talent.affectedStats.flatDmgReduction += item.affectedStats.flatDmgReduction * talent.activationRate;
+                    talent.affectedStats.income           += item.affectedStats.income           * talent.activationRate;
+                    talent.affectedStats.hpRegen          += item.affectedStats.hpRegen          * talent.activationRate;
                 }
             });
 
@@ -916,26 +916,34 @@ export const TalentBehaviors = {
         },
 
     [TalentType.MERCHANT_5B]:
-        (context: TalentBehaviorContext) => {
+        async (context: TalentBehaviorContext) => {
             const { attacker, client, shop } = context;
-            const upgradable = shop?.filter(item => item.rarity < ItemRarity.LEGENDARY);
+            const upgradable = shop?.filter(item => item.rarity < ItemRarity.MYTHIC);
             if (!upgradable?.length) return;
 
             const item = upgradable[Math.floor(Math.random() * upgradable.length)];
             const originalPrice = item.price;
-            const snapshot = new Item();
-            snapshot.affectedStats = new AffectedStats().assign(item.affectedStats.toJSON());
-            snapshot.setBonusStats = new AffectedStats().assign(item.setBonusStats.toJSON());
-            snapshot.sellPrice = item.sellPrice;
-            snapshot.baseAttackSpeed = item.baseAttackSpeed;
-            snapshot.baseMinDamage = item.baseMinDamage;
-            snapshot.baseMaxDamage = item.baseMaxDamage;
+
+            // Lock rarity so re-triggers skip this item while the DB fetch is in flight
+            const originalRarity = item.rarity;
+            item.rarity = ItemRarity.MYTHIC;
+            const baseItem = await getItemById(item.itemId);
+            if (!baseItem) {
+                item.rarity = originalRarity;
+                return;
+            }
+
+            // Each step merges a freshly rolled copy — like buying shop duplicates —
+            // so the mythic ends up with varied affixes, not one stat multiplied.
+            item.rarity = originalRarity;
             while (item.rarity < ItemRarity.MYTHIC) {
-                applyRarityUpgrade(item, snapshot, attacker, false);
+                const rolledSource = cloneItem(baseItem);
+                rollItemStats(rolledSource);
+                applyRarityUpgrade(item, rolledSource, attacker, false);
             }
             item.price = originalPrice;
 
-            client.send('draft_log', `Black market contact: ${item.name} is now Legendary!`);
+            client.send('draft_log', `Black market contact: ${item.name} is now Mythic!`);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.MERCHANT_5B,
@@ -946,11 +954,10 @@ export const TalentBehaviors = {
 
 function clonedAsGhost(source: Item): Item {
     const raw = source.toJSON() as any;
-    const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
+    const { affectedStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
 
     const ghost = new Item().assign(primitives);
     ghost.affectedStats = new AffectedStats().assign(affectedStats || {});
-    ghost.setBonusStats = new AffectedStats().assign(setBonusStats || {});
     ghost.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
 
     const equipOptionsArr = new ArraySchema<string>();
@@ -969,7 +976,6 @@ function clonedAsGhost(source: Item): Item {
     ghost.sellPrice = 0;
     ghost.sold = false;
     ghost.equipped = false;
-    ghost.setActive = false;
     ghost.tags = new ArraySchema<string>('dual_wield_copy');
 
     return ghost;

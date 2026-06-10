@@ -23,6 +23,7 @@ import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
 import { CombatLogMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
+import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 
 export class FightRoom extends Room {
     declare state: FightState;
@@ -189,6 +190,8 @@ export class FightRoom extends Room {
         if (this.state.battleStarted) {
             this.checkPoison(this.state.player, this.state.enemy);
             this.checkPoison(this.state.enemy, this.state.player);
+            this.checkBurn(this.state.player, this.state.enemy);
+            this.checkBurn(this.state.enemy, this.state.player);
 
             if (this.clock.elapsedTime > 65000 && !this.state.endBurnTimer) {
                 this.startEndBurnTimer();
@@ -204,6 +207,8 @@ export class FightRoom extends Room {
                 this.state.enemy.clearAllAttackTimers();
                 this.state.player.poisonTimer?.clear();
                 this.state.enemy.poisonTimer?.clear();
+                this.state.player.burnTimer?.clear();
+                this.state.enemy.burnTimer?.clear();
                 this.state.endBurnTimer?.clear();
                 this.state.skillsTimers.forEach((timer) => timer.clear());
                 this.state.player.regenTimer?.clear();
@@ -224,10 +229,12 @@ export class FightRoom extends Room {
             this.broadcast('damage', {
                 playerId: this.state.player.playerId,
                 damage: burnDamage,
+                type: 'burn',
             });
             this.broadcast('damage', {
                 playerId: this.state.enemy.playerId,
                 damage: burnDamage,
+                type: 'burn',
             });
         }, 1000);
     }
@@ -282,6 +289,7 @@ export class FightRoom extends Room {
                     playerId: player.playerId,
                     healing: player.hpRegen,
                     damage: player.hpRegen * -1,
+                    type: 'normal',
                 });
             }, 1000);
         }
@@ -305,14 +313,34 @@ export class FightRoom extends Room {
                     attacker: this.state.player,
                 });
 
-                defender.takeDamage(poisonDamage, this.state.playerClient);
+                defender.takeDamage(poisonDamage, this.state.playerClient, 'poison');
                 poisonTalents.forEach(t => track(t, 0, poisonDamage));
                 this.logCombat(this.state.playerClient, { text: `${defender.name} takes ${fmt(poisonDamage)} poison damage!`, kind: 'poison_tick', defenderId: defender.playerId, damage: poisonDamage, poisonStacks: defender.poisonStack });
             }, 1000);
         }
     }
 
-    tryWeaponAttack(attacker: Player, defender: Player, weapon: Item, slot: string) {
+    checkBurn(attacker: Player, defender: Player) {
+        if (defender.burnStack <= 0) return;
+        const burnTalents = attacker.talents.filter(t => t.talentId === TalentType.BURNING_BLOOD);
+        if (!defender.burnTimer) {
+            defender.burnTimer = this.clock.setInterval(() => {
+                const burnDamage = defender.burnStack * BURN_DAMAGE_PER_STACK;
+
+                this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
+                    defender: defender,
+                    damage: burnDamage,
+                    attacker: this.state.player,
+                });
+
+                defender.takeDamage(burnDamage, this.state.playerClient, 'burn');
+                burnTalents.forEach(t => track(t, 0, burnDamage));
+                this.logCombat(this.state.playerClient, { text: `${defender.name} takes ${fmt(burnDamage)} burn damage!`, kind: 'burn_tick', defenderId: defender.playerId, damage: burnDamage, burnStacks: defender.burnStack });
+            }, 1000);
+        }
+    }
+
+    tryWeaponAttack(attacker: Player, defender: Player, weapon: Item, slot: string, isCounter = false) {
         const minDmg = weapon.baseMinDamage + attacker.accuracy;
         const strengthMultiplier = weapon.strengthScaling;
         const maxDmg = weapon.baseMaxDamage + attacker.strength * strengthMultiplier;
@@ -328,6 +356,7 @@ export class FightRoom extends Room {
                 this.dispatcher.dispatch(new OnDodgeTriggerCommand(), {
                     attacker: attacker,
                     defender: defender,
+                    isCounter: isCounter,
                 });
                 return;
             }

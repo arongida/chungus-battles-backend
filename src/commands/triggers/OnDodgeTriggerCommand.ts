@@ -8,14 +8,18 @@ import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class OnDodgeTriggerCommand extends Command<
     FightRoom,
-    { attacker: Player; defender: Player }
+    { attacker: Player; defender: Player; isCounter?: boolean }
 > {
-    execute({ attacker, defender} = this.payload) {
+    execute({ attacker, defender, isCounter} = this.payload) {
         const attackContext: BehaviorContext = {
             client: this.state.playerClient,
             attacker: attacker,
             defender: defender,
-            trigger: TriggerType.ON_DODGE
+            clock: this.clock,
+            trigger: TriggerType.ON_DODGE,
+            isCounterAttack: isCounter,
+            performWeaponAttack: (counterAttacker, counterDefender, weapon, slot) =>
+                this.room.tryWeaponAttack(counterAttacker, counterDefender, weapon, slot, true),
         };
         const talentsToTriggerOnDefender: Talent[] = defender.talents.filter(
             (talent) => talent.triggerTypes.includes(TriggerType.ON_DODGE)

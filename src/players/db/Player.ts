@@ -9,6 +9,7 @@ import {StatsSchema} from "../../common/db/Stats";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollTheDice} from "../../common/utils";
+import {rollItemStats} from "../../items/stats/itemStatRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION} from "../../common/types";
 
@@ -44,11 +45,10 @@ export async function getPlayer(playerId: number): Promise<Player> {
 }
 
 function buildItemSchema(itemFromDb: any): Item {
-    const { affectedStats, setBonusStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    const { affectedStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
     if (!item.sellPrice) item.sellPrice = Math.floor(item.price * item.rarity * 0.7);
     item.affectedStats = new AffectedStats().assign(affectedStats || {});
-    item.setBonusStats = new AffectedStats().assign(setBonusStats || {});
     item.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
@@ -166,6 +166,7 @@ export async function createNewPlayer(
     const playerSchema = getPlayerSchemaObject(newPlayer.toObject());
     const defaultWeapon = await getItemById(getDefaultWeaponId(avatarUrl));
     if (defaultWeapon) {
+        rollItemStats(defaultWeapon);
         playerSchema.inventory.push(defaultWeapon);
         playerSchema.setItemEquipped(defaultWeapon, EquipSlot.MAIN_HAND);
         if (defaultWeapon.itemId === 68) playerSchema.gold += 3;
@@ -213,11 +214,10 @@ function cleanRawObj(obj: any): Record<string, any> {
 
 function cleanRawItem(item: any): Record<string, any> | null {
     if (!item) return null;
-    const { _id, __v, affectedStats, setBonusStats, affectedEnemyStats, ...rest } = item;
+    const { _id, __v, affectedStats, affectedEnemyStats, ...rest } = item;
     return {
         ...rest,
         affectedStats: cleanRawObj(affectedStats),
-        setBonusStats: cleanRawObj(setBonusStats),
         affectedEnemyStats: cleanRawObj(affectedEnemyStats),
     };
 }

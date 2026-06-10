@@ -36,7 +36,6 @@ export function buildBaseAndItemsSnapshot(player: Player): StatsSnapshot {
     };
     player.equippedItems.forEach((item) => {
         addStats(snapshot, item.affectedStats);
-        if (item.setActive) addStats(snapshot, item.setBonusStats);
     });
     return snapshot;
 }

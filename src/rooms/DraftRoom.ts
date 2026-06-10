@@ -1,7 +1,8 @@
 import { Client, Room } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
 import { copyPlayer, createNewPlayer, getPlayer, updatePlayer } from '../players/db/Player';
-import { getNumberOfItems, getQuestItems, getItemById } from '../items/db/Item';
+import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
+import { rollItemStats } from '../items/stats/itemStatRoller';
 import { applyRarityUpgrade, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
@@ -13,7 +14,6 @@ import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRe
 import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCommand';
 import { EquipSlot } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
-import { UpdateActiveSets } from "../commands/UpdateActiveSets"; import { ArraySchema } from "@colyseus/schema";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 
 export class DraftRoom extends Room {
@@ -83,7 +83,6 @@ export class DraftRoom extends Room {
     update() {
         if (this.state.player) {
             this.dispatcher.dispatch(new UpdateStatsCommand());
-            this.dispatcher.dispatch(new UpdateActiveSets());
         }
     }
 
@@ -172,20 +171,13 @@ export class DraftRoom extends Room {
                 }
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
                 if (ownedTarget) {
-                    const preview = await getItemById(rolledItem.itemId);
-                    if (!preview) {
-                        this.state.shop.push(rolledItem);
-                        continue;
-                    }
-                    const source = await getItemById(rolledItem.itemId);
-                    if (!source) {
-                        this.state.shop.push(rolledItem);
-                        continue;
-                    }
-                    while (preview.rarity < ownedTarget.rarity + 1) {
-                        applyRarityUpgrade(preview, source, this.state.player);
-                    }
+                    // Preview = clone of the owned item (preserving its rolled stats
+                    // and rarity) upgraded once with this specific shop roll.
+                    const preview = cloneItem(ownedTarget);
+                    applyRarityUpgrade(preview, rolledItem, this.state.player);
                     preview.price = rolledItem.price;
+                    preview.sold = false;
+                    preview.equipped = false;
                     this.state.shop.push(preview);
                 } else {
                     this.state.shop.push(rolledItem);
@@ -279,8 +271,12 @@ export class DraftRoom extends Room {
             const shopItem = this.state.shop[i];
             if (shopItem.itemId !== soldItemId || shopItem.sold) continue;
             if (!findOwnedUpgradeTarget(this.state.player, soldItemId)) {
+                // Replace the stale upgrade-preview with a freshly rolled normal item.
                 const baseItem = await getItemById(soldItemId);
-                if (baseItem) this.state.shop.splice(i, 1, baseItem);
+                if (baseItem) {
+                    rollItemStats(baseItem);
+                    this.state.shop.splice(i, 1, baseItem);
+                }
             }
         }
     }
