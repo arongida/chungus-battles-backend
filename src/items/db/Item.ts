@@ -26,6 +26,7 @@ export const ItemSchema = new Schema({
     strengthScaling: Number,
     triggerTypes: [String],
     affectedEnemyStats: StatsSchema,
+    upgradePreview: Boolean,
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);

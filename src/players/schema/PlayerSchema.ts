@@ -230,7 +230,9 @@ export class Player extends Schema implements IStats {
         if (lockedIdx !== -1) this.lockedShop.splice(lockedIdx, 1);
 
         const ownedTarget = this.findUpgradeTarget(item.itemId);
-        if (ownedTarget && item.rarity === ownedTarget.rarity + 1) {
+        const isUpgrade = item.upgradePreview && ownedTarget && item.rarity > ownedTarget.rarity;
+        item.upgradePreview = false;
+        if (isUpgrade) {
             let equippedSlot: EquipSlot | null = null;
             this.equippedItems.forEach((value, key) => {
                 if (value === ownedTarget) equippedSlot = key as EquipSlot;

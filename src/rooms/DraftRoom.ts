@@ -3,7 +3,7 @@ import { DraftState } from './schema/DraftState';
 import { copyPlayer, createNewPlayer, getPlayer, updatePlayer } from '../players/db/Player';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyRarityUpgrade, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
+import { applyLuckyShopUpgrades, applyRarityUpgrade, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
 import { getRandomTalents } from '../talents/db/Talent';
@@ -12,7 +12,7 @@ import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCo
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
 import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
 import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCommand';
-import { EquipSlot } from "../items/types/ItemTypes";
+import { EquipSlot, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 
@@ -178,14 +178,24 @@ export class DraftRoom extends Room {
                     preview.price = rolledItem.price;
                     preview.sold = false;
                     preview.equipped = false;
+                    preview.upgradePreview = true;
+                    this.announceLuckyUpgrade(preview, applyLuckyShopUpgrades(preview, rolledItem, this.state.player));
                     this.state.shop.push(preview);
                 } else {
+                    this.announceLuckyUpgrade(rolledItem, applyLuckyShopUpgrades(rolledItem, rolledItem, this.state.player));
                     this.state.shop.push(rolledItem);
                 }
             }
         }
 
         this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
+    }
+
+    private announceLuckyUpgrade(item: { name: string; rarity: number }, steps: number) {
+        if (steps <= 0) return;
+        const rarityName = ItemRarity[item.rarity];
+        const displayName = rarityName.charAt(0) + rarityName.slice(1).toLowerCase();
+        this.clients[0]?.send('draft_log', `Lucky find! ${item.name} appears at ${displayName} rarity!`);
     }
 
     private async handleRefreshTalentSelection(client: Client) {
