@@ -21,6 +21,8 @@ if (!DB_CONNECTION_STRING) {
 }
 
 const DESCRIPTIONS: Record<number, string> = {
+    14:  'Each hit applies 1 burn stack (2 damage per stack per second, for 3s).',
+    18:  "Each hit applies 1 stack of poison. Poison deals damage scaling with the enemy's max HP each second for 10s.",
     28:  '+3% attack speed per rogue item at fight start.',
     701: '+0.5 strength per hit, resets after fight.',
 };

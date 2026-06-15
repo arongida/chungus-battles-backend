@@ -29,9 +29,25 @@ const updates: { talentId: number; description: string }[] = [
   },
   {
     talentId: 10,
-    // was: "Once every 2 seconds: restore 2 (+1/level) health."
-    // "+1/level" reads as "1 divided by level" — clarify to "per level"
-    description: 'Once every 2 seconds: restore 2 (+1 per level) health.',
+    // Burning Blood. code: applies max(1, floor(1 + hpRegen)) burn stacks every 3s.
+    // Clarify the burn DoT mechanic (2 dmg/stack/sec for 3s) directly in the description.
+    description: 'Once every 3 seconds: apply 1 (+1 per HP regen) burn stacks to the enemy. Burn deals 2 damage per stack each second for 3s.',
+  },
+  {
+    talentId: 27,
+    // Poison. code: applies 1 poison stack on-attack.
+    // Clarify the poison DoT mechanic (scales with target's max HP, lasts 10s).
+    description: "On attack: apply 1 poison stack to the enemy. Poison deals damage scaling with the enemy's max HP each second for 10s.",
+  },
+  {
+    talentId: 302,
+    // Rogue vol III. — same poison-on-attack effect as talent 27.
+    description: "On attack: apply 1 poison stack to the enemy. Poison deals damage scaling with the enemy's max HP each second for 10s.",
+  },
+  {
+    talentId: 36,
+    // Corroding Collection. code: enemy gains 2 poison stacks per item they own.
+    description: "The enemy gains 2 poison stacks per item they have. Poison deals damage scaling with the enemy's max HP each second for 10s.",
   },
   {
     talentId: 16,

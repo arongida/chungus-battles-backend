@@ -35,4 +35,4 @@ export function wandOfFireBurnStacks(rarity: number): number {
 export const BURN_DAMAGE_PER_STACK = 2;
 
 /** Burn DoT: how long an application's stacks last. */
-export const BURN_DURATION_MS = 4000;
+export const BURN_DURATION_MS = 3000;
