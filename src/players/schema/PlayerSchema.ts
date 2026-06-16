@@ -41,6 +41,7 @@ export class Player extends Schema implements IStats {
     invincibleTimer: Delayed;
     talentsOnCooldown: TalentType[] = [];
     attackSpeedMultiplier: number = 1;
+    healingEffectiveness: number = 1;
     hasVersionWin: boolean = false;
 
 
@@ -171,6 +172,25 @@ export class Player extends Schema implements IStats {
             return;
         }
         this.invincibleTimer = clock.setTimeout(endInvincibility, invincibleLenghtMS);
+    }
+
+    heal(amount: number, poisonSource?: Player): number {
+        if (amount <= 0) {
+            this.hp += amount;
+            return amount;
+        }
+        const healed = amount * this.healingEffectiveness;
+        this.hp += healed;
+        const prevented = amount - healed;
+        if (prevented > 0 && poisonSource) {
+            poisonSource.talents.forEach((t) => {
+                if (t.talentId === TalentType.POISON || t.talentId === TalentType.ROGUE_3) {
+                    t.statHealingPrevented += prevented;
+                    t.totalHealingPrevented += prevented;
+                }
+            });
+        }
+        return healed;
     }
 
     takeDamage(damage: number, playerClient: Client, damageType: DamageType = 'normal') {

@@ -222,7 +222,9 @@ export class FightRoom extends Room {
     startEndBurnTimer() {
         if (this.state.endBurnTimer) return;
         this.state.endBurnTimer = this.clock.setInterval(() => {
-            const burnDamage = this.state.endBurnDamage++;
+            const burnDamage = this.state.endBurnDamage;
+            const increment = Math.pow(10, Math.floor(Math.log10(burnDamage)));
+            this.state.endBurnDamage += increment;
             this.state.player.hp -= burnDamage;
             this.state.enemy.hp -= burnDamage;
             this.logCombat('broadcast', { text: `The battle is dragging on! Both players burned for ${burnDamage} damage!`, kind: 'end_burn', damage: burnDamage, attackerId: this.state.player.playerId, defenderId: this.state.enemy.playerId });
@@ -279,16 +281,16 @@ export class FightRoom extends Room {
         player.attackTimers.set(slot, timer);
     }
 
-    startRegenTimer(player: Player) {
+    startRegenTimer(player: Player, opponent?: Player) {
         if (player.hpRegen) {
             player.regenTimer = this.clock.setInterval(() => {
-                player.hp += player.hpRegen;
-                const isMinusRegen = player.hpRegen < 0;
-                this.logCombat(this.state.playerClient, { text: `${player.name} regenerates ${fmt(player.hpRegen)} hp!`, kind: 'regen', attackerId: player.playerId, healing: player.hpRegen });
+                const healed = player.heal(player.hpRegen, opponent);
+                const isMinusRegen = healed < 0;
+                this.logCombat(this.state.playerClient, { text: `${player.name} regenerates ${fmt(healed)} hp!`, kind: 'regen', attackerId: player.playerId, healing: healed });
                 this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {
                     playerId: player.playerId,
-                    healing: player.hpRegen,
-                    damage: player.hpRegen * -1,
+                    healing: healed,
+                    damage: healed * -1,
                     type: 'normal',
                 });
             }, 1000);
@@ -297,15 +299,13 @@ export class FightRoom extends Room {
 
     checkPoison(attacker: Player, defender: Player) {
         if (defender.poisonStack <= 0) return;
-        const poisonTalent = attacker.talents.find((talent) => talent.talentId === TalentType.POISON);
         const poisonTalents = attacker.talents.filter(t =>
             t.talentId === TalentType.POISON || t.talentId === TalentType.ROGUE_3
         );
 
-        const activationRate = poisonTalent ? poisonTalent.activationRate : 0.015;
         if (!defender.poisonTimer) {
             defender.poisonTimer = this.clock.setInterval(() => {
-                const poisonDamage = defender.poisonStack * (activationRate * defender.maxHp + activationRate * 100) * 0.1;
+                const poisonDamage = defender.poisonStack * defender.maxHp * 0.001;
 
                 this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
                     defender: defender,
@@ -402,8 +402,8 @@ export class FightRoom extends Room {
         //start attack timers
         this.startWeaponAttackTimers(this.state.player, this.state.enemy);
         this.startWeaponAttackTimers(this.state.enemy, this.state.player);
-        this.startRegenTimer(this.state.player);
-        this.startRegenTimer(this.state.enemy);
+        this.startRegenTimer(this.state.player, this.state.enemy);
+        this.startRegenTimer(this.state.enemy, this.state.player);
 
         //start fight start effects
         this.dispatcher.dispatch(new FightStartTriggerCommand());

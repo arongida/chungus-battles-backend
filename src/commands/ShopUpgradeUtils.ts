@@ -23,7 +23,7 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
   },
   18: (item) => {
     const stacks = item.rarity;
-    return `Applies ${stacks} poison stack${stacks > 1 ? 's' : ''} on hit.`;
+    return `Applies ${stacks} poison stack${stacks > 1 ? 's' : ''} on hit. Each stack deals 1% max HP over 10s and cuts healing by 1%.`;
   },
   59: (item) => `Heals for ${item.rarity * 5 + 6}% of damage dealt on hit.`,
   702: (item, player) => `Gains +${(player.level * item.rarity * 0.01 + 0.01).toFixed(2)} * level strength per attack.`,
