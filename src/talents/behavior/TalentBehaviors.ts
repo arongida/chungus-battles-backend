@@ -95,7 +95,7 @@ export const TalentBehaviors = {
     },
 
     [TalentType.INVIGORATE]: (context: TalentBehaviorContext) => {
-        const { attacker, damage, client } = context;
+        const { attacker, defender, damage, client } = context;
         const leechAmount = damage * 0.15 + 1;
         const healed = attacker.heal(leechAmount, defender);
         track(context.talent, 1, 0, healed);
