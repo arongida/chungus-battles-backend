@@ -26,6 +26,8 @@ export const TalentSchema = new Schema({
   totalHealingDone: { type: Number, default: 0 },
   totalGoldGained:  { type: Number, default: 0 },
   totalXpGained:    { type: Number, default: 0 },
+  statHealingPrevented:  { type: Number, default: 0 },
+  totalHealingPrevented: { type: Number, default: 0 },
 });
 
 export const talentModel = mongoose.model('Talent', TalentSchema);

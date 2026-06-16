@@ -47,6 +47,7 @@ export class UpdateStatsCommand extends Command<
 
         player.attackSpeed = player.attackSpeedMultiplier;
         player.hp = player.maxHp - damageTaken;
+        player.healingEffectiveness = Math.max(0, 1 - player.poisonStack * 0.01);
     }
 
 

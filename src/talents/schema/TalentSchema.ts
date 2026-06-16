@@ -28,6 +28,8 @@ export class Talent extends Schema {
     @type('number') totalHealingDone: number = 0;
     @type('number') totalGoldGained: number = 0;
     @type('number') totalXpGained: number = 0;
+    @type('number') statHealingPrevented: number = 0;
+    @type('number') totalHealingPrevented: number = 0;
 
     resetCombatStats() {
         this.statActivations = 0;
@@ -35,6 +37,7 @@ export class Talent extends Schema {
         this.statHealingDone = 0;
         this.statGoldGained = 0;
         this.statXpGained = 0;
+        this.statHealingPrevented = 0;
     }
 
     executeBehavior(context: BehaviorContext) {

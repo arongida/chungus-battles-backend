@@ -1,7 +1,7 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
 import { EquipSlot, ItemType } from '../types/ItemTypes';
-import { CombatLogMessage } from '../../common/MessageTypes';
+import { CombatLogMessage, fmt } from '../../common/MessageTypes';
 import {
     chungiHpDamageFraction,
     FLOWERING_STAFF_INVULN_COOLDOWN_MS,
@@ -112,12 +112,12 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     },
 
     // Soulstealer's Scythe (59) — rarity 2+: heals for (rarity*5+5)% of damage dealt + 1 on hit.
-    59: ({ attacker, damage, client, item }) => {
+    59: ({ attacker, defender, damage, client, item }) => {
         if (!attacker || !damage || !item || item.rarity <= 1) return;
         const heal = Math.floor(damage * (item.rarity * 5 + 5) / 100) + 1;
-        attacker.hp += heal;
-        client?.send('healing', { playerId: attacker.playerId, healing: heal });
-        client?.send('combat_log', { text: `${attacker.name}'s ${item.name} leeches ${heal} health!`, kind: 'leech', attackerId: attacker.playerId, itemId: item.itemId, healing: heal } as CombatLogMessage)
+        const scytheHealed = attacker.heal(heal, defender);
+        client?.send('healing', { playerId: attacker.playerId, healing: scytheHealed });
+        client?.send('combat_log', { text: `${attacker.name}'s ${item.name} leeches ${fmt(scytheHealed)} health!`, kind: 'leech', attackerId: attacker.playerId, itemId: item.itemId, healing: scytheHealed } as CombatLogMessage)
     },
 
     // Magic Ring Weapon (702) — rarity 2+: gains +(rarity*0.01+0.01) strength per attack.

@@ -14,11 +14,11 @@ import { CombatLogMessage, fmt } from "../../common/MessageTypes";
 import { Talent } from "../schema/TalentSchema";
 
 export function track(talent: Talent, activations: number, damage = 0, healing = 0, gold = 0, xp = 0) {
-    talent.statActivations  += activations;  talent.totalActivations  += activations;
-    talent.statDamageDealt  += damage;       talent.totalDamageDealt  += damage;
-    talent.statHealingDone  += healing;      talent.totalHealingDone  += healing;
-    talent.statGoldGained   += gold;         talent.totalGoldGained   += gold;
-    talent.statXpGained     += xp;           talent.totalXpGained     += xp;
+    talent.statActivations += activations; talent.totalActivations += activations;
+    talent.statDamageDealt += damage; talent.totalDamageDealt += damage;
+    talent.statHealingDone += healing; talent.totalHealingDone += healing;
+    talent.statGoldGained += gold; talent.totalGoldGained += gold;
+    talent.statXpGained += xp; talent.totalXpGained += xp;
 }
 
 export const TalentBehaviors = {
@@ -97,16 +97,16 @@ export const TalentBehaviors = {
     [TalentType.INVIGORATE]: (context: TalentBehaviorContext) => {
         const { attacker, damage, client } = context;
         const leechAmount = damage * 0.15 + 1;
-        attacker.hp += leechAmount;
-        track(context.talent, 1, 0, leechAmount);
-        client.send('combat_log', { text: `${attacker.name} leeches ${fmt(leechAmount)} health!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, healing: leechAmount } as CombatLogMessage);
+        const healed = attacker.heal(leechAmount, defender);
+        track(context.talent, 1, 0, healed);
+        client.send('combat_log', { text: `${attacker.name} leeches ${fmt(healed)} health!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, healing: healed } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.INVIGORATE,
         });
         client.send('healing', {
             playerId: attacker.playerId,
-            healing: leechAmount,
+            healing: healed,
         });
     },
 
@@ -115,13 +115,14 @@ export const TalentBehaviors = {
         if (trigger === TriggerType.ACTIVE) {
             if (defender.strength > 1 && defender.strength > defender.accuracy) {
                 talent.affectedEnemyStats.strength -= 1;
-                talent.affectedStats.strength += 1;
-                client.send('combat_log', { text: `${attacker.name} snitches 1 strength from ${defender.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
-                client.send('trigger_talent', {
-                    playerId: attacker.playerId,
-                    talentId: TalentType.SNITCH,
-                });
+
             }
+            talent.affectedStats.strength += 1;
+            client.send('combat_log', { text: `${attacker.name} snitches 1 strength from ${defender.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
+            client.send('trigger_talent', {
+                playerId: attacker.playerId,
+                talentId: TalentType.SNITCH,
+            });
         } else if (trigger === TriggerType.FIGHT_END) {
             talent.affectedEnemyStats.strength = 0;
             talent.affectedStats.strength = 0;
@@ -166,16 +167,16 @@ export const TalentBehaviors = {
             attacker: attacker,
         });
         defender.takeDamage(reducedAmount, client);
-        attacker.hp += reducedAmount;
-        track(context.talent, 1, reducedAmount, reducedAmount);
-        client.send('combat_log', { text: `${attacker.name} scams ${fmt(reducedAmount)} health from ${defender.name}!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: reducedAmount, healing: reducedAmount } as CombatLogMessage);
+        const scamHealed = attacker.heal(reducedAmount, defender);
+        track(context.talent, 1, reducedAmount, scamHealed);
+        client.send('combat_log', { text: `${attacker.name} scams ${fmt(scamHealed)} health from ${defender.name}!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: reducedAmount, healing: scamHealed } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.SCAM,
         });
         client.send('healing', {
             playerId: attacker.playerId,
-            healing: amount,
+            healing: scamHealed,
         });
     },
 
@@ -321,16 +322,16 @@ export const TalentBehaviors = {
     [TalentType.RESILIENCE]: (context: TalentBehaviorContext) => {
         const { defender, client, talent } = context;
         const healingAmount = talent.activationRate * defender.maxHp;
-        defender.hp += healingAmount;
-        track(talent, 1, 0, healingAmount);
-        client.send('combat_log', { text: `${defender.name} recovers ${fmt(healingAmount)} health!`, kind: 'heal', talentId: talent.talentId, attackerId: defender.playerId, healing: healingAmount } as CombatLogMessage);
+        const resilienceHealed = defender.heal(healingAmount);
+        track(talent, 1, 0, resilienceHealed);
+        client.send('combat_log', { text: `${defender.name} recovers ${fmt(resilienceHealed)} health!`, kind: 'heal', talentId: talent.talentId, attackerId: defender.playerId, healing: resilienceHealed } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: defender.playerId,
             talentId: TalentType.RESILIENCE,
         });
         client.send('healing', {
             playerId: defender.playerId,
-            healing: healingAmount,
+            healing: resilienceHealed,
         });
     },
 
@@ -705,14 +706,14 @@ export const TalentBehaviors = {
 
             attacker.equippedItems.forEach((item) => {
                 if (item.class === ItemClass.WARRIOR) {
-                    talent.affectedStats.strength         += item.affectedStats.strength         * talent.activationRate;
-                    talent.affectedStats.accuracy         += item.affectedStats.accuracy         * talent.activationRate;
-                    talent.affectedStats.maxHp            += item.affectedStats.maxHp            * talent.activationRate;
-                    talent.affectedStats.defense          += item.affectedStats.defense          * talent.activationRate;
-                    talent.affectedStats.dodgeRate        += item.affectedStats.dodgeRate        * talent.activationRate;
+                    talent.affectedStats.strength += item.affectedStats.strength * talent.activationRate;
+                    talent.affectedStats.accuracy += item.affectedStats.accuracy * talent.activationRate;
+                    talent.affectedStats.maxHp += item.affectedStats.maxHp * talent.activationRate;
+                    talent.affectedStats.defense += item.affectedStats.defense * talent.activationRate;
+                    talent.affectedStats.dodgeRate += item.affectedStats.dodgeRate * talent.activationRate;
                     talent.affectedStats.flatDmgReduction += item.affectedStats.flatDmgReduction * talent.activationRate;
-                    talent.affectedStats.income           += item.affectedStats.income           * talent.activationRate;
-                    talent.affectedStats.hpRegen          += item.affectedStats.hpRegen          * talent.activationRate;
+                    talent.affectedStats.income += item.affectedStats.income * talent.activationRate;
+                    talent.affectedStats.hpRegen += item.affectedStats.hpRegen * talent.activationRate;
                 }
             });
 
