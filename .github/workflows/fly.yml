@@ -2,7 +2,8 @@ name: Fly Deploy
 on:
   push:
     branches:
-      - main # change to main if needed
+      - main
+      - development
 jobs:
   deploy:
     name: Deploy app
@@ -11,6 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
+      - name: Deploy production
+        if: github.ref_name == 'main'
+        run: flyctl deploy --remote-only --config fly.toml
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Deploy dev
+        if: github.ref_name == 'development'
+        run: flyctl deploy --remote-only --config fly.dev.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
