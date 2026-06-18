@@ -87,7 +87,7 @@ export class FightRoom extends Room {
 
         //set up enemy state
         if (!this.state.enemy.playerId) {
-            let enemy = await getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
+            let enemy = await this.pickEnemy(options.enemyPlayerId);
             //set up enemy state
             await this.setUpState(enemy, true);
         }
@@ -119,6 +119,18 @@ export class FightRoom extends Room {
             this.state.battleStarted = true;
             this.startBattle();
         }, 5500);
+    }
+
+    // Dev-only debug tool: lets the client request a specific opponent (the "next fight
+    // picker") instead of random same-round matchmaking. Disabled in production regardless
+    // of what the client sends. Falls back to normal matchmaking if no override is given,
+    // not allowed, or the requested player doesn't exist.
+    async pickEnemy(enemyPlayerId: any): Promise<Player> {
+        if (enemyPlayerId && process.env.NODE_ENV !== 'production') {
+            const enemy = await getPlayer(Number(enemyPlayerId));
+            if (enemy) return enemy;
+        }
+        return getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
     }
 
     async sendFightEndToClient() {
