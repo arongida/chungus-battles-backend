@@ -8,6 +8,9 @@ primary_region = 'arn'
 
 [build]
 
+[env]
+  COLYSEUS_SEAT_RESERVATION_TIME = '30'
+
 [http_service]
   internal_port = 2567
   force_https = true

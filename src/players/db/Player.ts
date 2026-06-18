@@ -341,6 +341,7 @@ export interface LeaderboardFilters {
     name?: string;
     avatar?: string;
     minRound?: number;
+    level?: number;
     rankForOriginalPlayerId?: number;
 }
 
@@ -350,6 +351,7 @@ function buildMatchConditions(filters: LeaderboardFilters): Record<string, any> 
     if (filters.name) match.name = { $regex: filters.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
     if (filters.avatar) match.avatarUrl = filters.avatar;
     if (filters.minRound !== undefined) match.round = { $gte: filters.minRound };
+    if (filters.level !== undefined) match.level = filters.level;
     return match;
 }
 
