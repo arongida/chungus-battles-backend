@@ -47,8 +47,9 @@ export const server = defineServer({
             const name = req.query.name ? String(req.query.name) : undefined;
             const avatar = req.query.avatar ? String(req.query.avatar) : undefined;
             const minRound = req.query.minRound !== undefined ? Number(req.query.minRound) : undefined;
+            const level = req.query.level !== undefined ? Number(req.query.level) : undefined;
             const rankForOriginalPlayerId = req.query.rankForOriginalPlayerId ? Number(req.query.rankForOriginalPlayerId) : undefined;
-            const result = await getLeaderboard({ limit, skip, gameVersion: currentVersion ? GAME_VERSION : undefined, name, avatar, minRound, rankForOriginalPlayerId });
+            const result = await getLeaderboard({ limit, skip, gameVersion: currentVersion ? GAME_VERSION : undefined, name, avatar, minRound, level, rankForOriginalPlayerId });
             res.status(200).json(result);
         });
 

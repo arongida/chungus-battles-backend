@@ -1,14 +1,15 @@
-# fly.toml app configuration file generated for chungus-battles-backend on 2024-05-16T19:26:02+02:00
+# fly.toml app configuration file for the chungus-battles-backend DEV environment
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'chungus-battles-backend'
+app = 'chungus-battles-backend-dev'
 primary_region = 'arn'
 
 [build]
 
 [env]
+  NODE_ENV = 'development'
   COLYSEUS_SEAT_RESERVATION_TIME = '30'
 
 [http_service]
