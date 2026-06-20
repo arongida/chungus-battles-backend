@@ -5,6 +5,7 @@ import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../item
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { applyLuckyShopUpgrades, applyRarityUpgrade, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
 import { Player } from '../players/schema/PlayerSchema';
+import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
 import { getRandomTalents } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
@@ -22,6 +23,9 @@ export class DraftRoom extends Room {
 
     dispatcher = new Dispatcher(this);
     private talentSelectionGeneration: number = 0;
+    // Most-recently-sold item, kept around so an accidental sale can be undone. A single
+    // slot is enough — selling again overwrites it, so only the latest sale is recoverable.
+    private lastSoldItem: Item | null = null;
 
     async onCreate(options: any) {
         this.setState(new DraftState());
@@ -31,6 +35,9 @@ export class DraftRoom extends Room {
         });
         this.onMessage('sell', async (client, message) => {
             await this.sellItem(message.itemId);
+        });
+        this.onMessage('undo_sell', (client) => {
+            this.undoSell(client);
         });
         this.onMessage('equip', async (client, message) => {
             await this.equipItem(message.itemId, message.slot, client);
@@ -169,6 +176,7 @@ export class DraftRoom extends Room {
                     rolledItem.price = this.calculatePotionPrice(this.state.player);
                     rolledItem.sellPrice = Math.floor(rolledItem.price * 0.7);
                 }
+                const slot = this.state.shop.length;
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
                 if (ownedTarget) {
                     // Preview = clone of the owned item (preserving its rolled stats
@@ -179,10 +187,10 @@ export class DraftRoom extends Room {
                     preview.sold = false;
                     preview.equipped = false;
                     preview.upgradePreview = true;
-                    this.announceLuckyUpgrade(preview, applyLuckyShopUpgrades(preview, rolledItem, this.state.player));
+                    this.announceLuckyUpgrade(preview, applyLuckyShopUpgrades(preview, rolledItem, this.state.player), slot);
                     this.state.shop.push(preview);
                 } else {
-                    this.announceLuckyUpgrade(rolledItem, applyLuckyShopUpgrades(rolledItem, rolledItem, this.state.player));
+                    this.announceLuckyUpgrade(rolledItem, applyLuckyShopUpgrades(rolledItem, rolledItem, this.state.player), slot);
                     this.state.shop.push(rolledItem);
                 }
             }
@@ -191,11 +199,13 @@ export class DraftRoom extends Room {
         this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
     }
 
-    private announceLuckyUpgrade(item: { name: string; rarity: number }, steps: number) {
+    private announceLuckyUpgrade(item: { name: string; rarity: number }, steps: number, slot: number) {
         if (steps <= 0) return;
         const rarityName = ItemRarity[item.rarity];
         const displayName = rarityName.charAt(0) + rarityName.slice(1).toLowerCase();
-        this.clients[0]?.send('draft_log', `Lucky find! ${item.name} appears at ${displayName} rarity!`);
+        // Floating text over the shop card (see TriggerAnimations.triggerShopFloatingText)
+        // instead of a snackbar toast — the toast queued/overlapped awkwardly with other UI.
+        this.clients[0]?.send('shop_floating', { slot, text: `Lucky find! ${item.name} appears at ${displayName} rarity!`, rarity: item.rarity });
     }
 
     private async handleRefreshTalentSelection(client: Client) {
@@ -273,7 +283,21 @@ export class DraftRoom extends Room {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
         await this.state.player.sellItem(item);
+        this.lastSoldItem = item;
+        this.state.canUndoSell = true;
         await this.resetStaleUpgradePreviews(itemId);
+    }
+
+    private undoSell(client: Client) {
+        if (!this.lastSoldItem) {
+            client.send('error', 'Nothing to undo!');
+            return;
+        }
+        const item = this.lastSoldItem;
+        this.lastSoldItem = null;
+        this.state.canUndoSell = false;
+        this.state.player.gold -= item.sellPrice;
+        this.state.player.inventory.push(item);
     }
 
     private async resetStaleUpgradePreviews(soldItemId: number) {
