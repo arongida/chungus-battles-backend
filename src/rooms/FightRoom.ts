@@ -31,6 +31,10 @@ export class FightRoom extends Room {
 
     dispatcher = new Dispatcher(this);
     private recorder = new ReplayRecorder();
+    // Stable id for the fight currently in progress — generated up front (in startBattle)
+    // so it can be included in the end_battle broadcast, not just the fire-and-forget
+    // replay save that happens afterward. Lets the client deep-link "Watch Replay".
+    private replayId = randomUUID();
 
     onCreate() {
         this.state = new FightState();
@@ -48,7 +52,7 @@ export class FightRoom extends Room {
 
         this.onMessage('continue_run', () => {
             this.state.versionWinPending = false;
-            this.broadcast('end_battle', { result: 'win' });
+            this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId });
         });
 
         this.onMessage('accept_win', () => {
@@ -59,6 +63,15 @@ export class FightRoom extends Room {
         this.onMessage('abandon_run', async (client) => {
             this.state.player.lives = 0;
             await updatePlayer(this.state.player);
+        });
+
+        // Concede the current fight only — counts as a normal loss (life + loss-bonus
+        // gold), unlike abandon_run which ends the whole run. Works any time before the
+        // fight has already resolved, including during the pre-battle countdown.
+        this.onMessage('forfeit_fight', () => {
+            if (this.state.fightResult) return;
+            this.state.fightResult = FightResultType.LOSE;
+            this.concludeBattle();
         });
 
         //start clock for timings
@@ -142,7 +155,7 @@ export class FightRoom extends Room {
         } else if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');
         } else {
-            this.broadcast('end_battle', { result: this.state.fightResult ?? 'win' });
+            this.broadcast('end_battle', { result: this.state.fightResult ?? 'win', replayId: this.currentReplayId });
         }
     }
 
@@ -185,6 +198,13 @@ export class FightRoom extends Room {
         console.log('[FightRoom]', 'room', this.roomId, 'disposing...');
     }
 
+    // Only meaningful once startBattle() has run (recorder.start() populates initialState) —
+    // e.g. a fight forfeited during the pre-battle countdown never gets a recorded replay,
+    // so the client shouldn't be pointed at a replayId that will 404.
+    private get currentReplayId(): string | undefined {
+        return this.recorder.initialState ? this.replayId : undefined;
+    }
+
     private logCombat(target: Client | 'broadcast', entry: CombatLogMessage) {
         if (target === 'broadcast') this.broadcast('combat_log', entry);
         else target.send('combat_log', entry);
@@ -213,22 +233,27 @@ export class FightRoom extends Room {
                 (this.state.player.hp <= 0 && !this.state.player.invincible) ||
                 (this.state.enemy.hp <= 0 && !this.state.enemy.invincible)
             ) {
-                //set state and clear intervals
-                this.state.battleStarted = false;
-                this.state.player.clearAllAttackTimers();
-                this.state.enemy.clearAllAttackTimers();
-                this.state.player.poisonTimer?.clear();
-                this.state.enemy.poisonTimer?.clear();
-                this.state.player.burnTimer?.clear();
-                this.state.enemy.burnTimer?.clear();
-                this.state.endBurnTimer?.clear();
-                this.state.skillsTimers.forEach((timer) => timer.clear());
-                this.state.player.regenTimer?.clear();
-                this.state.enemy.regenTimer?.clear();
-                this.logCombat('broadcast', { text: 'The battle has ended!', kind: 'fight_end' });
-                this.handleFightEnd();
+                this.concludeBattle();
             }
         }
+    }
+
+    // Stops every combat timer and runs the win/lose/draw resolution. Shared by the
+    // natural HP<=0 check in update() and the forfeit_fight handler below.
+    private concludeBattle() {
+        this.state.battleStarted = false;
+        this.state.player.clearAllAttackTimers();
+        this.state.enemy.clearAllAttackTimers();
+        this.state.player.poisonTimer?.clear();
+        this.state.enemy.poisonTimer?.clear();
+        this.state.player.burnTimer?.clear();
+        this.state.enemy.burnTimer?.clear();
+        this.state.endBurnTimer?.clear();
+        this.state.skillsTimers.forEach((timer) => timer.clear());
+        this.state.player.regenTimer?.clear();
+        this.state.enemy.regenTimer?.clear();
+        this.logCombat('broadcast', { text: 'The battle has ended!', kind: 'fight_end' });
+        this.handleFightEnd();
     }
 
     startEndBurnTimer() {
@@ -401,6 +426,7 @@ export class FightRoom extends Room {
 
     //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
     startBattle() {
+        this.replayId = randomUUID();
         this.recorder.start({
             player: snapshotPlayer(this.state.player),
             enemy: snapshotPlayer(this.state.enemy),
@@ -473,7 +499,7 @@ export class FightRoom extends Room {
         this.recorder.finalize();
         if (this.recorder.initialState) {
             saveReplay({
-                replayId: randomUUID(),
+                replayId: this.replayId,
                 originalPlayerId: this.state.player.originalPlayerId,
                 playerId: this.state.player.playerId,
                 round: this.state.player.round,
@@ -510,7 +536,7 @@ export class FightRoom extends Room {
             }
         }
 
-        this.broadcast('end_battle', { result: 'win' });
+        this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId });
     }
 
     private handleLoose() {
@@ -525,13 +551,13 @@ export class FightRoom extends Room {
                             : 10;
             this.state.player.gold += lossBonus;
             this.logCombat('broadcast', { text: `You received ${lossBonus} bonus gold for losing!`, kind: 'reward', goldDelta: lossBonus });
-            this.broadcast('end_battle', { result: 'lose', lossBonus });
+            this.broadcast('end_battle', { result: 'lose', lossBonus, replayId: this.currentReplayId });
         }
     }
 
     private handleDraw() {
         console.log('[FightRoom]', 'draw!');
         this.logCombat('broadcast', { text: "It's a draw!", kind: 'result', result: 'draw' });
-        this.broadcast('end_battle', { result: 'draw' });
+        this.broadcast('end_battle', { result: 'draw', replayId: this.currentReplayId });
     }
 }
