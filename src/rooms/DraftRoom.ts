@@ -205,7 +205,7 @@ export class DraftRoom extends Room {
         const displayName = rarityName.charAt(0) + rarityName.slice(1).toLowerCase();
         // Floating text over the shop card (see TriggerAnimations.triggerShopFloatingText)
         // instead of a snackbar toast — the toast queued/overlapped awkwardly with other UI.
-        this.clients[0]?.send('shop_floating', { slot, text: `Lucky find! ${item.name} appears at ${displayName} rarity!`, rarity: item.rarity });
+        this.clients[0]?.send('shop_floating', { slot, text: `Lucky find! Rarity up!`, rarity: item.rarity });
     }
 
     private async handleRefreshTalentSelection(client: Client) {
