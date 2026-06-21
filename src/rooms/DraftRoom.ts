@@ -205,7 +205,7 @@ export class DraftRoom extends Room {
         const displayName = rarityName.charAt(0) + rarityName.slice(1).toLowerCase();
         // Floating text over the shop card (see TriggerAnimations.triggerShopFloatingText)
         // instead of a snackbar toast — the toast queued/overlapped awkwardly with other UI.
-        this.clients[0]?.send('shop_floating', { slot, text: `Lucky find! ${item.name} appears at ${displayName} rarity!`, rarity: item.rarity });
+        this.clients[0]?.send('shop_floating', { slot, text: `Lucky find! Rarity up!`, rarity: item.rarity });
     }
 
     private async handleRefreshTalentSelection(client: Client) {
@@ -218,6 +218,7 @@ export class DraftRoom extends Room {
             this.state.player.gold -= price;
             this.state.hasFreeTalentReroll = false;
             this.updateTalentRerollCost();
+            this.invalidateUndoSell();
             await this.updateTalentSelection();
         }
     }
@@ -228,9 +229,11 @@ export class DraftRoom extends Room {
 
     private async updateTalentSelection() {
         const exceptions = this.state.availableTalents.map((talent) => talent.talentId);
-        this.state.availableTalents.clear();
         //if player has no talent points, return
-        if (this.state.remainingTalentPoints <= 0) return;
+        if (this.state.remainingTalentPoints <= 0) {
+            this.state.availableTalents.clear();
+            return;
+        }
 
         const generation = ++this.talentSelectionGeneration;
 
@@ -243,6 +246,10 @@ export class DraftRoom extends Room {
         //assign talents from db to state
         const talents = await getRandomTalents(2, nextTalentLevel, exceptions);
         if (generation !== this.talentSelectionGeneration) return;
+        // Clear and repopulate back-to-back (no await between them) so clients never observe
+        // an empty availableTalents mid-reroll — that transient emptiness was being
+        // misread by the frontend as "talent was picked" and closing the modal.
+        this.state.availableTalents.clear();
         talents.forEach((talent) => {
             if (this.state.availableTalents.length < 2) this.state.availableTalents.push(talent);
         });
@@ -277,6 +284,7 @@ export class DraftRoom extends Room {
             return;
         }
         this.state.player.getItem(item);
+        this.invalidateUndoSell();
     }
 
     private async sellItem(itemId: number) {
@@ -294,10 +302,22 @@ export class DraftRoom extends Room {
             return;
         }
         const item = this.lastSoldItem;
+        if (this.state.player.gold < item.sellPrice) {
+            client.send('error', 'Not enough gold to undo!');
+            return;
+        }
         this.lastSoldItem = null;
         this.state.canUndoSell = false;
         this.state.player.gold -= item.sellPrice;
         this.state.player.inventory.push(item);
+    }
+
+    // Undo is meant for instant regret right after a sale — any other gold-spending
+    // action in between (buy, level up, refresh shop/talents) closes the window, so
+    // a sale's proceeds can't be spent and then the item recovered for free on top.
+    private invalidateUndoSell() {
+        this.lastSoldItem = null;
+        this.state.canUndoSell = false;
     }
 
     private async resetStaleUpgradePreviews(soldItemId: number) {
@@ -339,6 +359,7 @@ export class DraftRoom extends Room {
         this.state.player.gold -= this.state.player.refreshShopCost;
         this.state.player.unlockShop();
         this.state.shop.clear();
+        this.invalidateUndoSell();
         await this.updateShop(this.state.shopSize);
     }
 
@@ -394,6 +415,7 @@ export class DraftRoom extends Room {
         }
         this.state.player.gold -= price;
         this.state.player.xp += xp;
+        this.invalidateUndoSell();
         await this.checkLevelUp();
     }
 
