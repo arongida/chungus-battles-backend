@@ -135,10 +135,16 @@ export class DraftRoom extends Room {
             this.dispatcher.dispatch(new DraftAuraTriggerCommand());
         }, 1000)
 
-        //shop start trigger - wait a bit for client to load
-        await delay(500, this.clock);
-        await this.dispatcher.dispatch(new ShopStartTriggerCommand());
-        await this.checkLevelUp();
+        //shop start trigger - deferred (not awaited) so onJoin returns and the
+        //client receives its JOIN_ROOM confirmation before this runs. Any
+        //client.send() called from here happens before that handshake — the
+        //Colyseus SDK only registers onMessage handlers once JOIN_ROOM is
+        //processed, so anything sent earlier is silently dropped. 500ms is
+        //comfortably more than enough time for the client to finish joining.
+        this.clock.setTimeout(async () => {
+            await this.dispatcher.dispatch(new ShopStartTriggerCommand());
+            await this.checkLevelUp();
+        }, 500);
 
     }
 
