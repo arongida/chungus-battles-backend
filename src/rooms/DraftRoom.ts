@@ -3,7 +3,7 @@ import { DraftState } from './schema/DraftState';
 import { copyPlayer, createNewPlayer, getPlayer, updatePlayer } from '../players/db/Player';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyLuckyShopUpgrades, applyRarityUpgrade, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
+import { applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
@@ -16,6 +16,7 @@ import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCo
 import { EquipSlot, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
+import { markFreeLuckyFindConsumed } from '../talents/behavior/TalentBehaviors';
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -136,7 +137,7 @@ export class DraftRoom extends Room {
 
         //shop start trigger - wait a bit for client to load
         await delay(500, this.clock);
-        this.dispatcher.dispatch(new ShopStartTriggerCommand());
+        await this.dispatcher.dispatch(new ShopStartTriggerCommand());
         await this.checkLevelUp();
 
     }
@@ -178,6 +179,10 @@ export class DraftRoom extends Room {
                 }
                 const slot = this.state.shop.length;
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
+                // Lucky find is disabled for potions and rings.
+                const luckyEligible = rolledItem.type !== 'potion' && !rolledItem.tags?.includes('ring');
+                let shopItem: Item;
+                let steps: number;
                 if (ownedTarget) {
                     // Preview = clone of the owned item (preserving its rolled stats
                     // and rarity) upgraded once with this specific shop roll.
@@ -187,12 +192,15 @@ export class DraftRoom extends Room {
                     preview.sold = false;
                     preview.equipped = false;
                     preview.upgradePreview = true;
-                    this.announceLuckyUpgrade(preview, applyLuckyShopUpgrades(preview, rolledItem, this.state.player), slot);
-                    this.state.shop.push(preview);
+                    steps = luckyEligible ? applyLuckyShopUpgrades(preview, rolledItem, this.state.player) : 0;
+                    shopItem = preview;
                 } else {
-                    this.announceLuckyUpgrade(rolledItem, applyLuckyShopUpgrades(rolledItem, rolledItem, this.state.player), slot);
-                    this.state.shop.push(rolledItem);
+                    steps = luckyEligible ? applyLuckyShopUpgrades(rolledItem, rolledItem, this.state.player) : 0;
+                    shopItem = rolledItem;
                 }
+                shopItem.luckyFind = steps > 0;
+                this.announceLuckyUpgrade(shopItem, steps, slot);
+                this.state.shop.push(shopItem);
             }
         }
 
@@ -265,6 +273,9 @@ export class DraftRoom extends Room {
 
         this.state.remainingTalentPoints = player.level - highestTalentTier;
         this.state.hasFreeTalentReroll = this.state.remainingTalentPoints > 0;
+        // Seed the hidden shop-roll stat for the very first shop of this draft phase — the
+        // draft aura tick (which keeps it current afterward) hasn't run yet at this point.
+        this.state.player.luckyFindChance = baseLuckyFindChance(this.state.player.level);
         this.updateTalentRerollCost();
         await this.updateTalentSelection();
 
@@ -284,6 +295,7 @@ export class DraftRoom extends Room {
             return;
         }
         this.state.player.getItem(item);
+        markFreeLuckyFindConsumed(this.state.player, item);
         this.invalidateUndoSell();
     }
 

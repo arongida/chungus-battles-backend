@@ -87,6 +87,24 @@ function getItemSchemaObject(itemFromDb: any): Item {
     return newItemSchemaObject;
 }
 
+/**
+ * Random sample of non-quest items at an exact tier (e.g. tier 5, for items that
+ * transform into a "random legendary" reward). Unlike getNumberOfItems, this matches
+ * tier exactly rather than `tier <= levelRequirement`.
+ */
+export async function getRandomItemsByTier(tier: number, count: number): Promise<Item[]> {
+    const itemArrayFromDb = await itemModel.aggregate([
+        {$match: {tier, tags: {$ne: 'quest'}}},
+        {$sample: {size: count}},
+    ]);
+
+    return itemArrayFromDb.map(item => {
+        const schemaItem = getItemSchemaObject(item);
+        rollItemStats(schemaItem);
+        return schemaItem;
+    });
+}
+
 export async function getItemById(itemId: number): Promise<Item | null> {
     const itemFromDb = await itemModel
         .findOne({itemId: itemId})

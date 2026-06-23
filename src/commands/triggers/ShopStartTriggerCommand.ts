@@ -6,7 +6,7 @@ import {BehaviorContext} from "../../common/BehaviorContext";
 import {triggerEquippedItems} from '../../common/triggerUtils';
 
 export class ShopStartTriggerCommand extends Command<DraftRoom> {
-    execute() {
+    async execute() {
 
         const onShopStartTalents: Talent[] = this.state.player.talents.filter(
             (talent) => talent.triggerTypes.includes(TriggerType.SHOP_START)
@@ -25,6 +25,6 @@ export class ShopStartTriggerCommand extends Command<DraftRoom> {
             }
         });
 
-        triggerEquippedItems(this.state.player, onShopStartTalentsContext, TriggerType.SHOP_START);
+        await triggerEquippedItems(this.state.player, onShopStartTalentsContext, TriggerType.SHOP_START);
     }
 }

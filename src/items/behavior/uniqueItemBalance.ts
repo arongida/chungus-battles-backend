@@ -2,9 +2,63 @@
 // implementations (ItemBehaviors.ts) and the rarity description updaters
 // (ShopUpgradeUtils.ts). Keep formulas here so balance changes touch one file.
 
+import { RollableStat, STAT_RANGES } from '../stats/itemStatPool';
+import type { Item } from '../schema/ItemSchema';
+
 /** Chungi (7): fraction of the wielder's max HP used as max damage. */
 export function chungiHpDamageFraction(rarity: number): number {
     return 0.05 + 0.05 * rarity;
+}
+
+/**
+ * Magic Ring (702): starts Common with one randomly rolled stat that grows
+ * permanently on every attack. Each level-up bumps its rarity and rolls
+ * another stat into the mix, until all 5 are active at Mythic (level 5).
+ *
+ * No separate "which stats are active" tracking is kept — a stat counts as
+ * rolled once its `affectedStats` value is non-zero, since that's what
+ * persists across the draft/fight DB round-trip and is already shown to the
+ * player via the normal item stat display.
+ *
+ * attackSpeed is excluded from the pool — stacking it would create a
+ * feedback loop (faster attacks → more stacks → even faster attacks).
+ */
+const MAGIC_RING_STAT_POOL: RollableStat[] = [
+    'strength', 'accuracy', 'defense', 'maxHp', 'dodgeRate', 'flatDmgReduction', 'hpRegen', 'income',
+];
+
+/** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
+const MAGIC_RING_STACK_FRACTION = 0.02;
+
+export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats on every attack and evolves on level up.';
+
+/** Picks a pool stat not yet rolled on this item (still zero), or null once the pool is exhausted. */
+function rollNextMagicRingStat(affectedStats: Item['affectedStats']): RollableStat | null {
+    const available = MAGIC_RING_STAT_POOL.filter((stat) => !(affectedStats as any)[stat]);
+    if (available.length === 0) return null;
+    return available[Math.floor(Math.random() * available.length)];
+}
+
+/** Per-attack growth for one active stat at the ring's current rarity. */
+function magicRingStackAmount(stat: RollableStat, rarity: number): number {
+    const tier = Math.min(5, Math.max(1, rarity));
+    return Math.round(STAT_RANGES[stat][tier].max * MAGIC_RING_STACK_FRACTION * 100) / 100;
+}
+
+/** Magic Ring (702): rolls a new stat straight into `affectedStats` (non-zero from the start) at the ring's current rarity. */
+export function rollMagicRingBonus(item: Item): void {
+    const stat = rollNextMagicRingStat(item.affectedStats);
+    if (!stat) return;
+    (item.affectedStats as any)[stat] += magicRingStackAmount(stat, item.rarity);
+}
+
+/** Magic Ring (702): adds one attack's worth of growth to every stat already rolled (non-zero) on this item. */
+export function stackMagicRingBonuses(item: Item): void {
+    for (const stat of MAGIC_RING_STAT_POOL) {
+        if ((item.affectedStats as any)[stat]) {
+            (item.affectedStats as any)[stat] += magicRingStackAmount(stat, item.rarity);
+        }
+    }
 }
 
 /**
@@ -13,6 +67,15 @@ export function chungiHpDamageFraction(rarity: number): number {
  * damage at 100% instead of the usual 50%.
  */
 export const TWO_HANDED_WEAPON_IDS = new Set([4]); // Zwei-hander
+
+/**
+ * Items excluded from the shop's owned-item rarity-upgrade path
+ * (findOwnedUpgradeTarget). Health Potion (6) is a consumable whose rarity
+ * is meant to come from its shop roll, not from stacking upgrades; Ring of
+ * Immortality (47) grants no stats and its rarity is irrelevant to its
+ * SHOP_START transform, so upgrading it would only be confusing.
+ */
+export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Potion, Ring of Immortality
 
 /** Flowering Staff (8): invulnerability window granted after each attack. */
 export function floweringStaffInvulnMs(rarity: number): number {

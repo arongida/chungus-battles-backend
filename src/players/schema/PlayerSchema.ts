@@ -43,6 +43,13 @@ export class Player extends Schema implements IStats {
     attackSpeedMultiplier: number = 1;
     healingEffectiveness: number = 1;
     hasVersionWin: boolean = false;
+    // Hidden shop-roll stat: seeded from level each draft aura tick (DraftAuraTriggerCommand),
+    // doubled by Black Market Contact's aura behavior (TalentBehaviors). Read by
+    // ShopUpgradeUtils.applyLuckyShopUpgrades. Resets to 0 every draft phase (new Player()).
+    luckyFindChance: number = 0;
+    // Hidden per-draft-phase flag: true once a lucky-find item has been claimed for free via
+    // Black Market Contact (TalentBehaviors.markFreeLuckyFindConsumed).
+    usedFreeLuckyFind: boolean = false;
 
 
     get hp(): number {
@@ -227,7 +234,7 @@ export class Player extends Schema implements IStats {
                 this.poisonTimer.clear();
                 this.poisonTimer = null;
             }
-        }, 10000);
+        }, 6000);
     }
 
     addBurnStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {
@@ -285,6 +292,7 @@ export class Player extends Schema implements IStats {
 
     async sellItem(item: Item) {
         if (item.equipped) return;
+        if (item.tags?.includes('quest')) return;
         this.gold += item.sellPrice;
         const indexOfDeletedItem = this.inventory.indexOf(item);
         this.inventory.splice(indexOfDeletedItem, 1);

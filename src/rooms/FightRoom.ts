@@ -342,7 +342,7 @@ export class FightRoom extends Room {
 
         if (!defender.poisonTimer) {
             defender.poisonTimer = this.clock.setInterval(() => {
-                const poisonDamage = defender.poisonStack * defender.maxHp * 0.001;
+                const poisonDamage = defender.poisonStack * defender.maxHp * 0.002;
 
                 this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
                     defender: defender,
@@ -484,7 +484,7 @@ export class FightRoom extends Room {
                 break;
         }
 
-        const goldToGet = this.state.player.income;
+        const goldToGet = Math.floor(this.state.player.income);
         this.state.player.baseStats.income += 1;
 
         this.state.player.gold += goldToGet;

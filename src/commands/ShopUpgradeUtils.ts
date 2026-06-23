@@ -9,6 +9,7 @@ import {
   chungiHpDamageFraction,
   FLOWERING_STAFF_INVULN_COOLDOWN_MS,
   floweringStaffInvulnMs,
+  NON_UPGRADEABLE_ITEM_IDS,
   TWO_HANDED_WEAPON_IDS,
   wandOfFireBurnStacks,
 } from '../items/behavior/uniqueItemBalance';
@@ -23,10 +24,9 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
   },
   18: (item) => {
     const stacks = item.rarity;
-    return `Applies ${stacks} poison stack${stacks > 1 ? 's' : ''} on hit. Each stack deals 1% max HP over 10s and cuts healing by 1%.`;
+    return `Applies ${stacks} poison stack${stacks > 1 ? 's' : ''} on hit. Each stack deals 1% max HP over 5s and cuts healing by 1%.`;
   },
   59: (item) => `Heals for ${item.rarity * 5 + 6}% of damage dealt on hit.`,
-  702: (item, player) => `Gains +${(player.level * item.rarity * 0.01 + 0.01).toFixed(2)} * level strength per attack.`,
   703: (item) => {
     const multiplier = item.rarity / 2;
     return multiplier === 1
@@ -63,11 +63,20 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
   }
 }
 
+/** Base (un-modified) lucky-find rarity-up chance for a shop slot at this level.
+ *  Seeded onto Player.luckyFindChance each draft aura tick (DraftAuraTriggerCommand)
+ *  and once at draft-phase setup (DraftRoom.setUpState) — talents (e.g. Black Market
+ *  Contact, TalentBehaviors) may then scale that hidden stat before it's read below. */
+export function baseLuckyFindChance(level: number): number {
+  return 0.10 + 0.02 * (level - 1);
+}
+
 /**
- * Lucky shop rolls: each shop slot has a level-scaled chance to arrive at a
- * higher rarity. Every successful step re-rolls the chance, so an item can
- * chain up to MYTHIC. Each step merges a freshly rolled copy of the item
- * template — same mechanic as the tier-5 instant-mythic talents.
+ * Lucky shop rolls: each shop slot has a chance — Player.luckyFindChance, seeded from
+ * baseLuckyFindChance and potentially scaled by talents — to arrive at a higher rarity.
+ * Every successful step re-rolls the chance, so an item can chain up to MYTHIC. Each step
+ * merges a freshly rolled copy of the item template — same mechanic as the tier-5
+ * instant-mythic talents.
  *
  * `source` must be the template-shaped roll for this slot (not the upgraded
  * target) so authored-stat items don't compound their already-merged stats.
@@ -77,7 +86,7 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
  */
 export function applyLuckyShopUpgrades(target: Item, source: Item, player: Player): number {
   const pristine = cloneItem(source);
-  const chance = 0.10 + 0.02 * (player.level - 1);
+  const chance = player.luckyFindChance;
   const basePrice = target.price;
 
   let steps = 0;
@@ -95,6 +104,10 @@ export function applyLuckyShopUpgrades(target: Item, source: Item, player: Playe
 }
 
 export function findOwnedUpgradeTarget(player: Player, itemId: number): Item | null {
+  if (NON_UPGRADEABLE_ITEM_IDS.has(itemId)) {
+    return null;
+  }
+
   const candidates: Item[] = [];
 
   player.equippedItems.forEach((item) => {
