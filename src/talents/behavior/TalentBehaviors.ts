@@ -12,6 +12,8 @@ import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { applyRarityUpgrade } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, fmt } from "../../common/MessageTypes";
 import { Talent } from "../schema/TalentSchema";
+import { Player } from "../../players/schema/PlayerSchema";
+import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus } from "../../items/behavior/uniqueItemBalance";
 
 export function track(talent: Talent, activations: number, damage = 0, healing = 0, gold = 0, xp = 0) {
     talent.statActivations += activations; talent.totalActivations += activations;
@@ -19,6 +21,14 @@ export function track(talent: Talent, activations: number, damage = 0, healing =
     talent.statHealingDone += healing; talent.totalHealingDone += healing;
     talent.statGoldGained += gold; talent.totalGoldGained += gold;
     talent.statXpGained += xp; talent.totalXpGained += xp;
+}
+
+/** Records that a shop purchase spent Black Market Contact's free lucky-find buy, so the
+ *  aura behavior below won't free up another item this draft phase. Called once from
+ *  DraftRoom.buyItem right after a purchase goes through — kept as a one-line delegation
+ *  so DraftRoom doesn't need to know which talent (or whether any) granted the discount. */
+export function markFreeLuckyFindConsumed(player: Player, item: Item): void {
+    if (item.luckyFind && item.price === 0) player.usedFreeLuckyFind = true;
 }
 
 export const TalentBehaviors = {
@@ -232,7 +242,9 @@ export const TalentBehaviors = {
     [TalentType.WEAPON_WHISPERER]: async (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
         const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
-        if (!weapon || weapon.rarity >= ItemRarity.MYTHIC) return;
+        // Quest weapons (e.g. Magic Ring) have their own rarity progression
+        // (level-up rolls) and must not be insta-mythic'd out of it.
+        if (!weapon || weapon.rarity >= ItemRarity.MYTHIC || weapon.tags?.includes('quest')) return;
 
         // Lock rarity immediately so subsequent aura ticks skip this while the DB fetch is in flight
         const originalRarity = weapon.rarity;
@@ -568,8 +580,15 @@ export const TalentBehaviors = {
             ) {
                 const ringWeapon = questItems.find((item) => item.itemId === 702);
                 if (ringWeapon) {
-                    ringWeapon.rarity = 2;
-                    ringWeapon.description = 'Gains +0.1 x level strength per attack.';
+                    ringWeapon.rarity = ItemRarity.COMMON;
+                    rollMagicRingBonus(ringWeapon);
+                    // Catch up to the player's current level (e.g. thief starts at level 2)
+                    // so the ring isn't stuck behind level-ups that already happened.
+                    while (ringWeapon.rarity < attacker.level && ringWeapon.rarity < ItemRarity.MYTHIC) {
+                        ringWeapon.rarity++;
+                        rollMagicRingBonus(ringWeapon);
+                    }
+                    ringWeapon.description = MAGIC_RING_DESCRIPTION;
                     attacker.getItem(ringWeapon);
                     client.send('draft_log', `${attacker.name} found a ring weapon!`);
                     client.send('trigger_talent', {
@@ -916,40 +935,26 @@ export const TalentBehaviors = {
             }
         },
 
-    [TalentType.MERCHANT_5B]:
-        async (context: TalentBehaviorContext) => {
-            const { attacker, client, shop } = context;
-            const upgradable = shop?.filter(item => item.rarity < ItemRarity.MYTHIC);
-            if (!upgradable?.length) return;
+    // Black Market Contact — AURA talent (runs every draft tick via DraftAuraTriggerCommand):
+    // doubles the hidden lucky-find chance stat, and flips one not-yet-free lucky-find shop
+    // item to price 0 until the player buys it (markFreeLuckyFindConsumed, above, then stops
+    // it from happening again this draft phase). Guarded on `trigger === AURA` so legacy player
+    // copies still carrying the old `after-refresh` trigger simply no-op instead of throwing.
+    [TalentType.MERCHANT_5B]: (context: TalentBehaviorContext) => {
+        const { attacker, shop, trigger } = context;
+        if (trigger !== TriggerType.AURA || !attacker || !shop) return;
 
-            const item = upgradable[Math.floor(Math.random() * upgradable.length)];
-            const originalPrice = item.price;
+        attacker.luckyFindChance *= 2;
 
-            // Lock rarity so re-triggers skip this item while the DB fetch is in flight
-            const originalRarity = item.rarity;
-            item.rarity = ItemRarity.MYTHIC;
-            const baseItem = await getItemById(item.itemId);
-            if (!baseItem) {
-                item.rarity = originalRarity;
-                return;
-            }
-
-            // Each step merges a freshly rolled copy — like buying shop duplicates —
-            // so the mythic ends up with varied affixes, not one stat multiplied.
-            item.rarity = originalRarity;
-            while (item.rarity < ItemRarity.MYTHIC) {
-                const rolledSource = cloneItem(baseItem);
-                rollItemStats(rolledSource);
-                applyRarityUpgrade(item, rolledSource, attacker, false);
-            }
-            item.price = originalPrice;
-
-            client.send('draft_log', `Black market contact: ${item.name} is now Mythic!`);
-            client.send('trigger_talent', {
-                playerId: attacker.playerId,
-                talentId: TalentType.MERCHANT_5B,
-            });
-        },
+        if (attacker.usedFreeLuckyFind) return;
+        const alreadyFreeUnsold = shop.some((i) => i.luckyFind && !i.sold && i.price === 0);
+        if (alreadyFreeUnsold) return;
+        const candidate = shop.find((i) => i.luckyFind && !i.sold && i.price > 0);
+        if (candidate) {
+            candidate.price = 0;
+            candidate.sellPrice = 0;
+        }
+    },
 }
     ;
 

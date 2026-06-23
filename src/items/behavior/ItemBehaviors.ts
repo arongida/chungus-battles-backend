@@ -1,20 +1,23 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
-import { EquipSlot, ItemType } from '../types/ItemTypes';
+import { EquipSlot, ItemRarity, ItemType } from '../types/ItemTypes';
 import { CombatLogMessage, fmt } from '../../common/MessageTypes';
 import {
     chungiHpDamageFraction,
     FLOWERING_STAFF_INVULN_COOLDOWN_MS,
     floweringStaffInvulnMs,
+    rollMagicRingBonus,
+    stackMagicRingBonuses,
     wandOfFireBurnStacks,
 } from './uniqueItemBalance';
+import { rollRandomMythicTierFiveItem } from './ringOfImmortality';
 import type { Item } from '../schema/ItemSchema';
 
 // Last invulnerability proc per staff instance (clock-elapsed ms). Keyed by
 // item instance so each fight's fresh state starts clean.
 const floweringStaffLastProcMs = new WeakMap<Item, number>();
 
-export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContext) => void> = {
+export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContext) => void | Promise<void>> = {
     // All shields — FIGHT_START: grant invulnerability (500 + 500*tier ms).
     [ItemType.SHIELD]: ({ attacker, trigger, clock, client, item }) => {
         // Old enemy snapshots may still carry shields with 'on-attacked'
@@ -108,7 +111,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     // Dagger of Poison (18) — rarity 2+: applies (rarity-1) poison stacks on hit.
     18: ({ defender, client, clock, item }) => {
         if (!defender || !client || !clock || !item) return;
-        defender.addPoisonStacks(clock, client, item.rarity - 1);
+        defender.addPoisonStacks(clock, client, item.rarity);
     },
 
     // Soulstealer's Scythe (59) — rarity 2+: heals for (rarity*5+5)% of damage dealt + 1 on hit.
@@ -120,13 +123,22 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         client?.send('combat_log', { text: `${attacker.name}'s ${item.name} leeches ${fmt(scytheHealed)} health!`, kind: 'leech', attackerId: attacker.playerId, itemId: item.itemId, healing: scytheHealed } as CombatLogMessage)
     },
 
-    // Magic Ring Weapon (702) — rarity 2+: gains +(rarity*0.01+0.01) strength per attack.
-    702: ({ attacker, item }) => {
-        if (!attacker || !item || item.rarity <= 1) return;
-        const bonusStrength = attacker.level * item.rarity * 0.05;
-        item.affectedStats.strength +=  bonusStrength;
-        item.affectedStats.maxHp += bonusStrength;
-        item.description = `Gains +${bonusStrength} strength and max HP per attack.`
+    // Magic Ring (702) — starts Common with one rolled stat that permanently
+    // stacks on every attack. LEVEL_UP bumps its rarity and rolls another
+    // stat into the mix, until all 5 are active at Mythic (level 5). Rolled
+    // stats live directly in affectedStats (no separate tracking needed) —
+    // see uniqueItemBalance.ts.
+    702: ({ attacker, item, trigger }) => {
+        if (!attacker || !item) return;
+
+        if (trigger === TriggerType.LEVEL_UP) {
+            if (item.rarity >= ItemRarity.MYTHIC) return;
+            item.rarity++;
+            rollMagicRingBonus(item);
+        } else {
+            stackMagicRingBonuses(item);
+        }
+
         attacker.equippedItems.forEach((equipped, slot) => {
             if (equipped === item) attacker.equippedItems.set(slot, equipped);
         });
@@ -139,6 +151,30 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         attacker.equippedItems.forEach((equipped, slot) => {
             if (equipped === item) attacker.equippedItems.set(slot, equipped);
         });
+    },
+
+    // Ring of Immortality (47) — grants no stats. SHOP_START: if it's still equipped
+    // when the next draft phase begins (i.e. it was worn through a fight), it
+    // transforms into a random tier-5 item rolled all the way up to Mythic.
+    47: async ({ attacker, item, trigger, client }) => {
+        if (trigger !== TriggerType.SHOP_START || !attacker || !item) return;
+
+        let ringSlot: EquipSlot | null = null;
+        attacker.equippedItems.forEach((equipped, slot) => {
+            if (equipped === item) ringSlot = slot as EquipSlot;
+        });
+        if (!ringSlot) return;
+
+        const newItem = await rollRandomMythicTierFiveItem(attacker);
+        if (!newItem) return;
+
+        // The rolled item can be any type (weapon/armor/helmet/shield) — never auto-equip
+        // it into the ring's hand slot, since a helmet/armor/shield doesn't belong there.
+        // Free the hand slot and drop the reward into inventory for the player to equip.
+        attacker.equippedItems.delete(ringSlot);
+        attacker.inventory.push(newItem);
+
+        client?.send('draft_log', `Your Ring of Immortality transforms into ${newItem.name} (Mythic)!`);
     },
 
 };

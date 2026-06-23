@@ -3,7 +3,7 @@ import {DraftRoom} from '../../rooms/DraftRoom';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {TalentBehaviorContext} from '../../talents/behavior/TalentBehaviorContext';
 import {TriggerType} from '../../common/types';
-import {triggerEquippedItems} from '../../common/triggerUtils';
+import {triggerEquippedItems, triggerInventoryItems} from '../../common/triggerUtils';
 
 export class LevelUpTriggerCommand extends Command<
     DraftRoom
@@ -28,5 +28,8 @@ export class LevelUpTriggerCommand extends Command<
         });
 
         triggerEquippedItems(this.state.player, onLevelUpTalentsContext, TriggerType.LEVEL_UP);
+        // Some items (e.g. Magic Ring) evolve on level-up even while sitting
+        // unequipped in the inventory.
+        triggerInventoryItems(this.state.player, onLevelUpTalentsContext, TriggerType.LEVEL_UP);
     }
 }

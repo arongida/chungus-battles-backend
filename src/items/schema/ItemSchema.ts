@@ -31,12 +31,14 @@ export class Item extends Schema {
   @type(AffectedStats) affectedEnemyStats: AffectedStats;
   // True only for shop slots that upgrade an item the player already owns.
   @type('boolean') upgradePreview: boolean = false;
+  // True for shop slots that rolled a lucky-find rarity-up (see applyLuckyShopUpgrades).
+  @type('boolean') luckyFind: boolean = false;
 
-  executeBehavior(context: BehaviorContext) {
+  executeBehavior(context: BehaviorContext): void | Promise<void> {
     const behavior = ItemBehaviors[this.itemId] ?? ItemBehaviors[this.type];
     if (behavior) {
       const itemContext: ItemBehaviorContext = { ...context, item: this };
-      behavior(itemContext);
+      return behavior(itemContext);
     }
   }
 }
