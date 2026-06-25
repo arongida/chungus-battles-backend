@@ -17,6 +17,7 @@ import { EquipSlot, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 import { markFreeLuckyFindConsumed } from '../talents/behavior/TalentBehaviors';
+import { RewardGainMessage } from '../common/MessageTypes';
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -24,9 +25,9 @@ export class DraftRoom extends Room {
 
     dispatcher = new Dispatcher(this);
     private talentSelectionGeneration: number = 0;
-    // Most-recently-sold item, kept around so an accidental sale can be undone. A single
-    // slot is enough — selling again overwrites it, so only the latest sale is recoverable.
-    private lastSoldItem: Item | null = null;
+    // Stack of recently-sold items, kept around so accidental sales can be undone in
+    // reverse order. Cleared by any gold-spending action (see invalidateUndoSell).
+    private soldItemStack: Item[] = [];
 
     async onCreate(options: any) {
         this.setState(new DraftState());
@@ -308,24 +309,31 @@ export class DraftRoom extends Room {
     private async sellItem(itemId: number) {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
+        const goldBefore = this.state.player.gold;
         await this.state.player.sellItem(item);
-        this.lastSoldItem = item;
+        // sellItem() no-ops for equipped/quest items, so derive the actual delta rather
+        // than assuming item.sellPrice was granted.
+        const goldGained = this.state.player.gold - goldBefore;
+        if (goldGained > 0) {
+            this.clients[0]?.send('reward_gain', { playerId: this.state.player.playerId, gold: goldGained } as RewardGainMessage);
+        }
+        this.soldItemStack.push(item);
         this.state.canUndoSell = true;
         await this.resetStaleUpgradePreviews(itemId);
     }
 
     private undoSell(client: Client) {
-        if (!this.lastSoldItem) {
+        const item = this.soldItemStack[this.soldItemStack.length - 1];
+        if (!item) {
             client.send('error', 'Nothing to undo!');
             return;
         }
-        const item = this.lastSoldItem;
         if (this.state.player.gold < item.sellPrice) {
             client.send('error', 'Not enough gold to undo!');
             return;
         }
-        this.lastSoldItem = null;
-        this.state.canUndoSell = false;
+        this.soldItemStack.pop();
+        this.state.canUndoSell = this.soldItemStack.length > 0;
         this.state.player.gold -= item.sellPrice;
         this.state.player.inventory.push(item);
     }
@@ -334,7 +342,7 @@ export class DraftRoom extends Room {
     // action in between (buy, level up, refresh shop/talents) closes the window, so
     // a sale's proceeds can't be spent and then the item recovered for free on top.
     private invalidateUndoSell() {
-        this.lastSoldItem = null;
+        this.soldItemStack.length = 0;
         this.state.canUndoSell = false;
     }
 
@@ -433,6 +441,7 @@ export class DraftRoom extends Room {
         }
         this.state.player.gold -= price;
         this.state.player.xp += xp;
+        client.send('reward_gain', { playerId: this.state.player.playerId, xp } as RewardGainMessage);
         this.invalidateUndoSell();
         await this.checkLevelUp();
     }

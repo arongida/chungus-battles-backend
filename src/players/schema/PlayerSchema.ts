@@ -270,11 +270,27 @@ export class Player extends Schema implements IStats {
             } else {
                 const invIdx = this.inventory.indexOf(ownedTarget);
                 if (invIdx !== -1) this.inventory.splice(invIdx, 1);
-                this.inventory.push(item);
+                if (!this.tryAutoEquipIntoEmptySlot(item)) this.inventory.push(item);
             }
         } else {
-            this.inventory.push(item);
+            if (!this.tryAutoEquipIntoEmptySlot(item)) this.inventory.push(item);
         }
+    }
+
+    /** Auto-equip a freshly acquired piece of gear into the first EMPTY valid slot.
+     *  Skips potions (the 'drink' pseudo-slot) and quest items, and never displaces an
+     *  already-equipped item. Returns true if it was equipped. */
+    private tryAutoEquipIntoEmptySlot(item: Item): boolean {
+        if (item.tags?.includes('quest')) return false;
+        if (!item.equipOptions) return false;
+        for (const slot of item.equipOptions) {
+            if (slot === 'drink') continue;
+            if (!this.equippedItems.get(slot as EquipSlot)) {
+                this.setItemEquipped(item, slot as EquipSlot);
+                return true;
+            }
+        }
+        return false;
     }
 
     private findUpgradeTarget(itemId: number): Item | null {
