@@ -10,17 +10,31 @@ import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { applyRarityUpgrade } from "../../commands/ShopUpgradeUtils";
-import { CombatLogMessage, fmt } from "../../common/MessageTypes";
+import { CombatLogMessage, RewardGainMessage, fmt } from "../../common/MessageTypes";
+import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
 import { Player } from "../../players/schema/PlayerSchema";
 import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus } from "../../items/behavior/uniqueItemBalance";
 
-export function track(talent: Talent, activations: number, damage = 0, healing = 0, gold = 0, xp = 0) {
+/** `reward`, when provided alongside a positive gold/xp amount, sends a `reward_gain` message to
+ *  the recipient so the client can pop floating +gold/+xp text over their avatar. */
+export function track(
+    talent: Talent, activations: number, damage = 0, healing = 0, gold = 0, xp = 0,
+    reward?: { client: Client; playerId: number },
+) {
     talent.statActivations += activations; talent.totalActivations += activations;
     talent.statDamageDealt += damage; talent.totalDamageDealt += damage;
     talent.statHealingDone += healing; talent.totalHealingDone += healing;
     talent.statGoldGained += gold; talent.totalGoldGained += gold;
     talent.statXpGained += xp; talent.totalXpGained += xp;
+
+    if (reward && (gold > 0 || xp > 0)) {
+        reward.client.send('reward_gain', {
+            playerId: reward.playerId,
+            gold: gold > 0 ? gold : undefined,
+            xp: xp > 0 ? xp : undefined,
+        } as RewardGainMessage);
+    }
 }
 
 /** Records that a shop purchase spent Black Market Contact's free lucky-find buy, so the
@@ -159,7 +173,7 @@ export const TalentBehaviors = {
         const { attacker, defender, client } = context;
         attacker.gold += 1;
         if (defender.gold > 0) defender.gold -= 1;
-        track(context.talent, 1, 0, 0, 1);
+        track(context.talent, 1, 0, 0, 1, 0, { client, playerId: attacker.playerId });
         client.send('combat_log', { text: `${attacker.name} stole 1 gold from ${defender.name}!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
@@ -412,7 +426,7 @@ export const TalentBehaviors = {
 
         const extraXp = attacker.round * 2;
         attacker.xp += extraXp;
-        track(talent, 1, 0, 0, 0, extraXp);
+        track(talent, 1, 0, 0, 0, extraXp, { client, playerId: attacker.playerId });
 
         talent.affectedStats.income += 1;
 
@@ -433,7 +447,7 @@ export const TalentBehaviors = {
             client.send('combat_log', { text: `${attacker.name}'s merchant weapon brings in +1 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
         } else {
             attacker.xp += 1;
-            track(talent, 1, 0, 0, 0, 1);
+            track(talent, 1, 0, 0, 0, 1, { client, playerId: attacker.playerId });
             client.send('combat_log', { text: `${attacker.name} gains +1 XP from the merchant's experience!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: 1 } as CombatLogMessage);
         }
         client.send('trigger_talent', {
@@ -463,7 +477,7 @@ export const TalentBehaviors = {
 
         talent.triggerTypes.clear();
 
-        track(talent, 1, 0, 0, talent.activationRate)
+        track(talent, 1, 0, 0, talent.activationRate, 0, { client, playerId: attacker.playerId })
 
         client.send('draft_log', `Gained ${talent.activationRate} gold!`);
         client.send('trigger_talent', {
@@ -517,7 +531,9 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { attacker, client, shop } = context;
             attacker.gold = 0;
-            attacker.xp += attacker.level * 2;
+            const comradeXp = attacker.level * 2;
+            attacker.xp += comradeXp;
+            client.send('reward_gain', { playerId: attacker.playerId, xp: comradeXp } as RewardGainMessage);
             const rewardCount = attacker.level + 1;
 
             for (let i = 0; i < rewardCount; i++) {
@@ -757,7 +773,7 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { defender, client } = context;
             defender.gold += 1;
-            track(context.talent, 1, 0, 0, 1);
+            track(context.talent, 1, 0, 0, 1, 0, { client, playerId: defender.playerId });
             client.send('combat_log', { text: `${defender.name} found 1 gold during dodge roll!`, kind: 'reward', talentId: context.talent.talentId, attackerId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: defender.playerId,
@@ -771,7 +787,7 @@ export const TalentBehaviors = {
             const chance = damage / talent.base;
             if (Math.random() < chance) {
                 attacker.gold += 1;
-                track(talent, 1, 0, 0, 1);
+                track(talent, 1, 0, 0, 1, 0, { client, playerId: attacker.playerId });
                 client.send('combat_log', { text: `${defender.name} bled a gold coin!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
@@ -818,7 +834,7 @@ export const TalentBehaviors = {
             }
             if (talent.totalActivations === 0) {
                 attacker.gold += talent.activationRate;
-                track(talent, 1, 0, 0, 20);
+                track(talent, 1, 0, 0, talent.activationRate, 0, { client, playerId: attacker.playerId });
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     talentId: TalentType.BARGAIN_HUNTER,
@@ -854,7 +870,7 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
             attacker.xp += 2;
-            track(talent, 1, 0, 0, 0, 2);
+            track(talent, 1, 0, 0, 0, 2, { client, playerId: attacker.playerId });
             client.send('combat_log', { text: `${attacker.name} gains +2 XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: 2 } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -877,7 +893,7 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { attacker, client } = context;
             attacker.gold += 1;
-            track(context.talent, 1, 0, 0, 1);
+            track(context.talent, 1, 0, 0, 1, 0, { client, playerId: attacker.playerId });
             client.send('combat_log', { text: `${attacker.name} gets 1 gold!`, kind: 'reward', talentId: context.talent.talentId, attackerId: attacker.playerId, goldDelta: 1 } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -926,7 +942,7 @@ export const TalentBehaviors = {
             const { defender, client, talent } = context;
             if (Math.random() < talent.activationRate) {
                 defender.gold += 1;
-                track(talent, 1, 0, 0, 1);
+                track(talent, 1, 0, 0, 1, 0, { client, playerId: defender.playerId });
                 client.send('combat_log', { text: `${defender.name} profits from pain, gaining 1 gold!`, kind: 'reward', talentId: talent.talentId, attackerId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
                 client.send('trigger_talent', {
                     playerId: defender.playerId,

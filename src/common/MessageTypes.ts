@@ -21,6 +21,15 @@ export type HealingMessage = {
   healing: number;
 };
 
+/** Fired whenever a player gains gold and/or xp, so the client can pop floating
+ *  +gold/+xp text over the player's avatar (during fight or shop round). Gains only —
+ *  spends are not represented here. Either field may be omitted if not gained. */
+export type RewardGainMessage = {
+  playerId: number;
+  gold?: number;
+  xp?: number;
+};
+
 export type TriggerTalentMessage = {
   playerId: number;
   talentId: number;

@@ -21,7 +21,7 @@ import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
 import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
-import { CombatLogMessage, fmt } from '../common/MessageTypes';
+import { CombatLogMessage, RewardGainMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 
@@ -490,8 +490,10 @@ export class FightRoom extends Room {
         this.state.player.gold += goldToGet;
         this.state.player.xp += this.state.player.round * 2;
 
+        const xpToGet = this.state.player.round * 2;
         this.logCombat('broadcast', { text: `You gained ${goldToGet} gold! (Income grows to ${goldToGet + 1} next fight)`, kind: 'reward', goldDelta: goldToGet });
-        this.logCombat('broadcast', { text: `You gained ${this.state.player.round * 2} xp!`, kind: 'reward' });
+        this.logCombat('broadcast', { text: `You gained ${xpToGet} xp!`, kind: 'reward', xpDelta: xpToGet });
+        this.broadcast('reward_gain', { playerId: this.state.player.playerId, gold: goldToGet, xp: xpToGet } as RewardGainMessage);
 
         //trigger fight-end effects
         this.dispatcher.dispatch(new FightEndTriggerCommand());
@@ -551,6 +553,7 @@ export class FightRoom extends Room {
                             : 10;
             this.state.player.gold += lossBonus;
             this.logCombat('broadcast', { text: `You received ${lossBonus} bonus gold for losing!`, kind: 'reward', goldDelta: lossBonus });
+            this.broadcast('reward_gain', { playerId: this.state.player.playerId, gold: lossBonus } as RewardGainMessage);
             this.broadcast('end_battle', { result: 'lose', lossBonus, replayId: this.currentReplayId });
         }
     }

@@ -17,6 +17,7 @@ import { EquipSlot, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 import { markFreeLuckyFindConsumed } from '../talents/behavior/TalentBehaviors';
+import { RewardGainMessage } from '../common/MessageTypes';
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -308,7 +309,14 @@ export class DraftRoom extends Room {
     private async sellItem(itemId: number) {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
+        const goldBefore = this.state.player.gold;
         await this.state.player.sellItem(item);
+        // sellItem() no-ops for equipped/quest items, so derive the actual delta rather
+        // than assuming item.sellPrice was granted.
+        const goldGained = this.state.player.gold - goldBefore;
+        if (goldGained > 0) {
+            this.clients[0]?.send('reward_gain', { playerId: this.state.player.playerId, gold: goldGained } as RewardGainMessage);
+        }
         this.soldItemStack.push(item);
         this.state.canUndoSell = true;
         await this.resetStaleUpgradePreviews(itemId);
@@ -433,6 +441,7 @@ export class DraftRoom extends Room {
         }
         this.state.player.gold -= price;
         this.state.player.xp += xp;
+        client.send('reward_gain', { playerId: this.state.player.playerId, xp } as RewardGainMessage);
         this.invalidateUndoSell();
         await this.checkLevelUp();
     }
