@@ -37,6 +37,7 @@ export type TriggerTalentMessage = {
 
 export type VersionWinMessage = {
   wins: number;
+  season: number;
 };
 
 export type CombatLogKind =

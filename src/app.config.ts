@@ -16,6 +16,7 @@ import { ItemType } from "./items/types/ItemTypes";
 import { shieldDescription } from "./commands/ShopUpgradeUtils";
 import { getAllTalents } from "./talents/db/Talent";
 import { getReplaysByOriginalPlayer, getReplayById } from './replay/db/Replay';
+import { SEASONS } from './common/seasons';
 
 export const server = defineServer({
 
@@ -80,6 +81,10 @@ export const server = defineServer({
         app.get('/talents', async (req, res)=> {
             const talents = await getAllTalents();
             res.status(200).send(talents);
+        });
+
+        app.get('/seasons', (_req, res) => {
+            res.json({ currentSeason: GAME_VERSION, seasons: SEASONS });
         });
 
         app.get('/replays', async (req, res) => {

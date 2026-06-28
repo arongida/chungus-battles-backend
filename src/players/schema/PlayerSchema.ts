@@ -278,10 +278,9 @@ export class Player extends Schema implements IStats {
     }
 
     /** Auto-equip a freshly acquired piece of gear into the first EMPTY valid slot.
-     *  Skips potions (the 'drink' pseudo-slot) and quest items, and never displaces an
+     *  Skips potions (the 'drink' pseudo-slot), and never displaces an
      *  already-equipped item. Returns true if it was equipped. */
     private tryAutoEquipIntoEmptySlot(item: Item): boolean {
-        if (item.tags?.includes('quest')) return false;
         if (!item.equipOptions) return false;
         for (const slot of item.equipOptions) {
             if (slot === 'drink') continue;

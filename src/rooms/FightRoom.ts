@@ -117,8 +117,8 @@ export class FightRoom extends Room {
         (await getQuestItems()).forEach(item => this.state.questItems.push(item));
         // this.state.availableItemCollections = await getAllItemCollections();
 
-        //start battle after 5 seconds
-        let countdown = 5;
+        //start battle after 3 seconds
+        let countdown = 3;
         const countdownTimer = this.clock.setInterval(() => {
             this.logCombat('broadcast', { text: `The battle will begin in ${countdown--} second(s)...`, kind: 'countdown' });
         }, 1000);
@@ -131,7 +131,7 @@ export class FightRoom extends Room {
             console.log('[FightRoom]', 'enemy', this.state.enemy.name);
             this.state.battleStarted = true;
             this.startBattle();
-        }, 5500);
+        }, 3500);
     }
 
     // Dev-only debug tool: lets the client request a specific opponent (the "next fight
@@ -151,7 +151,7 @@ export class FightRoom extends Room {
         if (!this.state.fightResult) return;
 
         if (this.state.versionWinPending) {
-            this.broadcast('version_win', {wins: this.state.player.wins});
+            this.broadcast('version_win', {wins: this.state.player.wins, season: GAME_VERSION});
         } else if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');
         } else {
@@ -533,7 +533,7 @@ export class FightRoom extends Room {
             if (this.state.player.wins > highestVersionWin) {
                 this.state.player.hasVersionWin = true;
                 this.state.versionWinPending = true;
-                this.broadcast('version_win', {wins: this.state.player.wins});
+                this.broadcast('version_win', {wins: this.state.player.wins, season: GAME_VERSION});
                 return;
             }
         }
