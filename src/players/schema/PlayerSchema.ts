@@ -187,6 +187,7 @@ export class Player extends Schema implements IStats {
             return amount;
         }
         const healed = amount * this.healingEffectiveness;
+        const hpBefore = this.hp;
         this.hp += healed;
         const prevented = amount - healed;
         if (prevented > 0 && poisonSource) {
@@ -197,7 +198,9 @@ export class Player extends Schema implements IStats {
                 }
             });
         }
-        return healed;
+        // Actual HP gained — the hp setter clamps at maxHp, so overheal must not
+        // be reported as healing (it inflates healing stats and replay HP tracking).
+        return this.hp - hpBefore;
     }
 
     takeDamage(damage: number, playerClient: Client, damageType: DamageType = 'normal') {

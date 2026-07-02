@@ -22,6 +22,7 @@ export const SEASONS: SeasonInfo[] = [
     name: 'New Beginnings',
     changes: [
       'Loss consolation reworked: losing players now choose between bonus gold (30/20/10 by lives left), bonus XP (20% more than the gold amount), or upgrading the rarity of a random owned item',
+      'Overheal reporting fixed: healing at full HP no longer inflates healing-done stats, floating heal numbers, or replay HP bars',
     ],
   },
   {
