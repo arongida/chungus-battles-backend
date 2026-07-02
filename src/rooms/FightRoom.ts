@@ -15,13 +15,15 @@ import { OnDamageTriggerCommand } from '../commands/triggers/OnDamageTriggerComm
 import { OnAttackedTriggerCommand } from '../commands/triggers/OnAttackedTriggerCommand';
 import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerCommand';
 import { TalentType } from '../talents/types/TalentTypes';
-import { getQuestItems } from '../items/db/Item';
+import { cloneItem, getItemById, getQuestItems } from '../items/db/Item';
+import { rollItemStats } from '../items/stats/itemStatRoller';
+import { applyRarityUpgrade, getEquippedUpgradeableItems } from '../commands/ShopUpgradeUtils';
 import { FightAuraTriggerCommand } from '../commands/triggers/FightAuraTriggerCommand';
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
 import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
-import { CombatLogMessage, RewardGainMessage, fmt } from '../common/MessageTypes';
+import { CombatLogMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 
@@ -65,8 +67,12 @@ export class FightRoom extends Room {
             await updatePlayer(this.state.player);
         });
 
+        this.onMessage('select_loss_reward', (client, message: SelectLossRewardMessage) => {
+            this.handleSelectLossReward(client, message);
+        });
+
         // Concede the current fight only — counts as a normal loss (life + loss-bonus
-        // gold), unlike abandon_run which ends the whole run. Works any time before the
+        // reward), unlike abandon_run which ends the whole run. Works any time before the
         // fight has already resolved, including during the pre-battle countdown.
         this.onMessage('forfeit_fight', () => {
             if (this.state.fightResult) return;
@@ -154,6 +160,9 @@ export class FightRoom extends Room {
             this.broadcast('version_win', {wins: this.state.player.wins, season: GAME_VERSION});
         } else if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');
+        } else if (this.state.lossRewardOptions) {
+            // Reconnect after a loss: resend the pending options (or the resolved outcome).
+            this.broadcast('end_battle', this.buildLossEndBattlePayload());
         } else {
             this.broadcast('end_battle', { result: this.state.fightResult ?? 'win', replayId: this.currentReplayId });
         }
@@ -182,6 +191,13 @@ export class FightRoom extends Room {
 
     async onLeave(client: Client, code: number) {
         console.log(`[FightRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
+        // Let an in-flight item upgrade finish before saving, and default to the
+        // gold option if the player left without choosing a loss reward.
+        if (this.state.lossRewardApplication) await this.state.lossRewardApplication;
+        if (this.state.lossRewardPending && this.state.lossRewardOptions) {
+            this.state.lossRewardPending = false;
+            this.state.player.gold += this.state.lossRewardOptions.goldAmount;
+        }
         //save player state to db
         this.state.player.sessionId = '';
         //set player for next round
@@ -548,14 +564,94 @@ export class FightRoom extends Room {
         if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');
         } else {
-            const lossBonus = this.state.player.lives === 1 ? 30
-                            : this.state.player.lives === 2 ? 20
-                            : 10;
-            this.state.player.gold += lossBonus;
-            this.logCombat('broadcast', { text: `You received ${lossBonus} bonus gold for losing!`, kind: 'reward', goldDelta: lossBonus });
-            this.broadcast('reward_gain', { playerId: this.state.player.playerId, gold: lossBonus } as RewardGainMessage);
-            this.broadcast('end_battle', { result: 'lose', lossBonus, replayId: this.currentReplayId });
+            const goldAmount = this.state.player.lives === 1 ? 30
+                             : this.state.player.lives === 2 ? 20
+                             : 10;
+            this.state.lossRewardOptions = {
+                goldAmount,
+                xpAmount: Math.round(goldAmount * 1.2),
+                itemUpgradeAvailable: getEquippedUpgradeableItems(this.state.player).length > 0,
+            };
+            this.state.lossRewardPending = true;
+            this.broadcast('end_battle', this.buildLossEndBattlePayload());
         }
+    }
+
+    private buildLossEndBattlePayload() {
+        return {
+            result: 'lose',
+            replayId: this.currentReplayId,
+            lossReward: {
+                ...this.state.lossRewardOptions,
+                outcome: this.state.lossRewardOutcome ?? undefined,
+            },
+        };
+    }
+
+    private handleSelectLossReward(client: Client, message: SelectLossRewardMessage) {
+        const state = this.state;
+        if (!state.lossRewardPending || !state.lossRewardOptions) {
+            client.send('error', 'No loss reward to choose.');
+            return;
+        }
+        const choice = message?.choice;
+        if (choice !== 'gold' && choice !== 'xp' && choice !== 'item_upgrade') {
+            client.send('error', 'Unknown loss reward choice.');
+            return;
+        }
+        if (choice === 'item_upgrade' && !state.lossRewardOptions.itemUpgradeAvailable) {
+            client.send('error', 'No upgradeable item.');
+            return;
+        }
+        state.lossRewardPending = false;
+
+        if (choice === 'gold' || choice === 'xp') {
+            this.grantLossReward(choice, choice === 'gold' ? state.lossRewardOptions.goldAmount : state.lossRewardOptions.xpAmount);
+            return;
+        }
+        state.lossRewardApplication = this.applyLossItemUpgrade(state.lossRewardOptions.goldAmount);
+    }
+
+    private grantLossReward(choice: 'gold' | 'xp', amount: number) {
+        const player = this.state.player;
+        if (choice === 'gold') {
+            player.gold += amount;
+            this.logCombat('broadcast', { text: `You received ${amount} bonus gold for losing!`, kind: 'reward', goldDelta: amount });
+            this.broadcast('reward_gain', { playerId: player.playerId, gold: amount } as RewardGainMessage);
+            this.state.lossRewardOutcome = { choice, gold: amount };
+        } else {
+            // Raw xp add only — level-up resolves in DraftRoom.checkLevelUp on rejoin.
+            player.xp += amount;
+            this.logCombat('broadcast', { text: `You received ${amount} bonus XP for losing!`, kind: 'reward', xpDelta: amount });
+            this.broadcast('reward_gain', { playerId: player.playerId, xp: amount } as RewardGainMessage);
+            this.state.lossRewardOutcome = { choice, xp: amount };
+        }
+        this.broadcast('loss_reward_result', this.state.lossRewardOutcome as LossRewardResultMessage);
+    }
+
+    private async applyLossItemUpgrade(fallbackGold: number) {
+        const player = this.state.player;
+        const candidates = getEquippedUpgradeableItems(player);
+        const picked = candidates[Math.floor(Math.random() * candidates.length)];
+        const base = picked ? await getItemById(picked.item.itemId) : null;
+        if (!base) {
+            // No candidate or missing template — fall back to the gold option.
+            this.grantLossReward('gold', fallbackGold);
+            return;
+        }
+
+        // Merge a freshly rolled copy of the template, same as lucky shop finds.
+        const rolled = cloneItem(base);
+        rollItemStats(rolled);
+        applyRarityUpgrade(picked.item, rolled, player, false);
+        if (picked.slot) player.equippedItems.set(picked.slot, picked.item);
+
+        this.logCombat('broadcast', { text: `Your ${picked.item.name} was upgraded for losing!`, kind: 'reward', itemId: picked.item.itemId });
+        this.state.lossRewardOutcome = {
+            choice: 'item_upgrade',
+            item: { itemId: picked.item.itemId, name: picked.item.name, rarity: picked.item.rarity },
+        };
+        this.broadcast('loss_reward_result', this.state.lossRewardOutcome as LossRewardResultMessage);
     }
 
     private handleDraw() {

@@ -30,6 +30,27 @@ export type RewardGainMessage = {
   xp?: number;
 };
 
+export type LossRewardChoice = 'gold' | 'xp' | 'item_upgrade';
+
+/** Offered to the losing player on end_battle — pick one via select_loss_reward. */
+export type LossRewardOptions = {
+  goldAmount: number;
+  xpAmount: number; // 20% more than gold — gold is the more flexible pick
+  itemUpgradeAvailable: boolean;
+};
+
+export type SelectLossRewardMessage = {
+  choice: LossRewardChoice;
+};
+
+/** Resolution of the loss-reward choice; for item_upgrade reveals which item got upgraded. */
+export type LossRewardResultMessage = {
+  choice: LossRewardChoice;
+  gold?: number;
+  xp?: number;
+  item?: { itemId: number; name: string; rarity: number };
+};
+
 export type TriggerTalentMessage = {
   playerId: number;
   talentId: number;

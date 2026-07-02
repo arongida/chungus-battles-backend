@@ -3,6 +3,7 @@ import {Player} from '../../players/schema/PlayerSchema';
 import {Client, Delayed} from 'colyseus';
 import {FightResultType} from '../../common/types';
 import {Item} from '../../items/schema/ItemSchema';
+import {LossRewardOptions, LossRewardResultMessage} from '../../common/MessageTypes';
 
 export class FightState extends Schema {
     @type(Player) player: Player = new Player();
@@ -15,4 +16,8 @@ export class FightState extends Schema {
     endBurnDamage: number = 10;
     playerClient: Client;
     versionWinPending: boolean = false;
+    lossRewardPending: boolean = false;
+    lossRewardOptions: LossRewardOptions | null = null;
+    lossRewardOutcome: LossRewardResultMessage | null = null;
+    lossRewardApplication: Promise<void> | null = null;
 }
