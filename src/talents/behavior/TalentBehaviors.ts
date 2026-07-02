@@ -123,15 +123,17 @@ export const TalentBehaviors = {
         const leechAmount = damage * 0.15 + 1;
         const healed = attacker.heal(leechAmount, defender);
         track(context.talent, 1, 0, healed);
-        client.send('combat_log', { text: `${attacker.name} leeches ${fmt(healed)} health!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, healing: healed } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.INVIGORATE,
         });
-        client.send('healing', {
-            playerId: attacker.playerId,
-            healing: healed,
-        });
+        if (healed > 0) {
+            client.send('combat_log', { text: `${attacker.name} leeches ${fmt(healed)} health!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, healing: healed } as CombatLogMessage);
+            client.send('healing', {
+                playerId: attacker.playerId,
+                healing: healed,
+            });
+        }
     },
 
     [TalentType.SNITCH]: (context: TalentBehaviorContext) => {
@@ -198,10 +200,12 @@ export const TalentBehaviors = {
             playerId: attacker.playerId,
             talentId: TalentType.SCAM,
         });
-        client.send('healing', {
-            playerId: attacker.playerId,
-            healing: scamHealed,
-        });
+        if (scamHealed > 0) {
+            client.send('healing', {
+                playerId: attacker.playerId,
+                healing: scamHealed,
+            });
+        }
     },
 
     [TalentType.BURNING_BLOOD]: (context: TalentBehaviorContext) => {
@@ -350,15 +354,17 @@ export const TalentBehaviors = {
         const healingAmount = talent.activationRate * defender.maxHp;
         const resilienceHealed = defender.heal(healingAmount);
         track(talent, 1, 0, resilienceHealed);
-        client.send('combat_log', { text: `${defender.name} recovers ${fmt(resilienceHealed)} health!`, kind: 'heal', talentId: talent.talentId, attackerId: defender.playerId, healing: resilienceHealed } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: defender.playerId,
             talentId: TalentType.RESILIENCE,
         });
-        client.send('healing', {
-            playerId: defender.playerId,
-            healing: resilienceHealed,
-        });
+        if (resilienceHealed > 0) {
+            client.send('combat_log', { text: `${defender.name} recovers ${fmt(resilienceHealed)} health!`, kind: 'heal', talentId: talent.talentId, attackerId: defender.playerId, healing: resilienceHealed } as CombatLogMessage);
+            client.send('healing', {
+                playerId: defender.playerId,
+                healing: resilienceHealed,
+            });
+        }
     },
 
     [TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {

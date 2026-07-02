@@ -338,6 +338,7 @@ export class FightRoom extends Room {
         if (player.hpRegen) {
             player.regenTimer = this.clock.setInterval(() => {
                 const healed = player.heal(player.hpRegen, opponent);
+                if (healed === 0) return;
                 const isMinusRegen = healed < 0;
                 this.logCombat(this.state.playerClient, { text: `${player.name} regenerates ${fmt(healed)} hp!`, kind: 'regen', attackerId: player.playerId, healing: healed });
                 this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {

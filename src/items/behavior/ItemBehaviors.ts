@@ -119,8 +119,10 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         if (!attacker || !damage || !item || item.rarity <= 1) return;
         const heal = Math.floor(damage * (item.rarity * 5 + 5) / 100) + 1;
         const scytheHealed = attacker.heal(heal, defender);
-        client?.send('healing', { playerId: attacker.playerId, healing: scytheHealed });
-        client?.send('combat_log', { text: `${attacker.name}'s ${item.name} leeches ${fmt(scytheHealed)} health!`, kind: 'leech', attackerId: attacker.playerId, itemId: item.itemId, healing: scytheHealed } as CombatLogMessage)
+        if (scytheHealed > 0) {
+            client?.send('healing', { playerId: attacker.playerId, healing: scytheHealed });
+            client?.send('combat_log', { text: `${attacker.name}'s ${item.name} leeches ${fmt(scytheHealed)} health!`, kind: 'leech', attackerId: attacker.playerId, itemId: item.itemId, healing: scytheHealed } as CombatLogMessage)
+        }
     },
 
     // Magic Ring (702) — starts Common with one rolled stat that permanently
