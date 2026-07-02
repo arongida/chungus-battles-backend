@@ -103,6 +103,25 @@ export function applyLuckyShopUpgrades(target: Item, source: Item, player: Playe
   return steps;
 }
 
+/** Equipped items eligible for a rarity upgrade. Skips non-upgradeable ids,
+ *  quest items (own rarity progression) and MYTHIC items. Entries carry their
+ *  slot key for the MapSchema re-set gotcha. */
+export function getEquippedUpgradeableItems(player: Player): Array<{ item: Item; slot: string }> {
+  const candidates: Array<{ item: Item; slot: string }> = [];
+
+  player.equippedItems.forEach((item, slot) => {
+    if (
+      !NON_UPGRADEABLE_ITEM_IDS.has(item.itemId) &&
+      !item.tags?.includes('quest') &&
+      item.rarity < ItemRarity.MYTHIC
+    ) {
+      candidates.push({ item, slot });
+    }
+  });
+
+  return candidates;
+}
+
 export function findOwnedUpgradeTarget(player: Player, itemId: number): Item | null {
   if (NON_UPGRADEABLE_ITEM_IDS.has(itemId)) {
     return null;

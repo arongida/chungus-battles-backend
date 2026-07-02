@@ -21,7 +21,7 @@ export const SEASONS: SeasonInfo[] = [
     number: 15,
     name: 'New Beginnings',
     changes: [
-      // Balance changes for season 15 go here as they are made.
+      'Loss consolation reworked: losing players now choose between bonus gold (30/20/10 by lives left), bonus XP (20% more than the gold amount), or upgrading the rarity of a random owned item',
     ],
   },
   {
