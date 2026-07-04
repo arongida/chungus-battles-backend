@@ -8,6 +8,7 @@ import {LossRewardOptions, LossRewardResultMessage} from '../../common/MessageTy
 export class FightState extends Schema {
     @type(Player) player: Player = new Player();
     @type(Player) enemy: Player = new Player();
+    @type('number') timeScale: number = 1;
     questItems: ArraySchema<Item> = new ArraySchema<Item>();
     battleStarted = false;
     skillsTimers: Delayed[] = [];

@@ -43,6 +43,10 @@ export type SelectLossRewardMessage = {
   choice: LossRewardChoice;
 };
 
+export type SetFightSpeedMessage = {
+  speed: number;
+};
+
 /** Resolution of the loss-reward choice; for item_upgrade reveals which item got upgraded. */
 export type LossRewardResultMessage = {
   choice: LossRewardChoice;
