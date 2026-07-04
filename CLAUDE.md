@@ -272,6 +272,12 @@ All served over HTTP on the same port as the WebSocket server.
 | `lock-shop`      | —                          | Lock current shop items            |
 | `unlock-shop`    | —                          | Unlock shop                        |
 
+### FightRoom — Client → Server
+
+| Message           | Payload               | Description                                             |
+|-------------------|-----------------------|---------------------------------------------------------|
+| `set_fight_speed` | `{ speed: number }`   | Set fight time scale (0.5, 1 or 2); synced as `FightState.timeScale` |
+
 ### FightRoom — Server → Client
 
 | Message           | Payload                          | Description                      |

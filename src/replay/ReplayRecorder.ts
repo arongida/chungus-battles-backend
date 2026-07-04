@@ -22,8 +22,12 @@ export class ReplayRecorder {
     events: ReplayEvent[] = [];
     truncated = false;
 
+    // nowFn must be monotonic within one recording; the room passes clock.elapsedTime
+    // (game time) so fights played at non-1x speed replay at normal pacing.
+    constructor(private nowFn: () => number = Date.now) {}
+
     start(initial: ReplayInitialState): void {
-        this.startedAt = Date.now();
+        this.startedAt = this.nowFn();
         this.initialState = initial;
         this.recording = true;
     }
@@ -44,7 +48,7 @@ export class ReplayRecorder {
             return;
         }
         this.events.push({
-            t: Date.now() - this.startedAt,
+            t: this.nowFn() - this.startedAt,
             kind,
             type,
             // structuredClone so mutable payloads don't get mutated after recording

@@ -23,16 +23,20 @@ import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
 import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
-import { CombatLogMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, fmt } from '../common/MessageTypes';
+import { CombatLogMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
+
+const ALLOWED_FIGHT_SPEEDS = [0.5, 1, 2];
 
 export class FightRoom extends Room {
     declare state: FightState;
     maxClients = 1;
 
     dispatcher = new Dispatcher(this);
-    private recorder = new ReplayRecorder();
+    // Game-time timestamps (clock.elapsedTime): replays of a sped-up/slowed-down fight
+    // still play back at normal 1x pacing.
+    private recorder = new ReplayRecorder(() => this.clock.elapsedTime);
     // Stable id for the fight currently in progress — generated up front (in startBattle)
     // so it can be included in the end_battle broadcast, not just the fire-and-forget
     // replay save that happens afterward. Lets the client deep-link "Watch Replay".
@@ -80,13 +84,65 @@ export class FightRoom extends Room {
             this.concludeBattle();
         });
 
+        this.onMessage('set_fight_speed', (client, message: SetFightSpeedMessage) => {
+            const speed = Number(message?.speed);
+            if (!ALLOWED_FIGHT_SPEEDS.includes(speed)) {
+                client.send('error', 'Invalid fight speed.');
+                return;
+            }
+            if (this.state.fightResult) return;
+            this.state.timeScale = speed;
+            this.applySimulationResolution(speed);
+        });
+
         //start clock for timings
         this.clock.start();
+        this.patchClockTimeScale();
 
         //set simulation interval for room
-        this.setSimulationInterval(() => this.update(), 100);
+        this.applySimulationResolution(this.state.timeScale);
 
         this.autoDispose = false;
+    }
+
+    // All fight timers (attacks, poison/burn/regen ticks, skill loops, end burn, delay())
+    // run off this.clock, and every Delayed advances by the deltaTime computed in tick().
+    // Scaling that delta scales the whole fight uniformly, so outcomes are unaffected.
+    // Gated on battleStarted: the countdown, post-fight delays and the onLeave disconnect
+    // timeout stay real-time.
+    //
+    // The tick body is reimplemented (mirroring ClockTimer.tick) rather than wrapped:
+    // ClockTimer.tick() ignores its arguments and reads this.now() internally, so a
+    // scaled time cannot be injected from outside. currentTime stays wall-clock because
+    // Colyseus's per-client message rate limiting reads it; elapsedTime becomes game-time,
+    // which keeps the 65s end-burn gate and replay timestamps consistent at any speed.
+    private patchClockTimeScale() {
+        const clock = this.clock as any;
+        clock.tick = () => {
+            const now = clock.now();
+            const scale = this.state.battleStarted ? this.state.timeScale : 1;
+            clock.deltaTime = (now - clock.currentTime) * scale;
+            clock.currentTime = now;
+            clock.elapsedTime += clock.deltaTime;
+            const delayedList = clock.delayed;
+            let i = delayedList.length;
+            while (i--) {
+                const delayed = delayedList[i];
+                if (delayed.active) {
+                    delayed.tick(clock.deltaTime);
+                } else {
+                    delayedList.splice(i, 1);
+                }
+            }
+        };
+    }
+
+    // Keep the game-time tick quantum at ~100ms: at 2x a 100ms wall tick would deliver
+    // 200ms of game time, making sub-second attack intervals coarse. Slowing down only
+    // gains resolution, so the interval is never lengthened past 100ms.
+    private applySimulationResolution(scale: number) {
+        const wallMs = scale > 1 ? Math.round(100 / scale) : 100;
+        this.setSimulationInterval(() => this.update(), wallMs);
     }
 
     async onJoin(client: Client, options: any) {
