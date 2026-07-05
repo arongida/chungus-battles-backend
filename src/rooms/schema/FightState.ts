@@ -16,7 +16,7 @@ export class FightState extends Schema {
     endBurnTimer: Delayed;
     endBurnDamage: number = 10;
     playerClient: Client;
-    versionWinPending: boolean = false;
+    gameWinPending: boolean = false;
     lossRewardPending: boolean = false;
     lossRewardOptions: LossRewardOptions | null = null;
     lossRewardOutcome: LossRewardResultMessage | null = null;

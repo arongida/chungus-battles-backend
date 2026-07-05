@@ -6,6 +6,7 @@ export class FightStats {
     damageReducedByDefense: number = 0;
     damageReducedByFlat: number = 0;
     attacksDodged: number = 0;
+    damageBlockedByInvincible: number = 0;
 
     reset(): void {
         this.damageTaken = { normal: 0, burn: 0, poison: 0 };
@@ -13,5 +14,6 @@ export class FightStats {
         this.damageReducedByDefense = 0;
         this.damageReducedByFlat = 0;
         this.attacksDodged = 0;
+        this.damageBlockedByInvincible = 0;
     }
 }

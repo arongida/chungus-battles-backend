@@ -697,7 +697,7 @@ export const TalentBehaviors = {
 
     [TalentType.DUAL_WIELD]:
         (context: TalentBehaviorContext) => {
-            const { attacker, talent } = context;
+            const { attacker } = context;
 
             // Remove ghost copies that leaked into inventory (e.g. from a prior setItemUnequipped)
             for (let i = attacker.inventory.length - 1; i >= 0; i--) {
@@ -711,7 +711,6 @@ export const TalentBehaviors = {
             const offHandIsGhost = offHand?.tags?.includes('dual_wield_copy');
             const mainHandIsWeapon = mainHand && mainHand.baseAttackSpeed > 0;
 
-            talent.affectedStats.attackSpeed = 1;
 
             // Only real weapons get mirrored — non-weapon hand items (e.g. Ring of
             // Immortality, which occupies a hand slot but isn't a weapon) should never
@@ -728,12 +727,10 @@ export const TalentBehaviors = {
 
             // Ghost already matches — no need to re-equip, just refresh speed bonus
             if (offHandIsGhost && offHand.itemId === mainHand.itemId && offHand.rarity === mainHand.rarity) {
-                talent.affectedStats.attackSpeed = 1 + mainHand.tier * talent.scaling;
                 return;
             }
 
             attacker.setItemEquipped(clonedAsGhost(mainHand), EquipSlot.OFF_HAND);
-            talent.affectedStats.attackSpeed = 1 + mainHand.tier * talent.scaling;
         },
 
     [TalentType.SHARPENING_STONE]:

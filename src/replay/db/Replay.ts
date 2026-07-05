@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { FightStatsMessage } from '../../common/MessageTypes';
+import { FightSideStats, FightStatsMessage } from '../../common/MessageTypes';
 
 const ReplayEventSchema = new Schema(
     {
@@ -57,6 +57,84 @@ export async function getReplaysByOriginalPlayer(originalPlayerId: number): Prom
 
 export async function getReplayById(replayId: string): Promise<Record<string, any> | null> {
     return replayModel.findOne({ replayId }).lean();
+}
+
+export interface GameStatsResult {
+    fights: number;
+    wins: number;
+    losses: number;
+    draws: number;
+    stats: FightStatsMessage;
+}
+
+const ZERO_SIDE: FightSideStats = {
+    damageDealt: { weapon: 0, burn: 0, poison: 0 },
+    healingReceived: 0,
+    damageReducedByDefense: 0,
+    damageReducedByFlat: 0,
+    attacksDodged: 0,
+    damageBlockedByInvincible: 0,
+};
+
+/** Cumulative fight stats for a character across every recorded fight (aggregated
+ *  on read from Replay docs, not persisted — see Season 16 plan). The "enemy" side
+ *  represents all opponents faced, combined. */
+export async function getGameStats(originalPlayerId: number): Promise<GameStatsResult> {
+    const [agg] = await replayModel.aggregate([
+        { $match: { originalPlayerId, stats: { $exists: true } } },
+        { $group: {
+            _id: null,
+            fights: { $sum: 1 },
+            wins: { $sum: { $cond: [{ $eq: ['$result', 'win'] }, 1, 0] } },
+            losses: { $sum: { $cond: [{ $in: ['$result', ['lose', 'loose']] }, 1, 0] } },
+            draws: { $sum: { $cond: [{ $eq: ['$result', 'draw'] }, 1, 0] } },
+            pWeapon: { $sum: '$stats.player.damageDealt.weapon' },
+            pBurn: { $sum: '$stats.player.damageDealt.burn' },
+            pPoison: { $sum: '$stats.player.damageDealt.poison' },
+            pHeal: { $sum: '$stats.player.healingReceived' },
+            pDef: { $sum: '$stats.player.damageReducedByDefense' },
+            pFlat: { $sum: '$stats.player.damageReducedByFlat' },
+            pDodge: { $sum: '$stats.player.attacksDodged' },
+            pInvuln: { $sum: '$stats.player.damageBlockedByInvincible' },
+            eWeapon: { $sum: '$stats.enemy.damageDealt.weapon' },
+            eBurn: { $sum: '$stats.enemy.damageDealt.burn' },
+            ePoison: { $sum: '$stats.enemy.damageDealt.poison' },
+            eHeal: { $sum: '$stats.enemy.healingReceived' },
+            eDef: { $sum: '$stats.enemy.damageReducedByDefense' },
+            eFlat: { $sum: '$stats.enemy.damageReducedByFlat' },
+            eDodge: { $sum: '$stats.enemy.attacksDodged' },
+            eInvuln: { $sum: '$stats.enemy.damageBlockedByInvincible' },
+        } },
+    ]).exec();
+
+    if (!agg) {
+        return { fights: 0, wins: 0, losses: 0, draws: 0, stats: { player: ZERO_SIDE, enemy: ZERO_SIDE } };
+    }
+
+    return {
+        fights: agg.fights ?? 0,
+        wins: agg.wins ?? 0,
+        losses: agg.losses ?? 0,
+        draws: agg.draws ?? 0,
+        stats: {
+            player: {
+                damageDealt: { weapon: agg.pWeapon ?? 0, burn: agg.pBurn ?? 0, poison: agg.pPoison ?? 0 },
+                healingReceived: agg.pHeal ?? 0,
+                damageReducedByDefense: agg.pDef ?? 0,
+                damageReducedByFlat: agg.pFlat ?? 0,
+                attacksDodged: agg.pDodge ?? 0,
+                damageBlockedByInvincible: agg.pInvuln ?? 0,
+            },
+            enemy: {
+                damageDealt: { weapon: agg.eWeapon ?? 0, burn: agg.eBurn ?? 0, poison: agg.ePoison ?? 0 },
+                healingReceived: agg.eHeal ?? 0,
+                damageReducedByDefense: agg.eDef ?? 0,
+                damageReducedByFlat: agg.eFlat ?? 0,
+                attacksDodged: agg.eDodge ?? 0,
+                damageBlockedByInvincible: agg.eInvuln ?? 0,
+            },
+        },
+    };
 }
 
 export async function saveReplay(data: {

@@ -18,6 +18,17 @@ export interface SeasonInfo {
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
   {
+    number: 16,
+    name: 'Race to Twelve',
+    changes: [
+      'Fixed-length runs: reaching 12 wins now ends the run as a victory — the old beat-the-record win condition is gone',
+      'Losses are now tracked per character',
+      'Wall of Fame: finished 12-win characters ranked by fewest losses',
+      'HP potion: disabled',
+      'Dual Wield: removed attack speed bonus'
+    ],
+  },
+  {
     number: 15,
     name: 'New Beginnings',
     changes: [

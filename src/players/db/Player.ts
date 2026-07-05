@@ -11,7 +11,7 @@ import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollTheDice} from "../../common/utils";
 import {rollItemStats} from "../../items/stats/itemStatRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
-import {GAME_VERSION} from "../../common/types";
+import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 
 
 const PlayerSchema = new Schema({
@@ -26,9 +26,9 @@ const PlayerSchema = new Schema({
     round: Number,
     lives: Number,
     wins: Number,
+    losses: {type: Number, default: 0},
     avatarUrl: String,
     gameVersion: Number,
-    hasVersionWin: Boolean,
     talents: [TalentSchema],
     inventory: [ItemSchema],
     lockedShop: [ItemSchema],
@@ -128,6 +128,7 @@ function getNewPlayer(playerId: number,
         round: 1,
         lives: avatarUrl === PlayerAvatar.WARRIOR ? 4 : 3,
         wins: 0,
+        losses: 0,
         avatarUrl: avatarUrl,
         gameVersion: GAME_VERSION,
         talents: [],
@@ -267,9 +268,9 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         round: player.round,
         lives: player.lives,
         wins: player.wins,
+        losses: player.losses,
         avatarUrl: player.avatarUrl,
         gameVersion: player.gameVersion,
-        hasVersionWin: player.hasVersionWin,
         income: player.income,
         hpRegen: player.hpRegen,
         dodgeRate: player.dodgeRate,
@@ -306,6 +307,7 @@ export function snapshotPlayer(player: Player): Record<string, any> {
         round: player.round,
         lives: player.lives,
         wins: player.wins,
+        losses: player.losses,
         hp: player.hp,
         maxHp: player.maxHp,
         strength: player.strength,
@@ -318,7 +320,6 @@ export function snapshotPlayer(player: Player): Record<string, any> {
         income: player.income,
         refreshShopCost: player.refreshShopCost,
         gameVersion: player.gameVersion,
-        hasVersionWin: player.hasVersionWin,
         baseStats: player.baseStats?.toJSON() || {},
         equippedItems,
         inventory: player.inventory.map(item => item.toJSON()),
@@ -342,6 +343,7 @@ export interface LeaderboardFilters {
     avatar?: string;
     minRound?: number;
     level?: number;
+    minWins?: number;
     rankForOriginalPlayerId?: number;
 }
 
@@ -352,6 +354,7 @@ function buildMatchConditions(filters: LeaderboardFilters): Record<string, any> 
     if (filters.avatar) match.avatarUrl = filters.avatar;
     if (filters.minRound !== undefined) match.round = { $gte: filters.minRound };
     if (filters.level !== undefined) match.level = filters.level;
+    if (filters.minWins !== undefined) match.wins = { $gte: filters.minWins };
     return match;
 }
 
@@ -405,20 +408,39 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
     };
 }
 
-export async function getHighestWinByVersion(gameVersion: number): Promise<number> {
-    const player = await playerModel.findOne({gameVersion}).sort({wins: -1}).limit(1).lean();
-    return player?.wins ?? 0;
-}
-
 export async function getPlayerRank(playerId: number): Promise<number> {
     const player = await playerModel.findOne({playerId: playerId}).lean();
     const rank = await playerModel.countDocuments({wins: {$gt: player.wins}});
     return rank + 1;
 }
 
-export async function getHighestWin(): Promise<number> {
-    const highestWinPlayer = await playerModel.findOne().sort({wins: -1}).limit(1).lean();
-    return highestWinPlayer.wins;
+/** "Wall of Fame": finished (12-win) characters ranked by fewest losses.
+ *  gameVersion >= 16 + losses field presence excludes pre-Season-16 record-chasing
+ *  snapshots that could otherwise have wins >= WINS_TO_WIN from an old, different win condition. */
+export async function getWallOfFame({ limit = 20, skip = 0 }: { limit?: number; skip?: number } = {}):
+    Promise<{ players: Record<string, any>[]; total: number }> {
+    const clampedLimit = Math.min(Math.max(1, limit), 100);
+
+    const pipeline: PipelineStage[] = [
+        { $match: { gameVersion: { $gte: 16 }, wins: { $gte: WINS_TO_WIN }, losses: { $exists: true } } },
+        // Dedupe insurance: exactly one >=12-win doc per character is expected, but keep
+        // the best (fewest-losses) doc per originalPlayerId in case of a double-save.
+        { $sort: { losses: 1, wins: -1, playerId: 1 } },
+        { $group: { _id: '$originalPlayerId', doc: { $first: '$$ROOT' } } },
+        { $replaceRoot: { newRoot: '$doc' } },
+        { $sort: { losses: 1, round: 1, originalPlayerId: 1 } },
+        { $facet: {
+            players: [{ $skip: skip }, { $limit: clampedLimit }],
+            totalCount: [{ $count: 'n' }],
+        }},
+    ];
+
+    const [result] = await playerModel.aggregate(pipeline).exec();
+
+    return {
+        players: (result?.players ?? []).map(cleanRawPlayerDoc),
+        total: result?.totalCount?.[0]?.n ?? 0,
+    };
 }
 
 export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {

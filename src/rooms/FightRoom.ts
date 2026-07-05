@@ -1,9 +1,9 @@
 import { Client, Room } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import { getHighestWin, getHighestWinByVersion, getPlayer, getSameRoundPlayer, snapshotPlayer, updatePlayer } from '../players/db/Player';
+import { getPlayer, getSameRoundPlayer, snapshotPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
-import { FightResultType, GAME_VERSION } from '../common/types';
+import { FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
 import { Dispatcher } from '@colyseus/command';
 import { ReplayRecorder } from '../replay/ReplayRecorder';
 import { saveReplay } from '../replay/db/Replay';
@@ -23,7 +23,7 @@ import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
 import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
-import { CombatLogMessage, FightSideStats, FightStatsMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
+import { CombatLogMessage, FightSideStats, FightStatsMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 
@@ -58,16 +58,6 @@ export class FightRoom extends Room {
 
         this.onMessage('chat', (client, message) => {
             this.broadcast('messages', `${client.sessionId}: ${message}`);
-        });
-
-        this.onMessage('continue_run', () => {
-            this.state.versionWinPending = false;
-            this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId, stats: this.currentFightStats });
-        });
-
-        this.onMessage('accept_win', () => {
-            this.state.versionWinPending = false;
-            this.broadcast('game_over', 'You are the best of the current version!');
         });
 
         this.onMessage('abandon_run', async (client) => {
@@ -216,8 +206,8 @@ export class FightRoom extends Room {
         await delay(2000, this.clock);
         if (!this.state.fightResult) return;
 
-        if (this.state.versionWinPending) {
-            this.broadcast('version_win', {wins: this.state.player.wins, season: GAME_VERSION});
+        if (this.state.gameWinPending) {
+            this.broadcast('game_win', { wins: this.state.player.wins, losses: this.state.player.losses, season: GAME_VERSION } as GameWinMessage);
         } else if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');
         } else if (this.state.lossRewardOptions) {
@@ -312,6 +302,7 @@ export class FightRoom extends Room {
             damageReducedByDefense: Math.round(self.fightStats.damageReducedByDefense),
             damageReducedByFlat: Math.round(self.fightStats.damageReducedByFlat),
             attacksDodged: self.fightStats.attacksDodged,
+            damageBlockedByInvincible: Math.round(self.fightStats.damageBlockedByInvincible),
         });
         return {
             player: sideFor(this.state.player, this.state.enemy),
@@ -598,7 +589,7 @@ export class FightRoom extends Room {
 
         switch (this.state.fightResult) {
             case FightResultType.WIN:
-                await this.handleWin();
+                this.handleWin();
                 break;
             case FightResultType.LOSE:
                 this.handleLoose();
@@ -642,25 +633,22 @@ export class FightRoom extends Room {
         }
     }
 
-    private async handleWin() {
+    private handleWin() {
         this.logCombat('broadcast', { text: 'You win!', kind: 'result', result: 'win' });
         console.log(`'[FightRoom]' ${this.state.player.name} wins!`);
         this.state.player.wins++;
 
-        const highestWin = await getHighestWin();
-        if (this.state.player.wins > highestWin) {
-            this.broadcast('game_over', 'YOU ARE THE #1 TOP CHUNGERION! CHUNGRATULATIONS!');
+        if (this.state.player.wins >= WINS_TO_WIN) {
+            this.state.gameWinPending = true;
+            // Hard-ends the run server-side: DraftRoom/FightRoom onJoin already reject
+            // lives <= 0, so a finished character can't be continued.
+            this.state.player.lives = 0;
+            this.broadcast('game_win', {
+                wins: this.state.player.wins,
+                losses: this.state.player.losses,
+                season: GAME_VERSION,
+            } as GameWinMessage);
             return;
-        }
-
-        if (!this.state.player.hasVersionWin) {
-            const highestVersionWin = await getHighestWinByVersion(GAME_VERSION);
-            if (this.state.player.wins > highestVersionWin) {
-                this.state.player.hasVersionWin = true;
-                this.state.versionWinPending = true;
-                this.broadcast('version_win', {wins: this.state.player.wins, season: GAME_VERSION});
-                return;
-            }
         }
 
         this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId, stats: this.currentFightStats });
@@ -669,6 +657,7 @@ export class FightRoom extends Room {
     private handleLoose() {
         this.logCombat('broadcast', { text: 'You loose!', kind: 'result', result: 'lose' });
         console.log(`[FightRoom]' ${this.state.player.name} looses!`);
+        this.state.player.losses++;
         this.state.player.lives--;
         if (this.state.player.lives <= 0) {
             this.broadcast('game_over', 'You have lost the game!');

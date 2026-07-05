@@ -44,7 +44,6 @@ export class Player extends Schema implements IStats {
     talentsOnCooldown: TalentType[] = [];
     attackSpeedMultiplier: number = 1;
     healingEffectiveness: number = 1;
-    hasVersionWin: boolean = false;
     // Hidden shop-roll stat: seeded from level each draft aura tick (DraftAuraTriggerCommand),
     // doubled by Black Market Contact's aura behavior (TalentBehaviors). Read by
     // ShopUpgradeUtils.applyLuckyShopUpgrades. Resets to 0 every draft phase (new Player()).
@@ -125,6 +124,9 @@ export class Player extends Schema implements IStats {
     // Declared after all other @type fields so existing field indices stay stable
     // (the frontend schema mirror relies on matching declaration order).
     @type('boolean') invincible: boolean = false;
+    // Must stay @type (not a plain field) — Player.copyFrom round-trips through
+    // toJSON(), so a plain field would not survive the draft/fight room transition.
+    @type('number') losses: number = 0;
 
     private _poisonStack: number = 0;
 
@@ -211,6 +213,7 @@ export class Player extends Schema implements IStats {
         if (this.hp <= 0) return;
         if (damage <= 0) return;
         if (this.invincible) {
+            this.fightStats.damageBlockedByInvincible += damage;
             playerClient.send('invulnerable', {
                 playerId: this.playerId,
                 damage: damage,

@@ -8,14 +8,14 @@ import cors from 'cors';
  */
 import {FightRoom} from './rooms/FightRoom';
 import {DraftRoom} from './rooms/DraftRoom';
-import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, playerToPlainObject} from './players/db/Player';
+import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, getWallOfFame, playerToPlainObject} from './players/db/Player';
 import {GAME_VERSION} from './common/types';
 import { getAllItems } from "./items/db/Item";
 import { getItemRollPreview } from "./items/stats/itemRollPreview";
 import { ItemType } from "./items/types/ItemTypes";
 import { shieldDescription } from "./commands/ShopUpgradeUtils";
 import { getAllTalents } from "./talents/db/Talent";
-import { getReplaysByOriginalPlayer, getReplayById } from './replay/db/Replay';
+import { getReplaysByOriginalPlayer, getReplayById, getGameStats } from './replay/db/Replay';
 import { SEASONS } from './common/seasons';
 
 export const server = defineServer({
@@ -49,8 +49,16 @@ export const server = defineServer({
             const avatar = req.query.avatar ? String(req.query.avatar) : undefined;
             const minRound = req.query.minRound !== undefined ? Number(req.query.minRound) : undefined;
             const level = req.query.level !== undefined ? Number(req.query.level) : undefined;
+            const minWins = req.query.minWins !== undefined ? Number(req.query.minWins) : undefined;
             const rankForOriginalPlayerId = req.query.rankForOriginalPlayerId ? Number(req.query.rankForOriginalPlayerId) : undefined;
-            const result = await getLeaderboard({ limit, skip, gameVersion: currentVersion ? GAME_VERSION : undefined, name, avatar, minRound, level, rankForOriginalPlayerId });
+            const result = await getLeaderboard({ limit, skip, gameVersion: currentVersion ? GAME_VERSION : undefined, name, avatar, minRound, level, minWins, rankForOriginalPlayerId });
+            res.status(200).json(result);
+        });
+
+        app.get('/wallOfFame', async (req, res) => {
+            const limit = req.query.limit !== undefined ? Number(req.query.limit) : 20;
+            const skip = req.query.skip !== undefined ? Number(req.query.skip) : 0;
+            const result = await getWallOfFame({ limit, skip });
             res.status(200).json(result);
         });
 
@@ -98,6 +106,13 @@ export const server = defineServer({
             const replay = await getReplayById(req.params.id);
             if (!replay) return res.status(404).send({ error: 'Replay not found' });
             res.status(200).json(replay);
+        });
+
+        app.get('/gameStats', async (req, res) => {
+            const originalPlayerId = Number(req.query.originalPlayerId);
+            if (!originalPlayerId || Number.isNaN(originalPlayerId)) return res.status(400).send({ error: 'originalPlayerId required' });
+            const result = await getGameStats(originalPlayerId);
+            res.status(200).json(result);
         });
 
         /**

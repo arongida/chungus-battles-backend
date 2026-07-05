@@ -170,7 +170,8 @@ export class DraftRoom extends Room {
     }
 
     private async updateShop(newShopSize: number) {
-        const excludeTypes = this.state.player.lives > 2 ? ['potion'] : [];
+        // Health potions are currently disabled from the shop.
+        const excludeTypes = ['potion'];
         const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level, excludeTypes);
         const lockedShop = this.state.player.lockedShop;
         if (lockedShop.length > 0) {
