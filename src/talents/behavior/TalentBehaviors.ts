@@ -709,10 +709,14 @@ export const TalentBehaviors = {
             const mainHand = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
             const offHand = attacker.equippedItems.get(EquipSlot.OFF_HAND);
             const offHandIsGhost = offHand?.tags?.includes('dual_wield_copy');
+            const mainHandIsWeapon = mainHand && mainHand.baseAttackSpeed > 0;
 
             talent.affectedStats.attackSpeed = 1;
 
-            if (!mainHand) {
+            // Only real weapons get mirrored — non-weapon hand items (e.g. Ring of
+            // Immortality, which occupies a hand slot but isn't a weapon) should never
+            // be copied into the off hand or treated as dual-wielded.
+            if (!mainHandIsWeapon) {
                 if (offHandIsGhost) attacker.setItemUnequipped(offHand, EquipSlot.OFF_HAND);
                 return;
             }

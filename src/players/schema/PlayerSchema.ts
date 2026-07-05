@@ -8,6 +8,7 @@ import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {BURN_DURATION_MS} from "../../items/behavior/uniqueItemBalance";
+import {FightStats} from "./FightStats";
 
 export class Player extends Schema implements IStats {
     @type('number') playerId: number;
@@ -34,6 +35,7 @@ export class Player extends Schema implements IStats {
     @type('number') private _hp: number = 0;
     @type(AffectedStats) baseStats: AffectedStats = new AffectedStats();
     damage: number = 0;
+    fightStats: FightStats = new FightStats();
     attackTimers: Map<string, Delayed> = new Map();
     poisonTimer: Delayed;
     burnTimer: Delayed;
@@ -200,7 +202,9 @@ export class Player extends Schema implements IStats {
         }
         // Actual HP gained — the hp setter clamps at maxHp, so overheal must not
         // be reported as healing (it inflates healing stats and replay HP tracking).
-        return this.hp - hpBefore;
+        const gained = this.hp - hpBefore;
+        if (gained > 0) this.fightStats.healingReceived += gained;
+        return gained;
     }
 
     takeDamage(damage: number, playerClient: Client, damageType: DamageType = 'normal') {
@@ -215,6 +219,7 @@ export class Player extends Schema implements IStats {
             return;
         }
         this.hp -= damage;
+        this.fightStats.damageTaken[damageType] += damage;
         playerClient.send('damage', {
             playerId: this.playerId,
             damage: damage,
@@ -223,7 +228,12 @@ export class Player extends Schema implements IStats {
     }
 
     getDamageAfterDefense(initialDamage: number): number {
-        const damage = (initialDamage * (100 / (100 + this.defense))) - this.flatDmgReduction;
+        const afterPct = initialDamage * (100 / (100 + this.defense));
+        const damage = afterPct - this.flatDmgReduction;
+        if (initialDamage > 0 && !this.invincible) {
+            this.fightStats.damageReducedByDefense += initialDamage - afterPct;
+            this.fightStats.damageReducedByFlat += Math.min(this.flatDmgReduction, Math.max(afterPct, 0));
+        }
         return damage > 0 ? damage : 0;
     }
 

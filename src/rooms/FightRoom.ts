@@ -23,7 +23,7 @@ import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
 import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
-import { CombatLogMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
+import { CombatLogMessage, FightSideStats, FightStatsMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 
@@ -41,6 +41,9 @@ export class FightRoom extends Room {
     // so it can be included in the end_battle broadcast, not just the fire-and-forget
     // replay save that happens afterward. Lets the client deep-link "Watch Replay".
     private replayId = randomUUID();
+    // Built once in handleFightEnd, before any end_battle broadcast — included in every
+    // end_battle payload and the saved replay doc. null until the fight actually concludes.
+    private fightStatsPayload: FightStatsMessage | null = null;
 
     onCreate() {
         this.state = new FightState();
@@ -48,6 +51,7 @@ export class FightRoom extends Room {
         // Wrap broadcast so every outbound event is captured by the recorder.
         const origBroadcast = this.broadcast.bind(this);
         (this as any).broadcast = (type: string, message?: any, options?: any) => {
+            this.stampCombatLogSeq(type, message);
             this.recorder.record('broadcast', type, message);
             return origBroadcast(type, message, options);
         };
@@ -58,7 +62,7 @@ export class FightRoom extends Room {
 
         this.onMessage('continue_run', () => {
             this.state.versionWinPending = false;
-            this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId });
+            this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId, stats: this.currentFightStats });
         });
 
         this.onMessage('accept_win', () => {
@@ -220,7 +224,7 @@ export class FightRoom extends Room {
             // Reconnect after a loss: resend the pending options (or the resolved outcome).
             this.broadcast('end_battle', this.buildLossEndBattlePayload());
         } else {
-            this.broadcast('end_battle', { result: this.state.fightResult ?? 'win', replayId: this.currentReplayId });
+            this.broadcast('end_battle', { result: this.state.fightResult ?? 'win', replayId: this.currentReplayId, stats: this.currentFightStats });
         }
     }
 
@@ -239,10 +243,24 @@ export class FightRoom extends Room {
         if ((client.send as any).__replayWrapped) return;
         const origSend = client.send.bind(client);
         (client as any).send = (type: string, message?: any) => {
+            this.stampCombatLogSeq(type, message);
             this.recorder.record('send', type, message);
             return origSend(type, message);
         };
         (client.send as any).__replayWrapped = true;
+    }
+
+    // Monotonic sequence counter for combat_log messages. Logs are delivered via a mix
+    // of buffered broadcast() and immediate client.send(), so arrival order on the
+    // client isn't guaranteed — stamping seq here (the single choke point both delivery
+    // paths pass through) lets the client sort them back into the order they were
+    // actually emitted in.
+    private combatLogSeq = 0;
+
+    private stampCombatLogSeq(type: string, message?: any): void {
+        if (type === 'combat_log' && message && typeof message === 'object') {
+            message.seq = this.combatLogSeq++;
+        }
     }
 
     async onLeave(client: Client, code: number) {
@@ -275,6 +293,30 @@ export class FightRoom extends Room {
     // so the client shouldn't be pointed at a replayId that will 404.
     private get currentReplayId(): string | undefined {
         return this.recorder.initialState ? this.replayId : undefined;
+    }
+
+    // Same gating as currentReplayId: a fight forfeited during the pre-battle countdown
+    // never builds stats (nothing happened yet), so omit rather than send all-zeros.
+    private get currentFightStats(): FightStatsMessage | undefined {
+        return this.recorder.initialState ? this.fightStatsPayload ?? undefined : undefined;
+    }
+
+    private buildFightStatsPayload(): FightStatsMessage {
+        const sideFor = (self: Player, opponent: Player): FightSideStats => ({
+            damageDealt: {
+                weapon: Math.round(opponent.fightStats.damageTaken.normal),
+                burn: Math.round(opponent.fightStats.damageTaken.burn),
+                poison: Math.round(opponent.fightStats.damageTaken.poison),
+            },
+            healingReceived: Math.round(self.fightStats.healingReceived),
+            damageReducedByDefense: Math.round(self.fightStats.damageReducedByDefense),
+            damageReducedByFlat: Math.round(self.fightStats.damageReducedByFlat),
+            attacksDodged: self.fightStats.attacksDodged,
+        });
+        return {
+            player: sideFor(this.state.player, this.state.enemy),
+            enemy: sideFor(this.state.enemy, this.state.player),
+        };
     }
 
     private logCombat(target: Client | 'broadcast', entry: CombatLogMessage) {
@@ -456,12 +498,11 @@ export class FightRoom extends Room {
         const maxDmg = weapon.baseMaxDamage + attacker.strength * strengthMultiplier;
         const attackRoll = Math.random() * (maxDmg - minDmg) + minDmg;
 
-        const damage = defender.getDamageAfterDefense(attackRoll);
-
         if (defender.dodgeRate > 0) {
             const dodgeChance = 1 - 100 / (100 + defender.dodgeRate);
 
             if (Math.random() < dodgeChance) {
+                defender.fightStats.attacksDodged++;
                 this.logCombat(this.state.playerClient, { text: `${defender.name} dodged ${attacker.name}'s ${weapon.name}!`, kind: 'dodge', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId });
                 this.dispatcher.dispatch(new OnDodgeTriggerCommand(), {
                     attacker: attacker,
@@ -471,6 +512,8 @@ export class FightRoom extends Room {
                 return;
             }
         }
+
+        const damage = defender.getDamageAfterDefense(attackRoll);
 
         this.dispatcher.dispatch(new OnAttackedTriggerCommand(), {
             attacker: attacker,
@@ -509,6 +552,8 @@ export class FightRoom extends Room {
 
         this.state.player.talents.forEach(t => t.resetCombatStats());
         this.state.enemy.talents.forEach(t => t.resetCombatStats());
+        this.state.player.fightStats.reset();
+        this.state.enemy.fightStats.reset();
 
         //start attack timers
         this.startWeaponAttackTimers(this.state.player, this.state.enemy);
@@ -543,6 +588,12 @@ export class FightRoom extends Room {
             } else {
                 this.state.fightResult = FightResultType.WIN;
             }
+        }
+
+        // Built before any end_battle broadcast (win/lose/draw handlers below) and before
+        // FightEndTriggerCommand, so post-fight trigger heals don't leak into the totals.
+        if (this.recorder.initialState) {
+            this.fightStatsPayload = this.buildFightStatsPayload();
         }
 
         switch (this.state.fightResult) {
@@ -586,6 +637,7 @@ export class FightRoom extends Room {
                 initialState: this.recorder.initialState,
                 events: this.recorder.events,
                 truncated: this.recorder.truncated,
+                stats: this.fightStatsPayload ?? undefined,
             }).catch(err => console.error('[FightRoom] replay save failed:', err));
         }
     }
@@ -611,7 +663,7 @@ export class FightRoom extends Room {
             }
         }
 
-        this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId });
+        this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId, stats: this.currentFightStats });
     }
 
     private handleLoose() {
@@ -638,6 +690,7 @@ export class FightRoom extends Room {
         return {
             result: 'lose',
             replayId: this.currentReplayId,
+            stats: this.currentFightStats,
             lossReward: {
                 ...this.state.lossRewardOptions,
                 outcome: this.state.lossRewardOutcome ?? undefined,
@@ -714,6 +767,6 @@ export class FightRoom extends Room {
     private handleDraw() {
         console.log('[FightRoom]', 'draw!');
         this.logCombat('broadcast', { text: "It's a draw!", kind: 'result', result: 'draw' });
-        this.broadcast('end_battle', { result: 'draw', replayId: this.currentReplayId });
+        this.broadcast('end_battle', { result: 'draw', replayId: this.currentReplayId, stats: this.currentFightStats });
     }
 }
