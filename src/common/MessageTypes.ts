@@ -101,6 +101,19 @@ export type CombatLogMessage = {
   result?: 'win' | 'lose' | 'draw';
 };
 
+export type FightSideStats = {
+  damageDealt: { weapon: number; burn: number; poison: number };
+  healingReceived: number;
+  damageReducedByDefense: number;
+  damageReducedByFlat: number;
+  attacksDodged: number;
+};
+
+export type FightStatsMessage = {
+  player: FightSideStats;
+  enemy: FightSideStats;
+};
+
 export function fmt(n: number): string {
   return parseFloat(n.toFixed(2)).toString();
 }

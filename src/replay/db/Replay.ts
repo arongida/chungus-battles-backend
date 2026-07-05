@@ -1,4 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
+import { FightStatsMessage } from '../../common/MessageTypes';
 
 const ReplayEventSchema = new Schema(
     {
@@ -24,6 +25,7 @@ const ReplaySchema = new Schema({
     initialState: Schema.Types.Mixed,
     events: [ReplayEventSchema],
     truncated: { type: Boolean, default: false },
+    stats: Schema.Types.Mixed,
 });
 
 ReplaySchema.index({ originalPlayerId: 1, round: 1 });
@@ -42,6 +44,7 @@ export interface ReplayListItem {
     durationMs: number;
     createdAt: Date;
     truncated: boolean;
+    stats?: FightStatsMessage;
 }
 
 export async function getReplaysByOriginalPlayer(originalPlayerId: number): Promise<ReplayListItem[]> {
@@ -69,6 +72,7 @@ export async function saveReplay(data: {
     initialState: Record<string, any>;
     events: any[];
     truncated: boolean;
+    stats?: FightStatsMessage;
 }): Promise<void> {
     await replayModel.create(data);
 }
