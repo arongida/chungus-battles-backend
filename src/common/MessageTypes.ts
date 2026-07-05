@@ -78,6 +78,11 @@ export type CombatLogKind =
 export type CombatLogMessage = {
   text: string;
   kind: CombatLogKind;
+  // Monotonic sequence number stamped by FightRoom's send/broadcast wrappers.
+  // Combat logs are sent via a mix of buffered broadcast() and immediate
+  // client.send(), which can arrive out of order on the client — seq lets the
+  // client reorder them deterministically.
+  seq?: number;
   attackerId?: number;
   defenderId?: number;
   weaponItemId?: number;

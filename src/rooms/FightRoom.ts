@@ -48,6 +48,7 @@ export class FightRoom extends Room {
         // Wrap broadcast so every outbound event is captured by the recorder.
         const origBroadcast = this.broadcast.bind(this);
         (this as any).broadcast = (type: string, message?: any, options?: any) => {
+            this.stampCombatLogSeq(type, message);
             this.recorder.record('broadcast', type, message);
             return origBroadcast(type, message, options);
         };
@@ -239,10 +240,24 @@ export class FightRoom extends Room {
         if ((client.send as any).__replayWrapped) return;
         const origSend = client.send.bind(client);
         (client as any).send = (type: string, message?: any) => {
+            this.stampCombatLogSeq(type, message);
             this.recorder.record('send', type, message);
             return origSend(type, message);
         };
         (client.send as any).__replayWrapped = true;
+    }
+
+    // Monotonic sequence counter for combat_log messages. Logs are delivered via a mix
+    // of buffered broadcast() and immediate client.send(), so arrival order on the
+    // client isn't guaranteed — stamping seq here (the single choke point both delivery
+    // paths pass through) lets the client sort them back into the order they were
+    // actually emitted in.
+    private combatLogSeq = 0;
+
+    private stampCombatLogSeq(type: string, message?: any): void {
+        if (type === 'combat_log' && message && typeof message === 'object') {
+            message.seq = this.combatLogSeq++;
+        }
     }
 
     async onLeave(client: Client, code: number) {
