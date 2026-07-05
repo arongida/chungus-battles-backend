@@ -23,6 +23,8 @@ export const SEASONS: SeasonInfo[] = [
     changes: [
       'Loss consolation reworked: losing players now choose between bonus gold (30/20/10 by lives left), bonus XP (20% more than the gold amount), or upgrading the rarity of a random owned item',
       'Overheal reporting fixed: healing at full HP no longer inflates healing-done stats, floating heal numbers, or replay HP bars',
+      'Stats after fights: you can check out various stats like damage dealt or dodged after fights',
+      'Fight speed controls: speed up or slow down fights at real time'
     ],
   },
   {
