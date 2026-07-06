@@ -66,6 +66,27 @@ describe("testing your Colyseus app", () => {
         return { room, client, playerId, cleanExit };
     }
 
+    // Buying gear now auto-equips it into the first empty valid slot (Player.getItem →
+    // tryAutoEquipIntoEmptySlot), so a purchased item may live in equippedItems instead of
+    // inventory. "Owning" an item means it's in either place.
+    function ownsItem(player: any, itemId: number): boolean {
+        if (player.inventory.find((i: Item) => i.itemId === itemId)) return true;
+        let equipped = false;
+        player.equippedItems.forEach((i: Item) => { if (i.itemId === itemId) equipped = true; });
+        return equipped;
+    }
+
+    // Move an item into inventory if it got auto-equipped on buy, so equip/sell flows can be
+    // exercised from a known starting point.
+    async function ensureInInventory(room: any, client: any, itemId: number) {
+        let slot: string | undefined;
+        room.state.player.equippedItems.forEach((i: Item, s: string) => { if (i.itemId === itemId) slot = s; });
+        if (slot) {
+            client.send('unequip', { itemId, slot });
+            await new Promise<void>(r => setTimeout(r, 150));
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Draft room — basic operations
     // -------------------------------------------------------------------------
@@ -86,7 +107,8 @@ describe("testing your Colyseus app", () => {
 
         expect(client.sessionId).toEqual(room.clients[0].sessionId);
         expect(room.state.player.talents.length).toBe(1);
-        expect(room.state.player.inventory.find((i: Item) => i.itemId === selectedItemId)).toBeDefined();
+        // The bought item is now owned — either in inventory or auto-equipped into an empty slot.
+        expect(ownsItem(room.state.player, selectedItemId)).toBe(true);
     });
 
     it("buying an item deducts gold and adds it to inventory", async () => {
@@ -99,7 +121,8 @@ describe("testing your Colyseus app", () => {
         await new Promise<void>(r => setTimeout(r, 100));
 
         expect(room.state.player.gold).toBe(goldBefore - item.price);
-        expect(room.state.player.inventory.find((i: Item) => i.itemId === item.itemId)).toBeDefined();
+        // Item is owned afterwards (inventory or auto-equipped).
+        expect(ownsItem(room.state.player, item.itemId)).toBe(true);
 
         await cleanExit();
     });
@@ -115,12 +138,16 @@ describe("testing your Colyseus app", () => {
         client.send('buy', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
 
+        // Only unequipped items can be sold; move it to inventory if buy auto-equipped it.
+        // Unequipping is gold-neutral, so it doesn't affect the refund math below.
+        await ensureInInventory(room, client, item.itemId);
+
         client.send('sell', { itemId: item.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
 
         const expectedGold = (goldBefore - item.price) + Math.floor(item.price * 0.7);
         expect(room.state.player.gold).toBe(expectedGold);
-        expect(room.state.player.inventory.find((i: Item) => i.itemId === item.itemId)).toBeUndefined();
+        expect(ownsItem(room.state.player, item.itemId)).toBe(false);
 
         await cleanExit();
     });
@@ -128,15 +155,20 @@ describe("testing your Colyseus app", () => {
     it("equipping an item moves it from inventory to equipped slot", async () => {
         const { room, client, cleanExit } = await createAndJoinDraftRoom();
 
-        const equippable = room.state.shop.find((i: Item) =>
-            i.equipOptions && (i.equipOptions as any).length > 0
-        );
+        const equippable = room.state.shop.find((i: Item) => {
+            const opts = Array.from((i.equipOptions ?? []) as any) as string[];
+            return opts.some(o => o !== 'drink');
+        });
         expect(equippable).toBeDefined();
 
-        const slot = Array.from(equippable.equipOptions)[0];
-        
+        const slot = (Array.from(equippable.equipOptions as any) as string[]).find(o => o !== 'drink');
+
         client.send('buy', { itemId: equippable.itemId });
         await new Promise<void>(r => setTimeout(r, 100));
+
+        // Buy may have auto-equipped it; put it back in inventory so we test the explicit equip.
+        await ensureInInventory(room, client, equippable.itemId);
+        expect(room.state.player.inventory.find((i: Item) => i.itemId === equippable.itemId)).toBeDefined();
 
         client.send('equip', { itemId: equippable.itemId, slot });
         await new Promise<void>(r => setTimeout(r, 100));
@@ -150,14 +182,18 @@ describe("testing your Colyseus app", () => {
 
     it("unequipping an item moves it back to inventory", async () => {
         const { room, client, cleanExit } = await createAndJoinDraftRoom();
-        const equippable = room.state.shop.find((i: Item) =>
-            i.equipOptions && (i.equipOptions as any).length > 0
-        );
+        const equippable = room.state.shop.find((i: Item) => {
+            const opts = Array.from((i.equipOptions ?? []) as any) as string[];
+            return opts.some(o => o !== 'drink');
+        });
         expect(equippable).toBeDefined();
-        const slot = Array.from(equippable.equipOptions)[0];
+        const slot = (Array.from(equippable.equipOptions as any) as string[]).find(o => o !== 'drink');
 
         client.send('buy', { itemId: equippable.itemId });
         await new Promise<void>(r => setTimeout(r, 250));
+
+        // Normalize to inventory first so equip lands in the known slot regardless of auto-equip.
+        await ensureInInventory(room, client, equippable.itemId);
 
         client.send('equip', { itemId: equippable.itemId, slot });
         await new Promise<void>(r => setTimeout(r, 100));
