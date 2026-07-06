@@ -489,7 +489,12 @@ export class FightRoom extends Room {
         const maxDmg = weapon.baseMaxDamage + attacker.strength * strengthMultiplier;
         const attackRoll = Math.random() * (maxDmg - minDmg) + minDmg;
 
-        if (defender.dodgeRate > 0) {
+        // Unstoppable Force (WARRIOR_3): consumes the empowered flag for this attack — skips the
+        // dodge roll entirely and doubles the final damage below.
+        const empowered = attacker.empoweredNextAttack;
+        if (empowered) attacker.empoweredNextAttack = false;
+
+        if (!empowered && defender.dodgeRate > 0) {
             const dodgeChance = 1 - 100 / (100 + defender.dodgeRate);
 
             if (Math.random() < dodgeChance) {
@@ -504,7 +509,8 @@ export class FightRoom extends Room {
             }
         }
 
-        const damage = defender.getDamageAfterDefense(attackRoll);
+        let damage = defender.getDamageAfterDefense(attackRoll);
+        if (empowered) damage *= 2;
 
         this.dispatcher.dispatch(new OnAttackedTriggerCommand(), {
             attacker: attacker,

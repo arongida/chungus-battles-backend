@@ -9,12 +9,13 @@ import { ArraySchema } from "@colyseus/schema";
 import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
-import { applyRarityUpgrade } from "../../commands/ShopUpgradeUtils";
+import { applyRarityUpgrade, applyLuckyShopUpgrades } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, RewardGainMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
 import { Player } from "../../players/schema/PlayerSchema";
 import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus } from "../../items/behavior/uniqueItemBalance";
+import { weaponWhispererSnapshots, weaponWhispererFinalRolls } from "./weaponWhispererState";
 
 /** `reward`, when provided alongside a positive gold/xp amount, sends a `reward_gain` message to
  *  the recipient so the client can pop floating +gold/+xp text over their avatar. */
@@ -221,7 +222,7 @@ export const TalentBehaviors = {
 
     [TalentType.THROW_MONEY]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, commandDispatcher } = context;
-        const initialDamage = 1 + attacker.gold * 0.5;
+        const initialDamage = attacker.income;
         const damage = defender.getDamageAfterDefense(initialDamage);
 
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
@@ -264,6 +265,31 @@ export const TalentBehaviors = {
         // (level-up rolls) and must not be insta-mythic'd out of it.
         if (!weapon || weapon.rarity >= ItemRarity.MYTHIC || weapon.tags?.includes('quest')) return;
 
+        // Snapshot the weapon's pre-upgrade state exactly once (before this talent ever touches
+        // it), so PlayerSchema.setItemUnequipped can revert it when it leaves MAIN_HAND — closes
+        // the exploit of cycling weapons through main-hand to permanently bank multiple Mythics.
+        if (!weaponWhispererSnapshots.has(weapon)) {
+            weaponWhispererSnapshots.set(weapon, cloneItem(weapon));
+        }
+
+        // If this exact weapon was rolled Mythic before (and later reverted on unequip), reapply
+        // that same result instead of rolling fresh random affixes on every re-equip.
+        const cachedResult = weaponWhispererFinalRolls.get(weapon);
+        if (cachedResult) {
+            weapon.rarity = cachedResult.rarity;
+            weapon.affectedStats = cachedResult.affectedStats;
+            weapon.baseMinDamage = cachedResult.baseMinDamage;
+            weapon.baseMaxDamage = cachedResult.baseMaxDamage;
+            weapon.baseAttackSpeed = cachedResult.baseAttackSpeed;
+            weapon.description = cachedResult.description;
+            client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Mythic!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
+            client.send('trigger_talent', {
+                playerId: attacker.playerId,
+                talentId: TalentType.WEAPON_WHISPERER,
+            });
+            return;
+        }
+
         // Lock rarity immediately so subsequent aura ticks skip this while the DB fetch is in flight
         const originalRarity = weapon.rarity;
         weapon.rarity = ItemRarity.MYTHIC;
@@ -280,6 +306,7 @@ export const TalentBehaviors = {
             rollItemStats(rolledSource);
             applyRarityUpgrade(weapon, rolledSource, attacker, false);
         }
+        weaponWhispererFinalRolls.set(weapon, cloneItem(weapon));
 
         client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Mythic!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
         client.send('trigger_talent', {
@@ -288,13 +315,55 @@ export const TalentBehaviors = {
         });
     },
 
+    // Gold Genie — AURA trigger (ticks every ~1s in both draft and fight rooms). Raises every
+    // merchant-class shop item to a guaranteed LEGENDARY floor, then gives it exactly one
+    // chance-based lucky-find roll (off the pristine pre-upgrade template) on top — applied
+    // *after* the floor so the roll isn't wasted climbing through commons. `goldGenieLuckyRolled`
+    // latches that one-time roll per shop slot so it doesn't re-roll (and inevitably hit MYTHIC)
+    // on every subsequent tick. Also grants a free claim on the first merchant item bought each
+    // shop (goldGenieClaimUsed/-FreeClaim latch, mirrors Comrade; consumed in DraftRoom.buyItem,
+    // reset in DraftRoom.updateShop). `!shop` makes it harmless mid-fight.
     [TalentType.GOLD_GENIE]: (context: TalentBehaviorContext) => {
-        const { attacker, client, talent } = context;
-        talent.affectedStats.defense = attacker.gold * talent.activationRate;
-        client.send('trigger_talent', {
-            playerId: attacker.playerId,
-            talentId: TalentType.GOLD_GENIE,
+        const { attacker, client, shop } = context;
+        if (!shop) return;
+        attacker.goldGenieFreeClaim = !attacker.goldGenieClaimUsed;
+
+        let upgraded = false;
+        shop.forEach((item, slot) => {
+            if (item.class !== ItemClass.MERCHANT || (item.rarity >= ItemRarity.LEGENDARY && item.goldGenieLuckyRolled)) return;
+            const pristine = cloneItem(item);
+            const basePrice = item.price;
+            let steps = 0;
+            while (item.rarity < ItemRarity.LEGENDARY) {
+                const rolled = cloneItem(pristine);
+                rollItemStats(rolled);
+                applyRarityUpgrade(item, rolled, attacker, false);
+                steps++;
+            }
+            let luckySteps = 0;
+            if (!item.goldGenieLuckyRolled) {
+                item.goldGenieLuckyRolled = true;
+                luckySteps = applyLuckyShopUpgrades(item, pristine, attacker);
+                steps += luckySteps;
+            }
+            if (steps > 0) {
+                item.price = Math.round(basePrice * (1 + 0.5 * steps));
+                item.sellPrice = Math.floor(item.price * 0.7);
+                upgraded = true;
+            }
+            // Same floating-text + fireworks celebration as a normal shop lucky find
+            // (DraftRoom.announceLuckyUpgrade) — only for the chance-based lucky steps, not the
+            // guaranteed climb to Legendary.
+            if (luckySteps > 0) {
+                client.send('shop_floating', { slot, text: 'Lucky find! Rarity up!', rarity: item.rarity });
+            }
         });
+        if (upgraded) {
+            client.send('trigger_talent', {
+                playerId: attacker.playerId,
+                talentId: TalentType.GOLD_GENIE,
+            });
+        }
     },
 
     [TalentType.STRONG]: (context: TalentBehaviorContext) => {
@@ -349,22 +418,17 @@ export const TalentBehaviors = {
         });
     },
 
+    // Hidden Vials — ON_DODGE trigger. `defender` is the dodger (talent owner); the enemy who
+    // missed is `attacker`. Applies the DoT stacks to the enemy.
     [TalentType.RESILIENCE]: (context: TalentBehaviorContext) => {
-        const { defender, client, talent } = context;
-        const healingAmount = talent.activationRate * defender.maxHp;
-        const resilienceHealed = defender.heal(healingAmount);
-        track(talent, 1, 0, resilienceHealed);
+        const { attacker, defender, client, clock, talent } = context;
+        attacker.addBurnStacks(clock, client, 1);
+        attacker.addPoisonStacks(clock, client, 1);
+        track(talent, 1);
         client.send('trigger_talent', {
             playerId: defender.playerId,
             talentId: TalentType.RESILIENCE,
         });
-        if (resilienceHealed > 0) {
-            client.send('combat_log', { text: `${defender.name} recovers ${fmt(resilienceHealed)} health!`, kind: 'heal', talentId: talent.talentId, attackerId: defender.playerId, healing: resilienceHealed } as CombatLogMessage);
-            client.send('healing', {
-                playerId: defender.playerId,
-                healing: resilienceHealed,
-            });
-        }
     },
 
     [TalentType.THORNY_FENCE]: (context: TalentBehaviorContext) => {
@@ -533,40 +597,18 @@ export const TalentBehaviors = {
             // );
         },
 
+    // Comrade — AURA trigger (ticks every ~1s in the draft room) so the bonus applies right after
+    // picking the talent, not only after the next shop refresh. Each tick sets the reroll cost to
+    // the player's income and exposes one free-item claim per shop; `comradeClaimUsed` (latched in
+    // DraftRoom.buyItem, reset in DraftRoom.updateShop) stops the aura from re-granting a fresh
+    // claim every second once one has been spent on the current shop. The actual free purchase is
+    // applied in DraftRoom.buyItem so the player picks which item.
     [TalentType.COMRADE]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, shop } = context;
-            attacker.gold = 0;
-            const comradeXp = attacker.level * 2;
-            attacker.xp += comradeXp;
-            client.send('reward_gain', { playerId: attacker.playerId, xp: comradeXp } as RewardGainMessage);
-            const rewardCount = attacker.level + 1;
-
-            for (let i = 0; i < rewardCount; i++) {
-                if (shop[i]) {
-                    shop[i].price = 0;
-                    shop[i].sellPrice = 0;
-                }
-            }
-
-            attacker.inventory.forEach(item => {
-                item.price = 0;
-                item.sellPrice = 0;
-            });
-
-            attacker.equippedItems.forEach(item => {
-                item.price = 0;
-                item.sellPrice = 0;
-            });
-
-            client.send('trigger_talent', {
-                playerId: attacker.playerId,
-                talentId: TalentType.COMRADE,
-            });
-            client.send(
-                'draft_log',
-                `Comrade ${attacker.name} achieved the requirements of the five-year plan and gets a reward: The first ${rewardCount} items are free in the shop!`
-            );
+            const { attacker, shop } = context;
+            if (!shop) return;
+            attacker.refreshShopCost = Math.floor(attacker.income);
+            attacker.comradeFreeClaim = !attacker.comradeClaimUsed;
         },
 
     [TalentType.GAMBLER]:
@@ -860,17 +902,16 @@ export const TalentBehaviors = {
             });
         },
 
+    // Unstoppable Force — ACTIVE trigger (activationRate 0.5 => every 2s). Flags the owner's next
+    // weapon attack to be un-dodgeable and deal double damage; consumed in FightRoom.tryWeaponAttack.
     [TalentType.WARRIOR_3]:
         (context: TalentBehaviorContext) => {
-            const { attacker, defender, client, talent } = context;
-            if (defender) {
-                talent.affectedStats.defense = defender.defense * talent.scaling;
-                talent.affectedStats.dodgeRate = defender.dodgeRate * talent.scaling;
-                client.send('trigger_talent', {
-                    playerId: attacker.playerId,
-                    talentId: TalentType.WARRIOR_3,
-                });
-            }
+            const { attacker, client } = context;
+            attacker.empoweredNextAttack = true;
+            client.send('trigger_talent', {
+                playerId: attacker.playerId,
+                talentId: TalentType.WARRIOR_3,
+            });
         },
 
     [TalentType.MERCHANT_4]:
@@ -885,15 +926,23 @@ export const TalentBehaviors = {
             });
         },
 
+    // Berserk — AURA trigger. Re-checked every ~1s; below 50% HP grants +100% strength (of base+item
+    // strength, via attackerSnapshot so it doesn't feed on its own bonus) and +100% attack speed.
+    // Writes `=` each tick (not `+=`), so UpdateStatsCommand's from-scratch resum removes the buff
+    // automatically once healed back above 50% — no FIGHT_END reset needed.
     [TalentType.WARRIOR_4]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent } = context;
-            const missingHPPercentage = (attacker.maxHp - attacker.hp) / attacker.maxHp;
-            talent.affectedStats.strength = attacker.strength * missingHPPercentage + 10;
-            client.send('trigger_talent', {
+            const { attacker, client, talent, attackerSnapshot } = context;
+            const base = attackerSnapshot ?? attacker;
+            const below = attacker.hp < attacker.maxHp * 0.5;
+            talent.affectedStats.strength = below ? base.strength : 0;
+            talent.affectedStats.attackSpeed = below ? 2 : 1;
+            if (below) {
+                client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.WARRIOR_4,
             });
+            }
         },
 
     [TalentType.ROGUE_4]:

@@ -25,7 +25,15 @@ export const SEASONS: SeasonInfo[] = [
       'Losses are now tracked per character',
       'Wall of Fame: finished 12-win characters ranked by fewest losses',
       'HP potion: disabled',
-      'Dual Wield: removed attack speed bonus'
+      'Dual Wield: removed attack speed bonus',
+      'Comrade: reworked — claim one free item from each shop; reroll cost now equals your income',
+      'Throw Money at the Problem: now deals 100% of your income as damage every 2s (was gold-scaled)',
+      'Unstoppable Force: reworked — every 2s your next weapon attack deals double damage and can\'t be dodged',
+      'Berserk: reworked — below 50% HP, gain +100% strength and +100% attack speed',
+      'Hidden Vials: reworked — dodging now applies 1 burn and 1 poison stack to the enemy',
+      'Gold Genie: reworked — merchant items in the shop are now Legendary (with a lucky-find chance to roll Mythic), and the first merchant item you buy each shop is free',
+      'Income Inequality: increased income bonus to 10',
+      'Weapon Whisperer: weapon only keeps upgrade permanently if you fight with it once'
     ],
   },
   {
