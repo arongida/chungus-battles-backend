@@ -36,6 +36,10 @@ const PlayerSchema = new Schema({
     equippedItems: {type: Map, of: ItemSchema},
 });
 
+// Backs the leaderboard/wall-of-fame aggregation sorts ({$sort: {wins:-1, originalPlayerId:-1, playerId:1}})
+// so they run index-backed instead of blocking-sorting the whole collection in memory.
+PlayerSchema.index({ wins: -1, originalPlayerId: -1, playerId: 1 });
+
 export const playerModel = mongoose.model('Player', PlayerSchema);
 
 export async function getPlayer(playerId: number): Promise<Player> {
@@ -374,7 +378,7 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
         }},
     ];
 
-    const [result] = await playerModel.aggregate(pipeline).exec();
+    const [result] = await playerModel.aggregate(pipeline).allowDiskUse(true).exec();
 
     let userRank: number | null = null;
     if (rankForOriginalPlayerId) {
@@ -384,7 +388,7 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
             { $match: { originalPlayerId: rankForOriginalPlayerId } },
             { $sort: { wins: -1, playerId: 1 } },
             { $limit: 1 },
-        ]).exec();
+        ]).allowDiskUse(true).exec();
 
         if (userDoc) {
             // Count deduped players that sort strictly above this player
@@ -396,7 +400,7 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
                     { wins: userDoc.wins, originalPlayerId: { $gt: rankForOriginalPlayerId } },
                 ]}},
                 { $count: 'n' },
-            ]).exec();
+            ]).allowDiskUse(true).exec();
             userRank = (countResult?.n ?? 0) + 1;
         }
     }
@@ -435,7 +439,7 @@ export async function getWallOfFame({ limit = 20, skip = 0 }: { limit?: number; 
         }},
     ];
 
-    const [result] = await playerModel.aggregate(pipeline).exec();
+    const [result] = await playerModel.aggregate(pipeline).allowDiskUse(true).exec();
 
     return {
         players: (result?.players ?? []).map(cleanRawPlayerDoc),

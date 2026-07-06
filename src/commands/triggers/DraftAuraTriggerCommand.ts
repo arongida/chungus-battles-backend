@@ -6,6 +6,7 @@ import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContex
 import {triggerEquippedItems} from '../../common/triggerUtils';
 import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
 import {baseLuckyFindChance} from '../ShopUpgradeUtils';
+import {TalentType} from '../../talents/types/TalentTypes';
 
 export class DraftAuraTriggerCommand extends Command<DraftRoom> {
     execute() {
@@ -16,6 +17,14 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         player.luckyFindChance = baseLuckyFindChance(player.level);
 
         const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes?.includes(TriggerType.AURA));
+
+        // Comrade sets the reroll cost to the player's income; it must run after any other
+        // aura talent that also writes refreshShopCost (e.g. Bargain Hunter, which pins it to 1)
+        // so the income-scaled cost is the value that sticks. V8's Array.sort is stable, so this
+        // only moves Comrade to the end and leaves every other talent's relative order intact.
+        auraTalents.sort((a, b) =>
+            (a.talentId === TalentType.COMRADE ? 1 : 0) - (b.talentId === TalentType.COMRADE ? 1 : 0)
+        );
 
         const attackerSnapshot = buildBaseAndItemsSnapshot(player);
 
