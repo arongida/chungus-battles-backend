@@ -33,6 +33,9 @@ export class Item extends Schema {
   @type('boolean') upgradePreview: boolean = false;
   // True for shop slots that rolled a lucky-find rarity-up (see applyLuckyShopUpgrades).
   @type('boolean') luckyFind: boolean = false;
+  // Server-only, not synced: Gold Genie (TalentBehaviors.ts) rolls its post-Legendary lucky-find
+  // chance exactly once per shop slot — this latches that so repeat aura ticks don't re-roll it.
+  goldGenieLuckyRolled: boolean = false;
 
   executeBehavior(context: BehaviorContext): void | Promise<void> {
     const behavior = ItemBehaviors[this.itemId] ?? ItemBehaviors[this.type];

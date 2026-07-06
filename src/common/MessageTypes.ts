@@ -60,8 +60,9 @@ export type TriggerTalentMessage = {
   talentId: number;
 };
 
-export type VersionWinMessage = {
+export type GameWinMessage = {
   wins: number;
+  losses: number;
   season: number;
 };
 
@@ -107,6 +108,7 @@ export type FightSideStats = {
   damageReducedByDefense: number;
   damageReducedByFlat: number;
   attacksDodged: number;
+  damageBlockedByInvincible: number;
 };
 
 export type FightStatsMessage = {

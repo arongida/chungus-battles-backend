@@ -9,6 +9,7 @@ import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {BURN_DURATION_MS} from "../../items/behavior/uniqueItemBalance";
 import {FightStats} from "./FightStats";
+import {weaponWhispererSnapshots} from "../../talents/behavior/weaponWhispererState";
 
 export class Player extends Schema implements IStats {
     @type('number') playerId: number;
@@ -44,7 +45,6 @@ export class Player extends Schema implements IStats {
     talentsOnCooldown: TalentType[] = [];
     attackSpeedMultiplier: number = 1;
     healingEffectiveness: number = 1;
-    hasVersionWin: boolean = false;
     // Hidden shop-roll stat: seeded from level each draft aura tick (DraftAuraTriggerCommand),
     // doubled by Black Market Contact's aura behavior (TalentBehaviors). Read by
     // ShopUpgradeUtils.applyLuckyShopUpgrades. Resets to 0 every draft phase (new Player()).
@@ -52,6 +52,16 @@ export class Player extends Schema implements IStats {
     // Hidden per-draft-phase flag: true once a lucky-find item has been claimed for free via
     // Black Market Contact (TalentBehaviors.markFreeLuckyFindConsumed).
     usedFreeLuckyFind: boolean = false;
+    // Unstoppable Force (WARRIOR_3): true for one weapon attack after the talent's ACTIVE tick
+    // fires. Consumed in FightRoom.tryWeaponAttack (skips dodge, doubles damage).
+    empoweredNextAttack: boolean = false;
+    // Comrade: true once the current shop's free-item claim has been spent (DraftRoom.buyItem),
+    // reset per shop build (DraftRoom.updateShop). Stops the aura from re-granting a fresh claim
+    // every tick after one has been used.
+    comradeClaimUsed: boolean = false;
+    // Gold Genie: same latch pattern as comradeClaimUsed, but scoped to the first merchant-class
+    // item bought each shop.
+    goldGenieClaimUsed: boolean = false;
 
 
     get hp(): number {
@@ -125,6 +135,16 @@ export class Player extends Schema implements IStats {
     // Declared after all other @type fields so existing field indices stay stable
     // (the frontend schema mirror relies on matching declaration order).
     @type('boolean') invincible: boolean = false;
+    // Must stay @type (not a plain field) — Player.copyFrom round-trips through
+    // toJSON(), so a plain field would not survive the draft/fight room transition.
+    @type('number') losses: number = 0;
+    // Comrade: true while a free-item claim is available for the current shop (aura-driven; see
+    // TalentBehaviors.ts). Synced so the client can present ANY shop item as claimable-free,
+    // including ones the player can't otherwise afford.
+    @type('boolean') comradeFreeClaim: boolean = false;
+    // Gold Genie: same latch as comradeFreeClaim, but the client only honors it on merchant-class
+    // shop items (see TalentBehaviors.ts GOLD_GENIE).
+    @type('boolean') goldGenieFreeClaim: boolean = false;
 
     private _poisonStack: number = 0;
 
@@ -211,6 +231,7 @@ export class Player extends Schema implements IStats {
         if (this.hp <= 0) return;
         if (damage <= 0) return;
         if (this.invincible) {
+            this.fightStats.damageBlockedByInvincible += damage;
             playerClient.send('invulnerable', {
                 playerId: this.playerId,
                 damage: damage,
@@ -330,8 +351,9 @@ export class Player extends Schema implements IStats {
         const itemToUnequip = this.equippedItems.get(slot);
 
         if (itemToUnequip) {
-            itemToUnequip.equipped = false;
-            this.inventory.push(itemToUnequip);
+            // Routed through setItemUnequipped (not inlined) so displacing an item this way
+            // reverts any Weapon Whisperer snapshot the same as an explicit unequip does.
+            this.setItemUnequipped(itemToUnequip, slot);
         }
 
         item.equipped = true;
@@ -342,6 +364,19 @@ export class Player extends Schema implements IStats {
     }
 
     setItemUnequipped(item: Item, slot: EquipSlot) {
+        // Weapon Whisperer's Mythic upgrade only applies while the weapon occupies MAIN_HAND —
+        // revert it to its pre-upgrade state the moment it leaves, so cycling weapons through
+        // that slot can't permanently bank multiple Mythics.
+        const snap = weaponWhispererSnapshots.get(item);
+        if (snap) {
+            item.rarity = snap.rarity;
+            item.affectedStats = snap.affectedStats;
+            item.baseMinDamage = snap.baseMinDamage;
+            item.baseMaxDamage = snap.baseMaxDamage;
+            item.baseAttackSpeed = snap.baseAttackSpeed;
+            item.description = snap.description;
+            weaponWhispererSnapshots.delete(item);
+        }
         item.equipped = false;
         this.inventory.push(item);
         this.equippedItems.delete(slot);

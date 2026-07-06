@@ -13,7 +13,7 @@ import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCo
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
 import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
 import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCommand';
-import { EquipSlot, ItemRarity } from "../items/types/ItemTypes";
+import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 import { markFreeLuckyFindConsumed } from '../talents/behavior/TalentBehaviors';
@@ -170,7 +170,11 @@ export class DraftRoom extends Room {
     }
 
     private async updateShop(newShopSize: number) {
-        const excludeTypes = this.state.player.lives > 2 ? ['potion'] : [];
+        // Comrade / Gold Genie: each newly built shop grants a fresh free-item claim.
+        this.state.player.comradeClaimUsed = false;
+        this.state.player.goldGenieClaimUsed = false;
+        // Health potions are currently disabled from the shop.
+        const excludeTypes = ['potion'];
         const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level, excludeTypes);
         const lockedShop = this.state.player.lockedShop;
         if (lockedShop.length > 0) {
@@ -297,11 +301,28 @@ export class DraftRoom extends Room {
             client.send('error', 'Not possible to buy item!');
             return;
         }
+        // Comrade: a free-item claim is available for this shop — make this purchase free
+        // regardless of price, then latch the claim as spent (DraftRoom.updateShop resets it).
+        const comradeFree = this.state.player.comradeFreeClaim && !item.sold;
+        // Gold Genie: same idea, scoped to the first merchant-class item bought this shop.
+        const goldGenieFree = this.state.player.goldGenieFreeClaim && item.class === ItemClass.MERCHANT && !item.sold;
+        if (comradeFree || goldGenieFree) {
+            item.price = 0;
+            item.sellPrice = 0;
+        }
         if (this.state.player.gold < item.price || item.sold) {
             client.send('error', 'Not possible to buy item!');
             return;
         }
         this.state.player.getItem(item);
+        if (comradeFree) {
+            this.state.player.comradeClaimUsed = true;
+            this.state.player.comradeFreeClaim = false;
+        }
+        if (goldGenieFree) {
+            this.state.player.goldGenieClaimUsed = true;
+            this.state.player.goldGenieFreeClaim = false;
+        }
         markFreeLuckyFindConsumed(this.state.player, item);
         this.invalidateUndoSell();
     }
