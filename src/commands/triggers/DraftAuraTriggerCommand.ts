@@ -5,8 +5,7 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContext";
 import {triggerEquippedItems} from '../../common/triggerUtils';
 import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
-import {baseLuckyFindChance} from '../ShopUpgradeUtils';
-import {TalentType} from '../../talents/types/TalentTypes';
+import {baseLuckyFindChance, BASE_REFRESH_SHOP_COST} from '../ShopUpgradeUtils';
 
 export class DraftAuraTriggerCommand extends Command<DraftRoom> {
     execute() {
@@ -16,15 +15,12 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         // so a talent that scales it (e.g. Black Market Contact) composes in the same pass.
         player.luckyFindChance = baseLuckyFindChance(player.level);
 
-        const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes?.includes(TriggerType.AURA));
+        // Re-seed the reroll cost to its base every tick, before aura talents run, so talents
+        // that adjust it (Comrade +income, Bargain Hunter -1) apply as deltas on a clean base
+        // instead of accumulating or fighting over a raw overwrite.
+        player.refreshShopCost = BASE_REFRESH_SHOP_COST;
 
-        // Comrade sets the reroll cost to the player's income; it must run after any other
-        // aura talent that also writes refreshShopCost (e.g. Bargain Hunter, which pins it to 1)
-        // so the income-scaled cost is the value that sticks. V8's Array.sort is stable, so this
-        // only moves Comrade to the end and leaves every other talent's relative order intact.
-        auraTalents.sort((a, b) =>
-            (a.talentId === TalentType.COMRADE ? 1 : 0) - (b.talentId === TalentType.COMRADE ? 1 : 0)
-        );
+        const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes?.includes(TriggerType.AURA));
 
         const attackerSnapshot = buildBaseAndItemsSnapshot(player);
 

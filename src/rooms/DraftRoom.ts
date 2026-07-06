@@ -3,7 +3,7 @@ import { DraftState } from './schema/DraftState';
 import { copyPlayer, createNewPlayer, getPlayer, updatePlayer } from '../players/db/Player';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
+import { applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
@@ -287,6 +287,7 @@ export class DraftRoom extends Room {
         // Seed the hidden shop-roll stat for the very first shop of this draft phase — the
         // draft aura tick (which keeps it current afterward) hasn't run yet at this point.
         this.state.player.luckyFindChance = baseLuckyFindChance(this.state.player.level);
+        this.state.player.refreshShopCost = BASE_REFRESH_SHOP_COST;
         this.updateTalentRerollCost();
         await this.updateTalentSelection();
 
