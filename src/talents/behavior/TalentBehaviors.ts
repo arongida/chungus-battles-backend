@@ -598,16 +598,17 @@ export const TalentBehaviors = {
         },
 
     // Comrade — AURA trigger (ticks every ~1s in the draft room) so the bonus applies right after
-    // picking the talent, not only after the next shop refresh. Each tick sets the reroll cost to
-    // the player's income and exposes one free-item claim per shop; `comradeClaimUsed` (latched in
-    // DraftRoom.buyItem, reset in DraftRoom.updateShop) stops the aura from re-granting a fresh
-    // claim every second once one has been spent on the current shop. The actual free purchase is
-    // applied in DraftRoom.buyItem so the player picks which item.
+    // picking the talent, not only after the next shop refresh. Each tick adds the player's income
+    // on top of the (freshly re-seeded, see DraftAuraTriggerCommand) base reroll cost, and exposes
+    // one free-item claim per shop; `comradeClaimUsed` (latched in DraftRoom.buyItem, reset in
+    // DraftRoom.updateShop) stops the aura from re-granting a fresh claim every second once one has
+    // been spent on the current shop. The actual free purchase is applied in DraftRoom.buyItem so
+    // the player picks which item.
     [TalentType.COMRADE]:
         (context: TalentBehaviorContext) => {
             const { attacker, shop } = context;
             if (!shop) return;
-            attacker.refreshShopCost = Math.floor(attacker.income);
+            attacker.refreshShopCost += Math.floor(attacker.income);
             attacker.comradeFreeClaim = !attacker.comradeClaimUsed;
         },
 
@@ -875,12 +876,13 @@ export const TalentBehaviors = {
             });
         },
 
+    // Bargain Hunter — AURA trigger; reduces the (freshly re-seeded, see DraftAuraTriggerCommand)
+    // base reroll cost by 1 rather than pinning it to a fixed value, so it composes additively
+    // with other reroll-cost talents (e.g. Comrade's +income) instead of overwriting them.
     [TalentType.BARGAIN_HUNTER]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
-            if (attacker.refreshShopCost !== 1) {
-                attacker.refreshShopCost = 1;
-            }
+            attacker.refreshShopCost -= 1;
             if (talent.totalActivations === 0) {
                 attacker.gold += talent.activationRate;
                 track(talent, 1, 0, 0, talent.activationRate, 0, { client, playerId: attacker.playerId });

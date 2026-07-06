@@ -26,7 +26,7 @@ export const SEASONS: SeasonInfo[] = [
       'Wall of Fame: finished 12-win characters ranked by fewest losses',
       'HP potion: disabled',
       'Dual Wield: removed attack speed bonus',
-      'Comrade: reworked — claim one free item from each shop; reroll cost now equals your income',
+      'Comrade: reworked — claim one free item from each shop; reroll cost increased by your income',
       'Throw Money at the Problem: now deals 100% of your income as damage every 2s (was gold-scaled)',
       'Unstoppable Force: reworked — every 2s your next weapon attack deals double damage and can\'t be dodged',
       'Berserk: reworked — below 50% HP, gain +100% strength and +100% attack speed',

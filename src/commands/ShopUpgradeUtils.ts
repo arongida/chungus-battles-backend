@@ -71,6 +71,10 @@ export function baseLuckyFindChance(level: number): number {
   return 0.10 + 0.02 * (level - 1);
 }
 
+/** Base (un-modified) shop reroll cost, seeded onto Player.refreshShopCost each draft
+ *  aura tick and at draft setup; talents (Comrade +income, Bargain Hunter -1) then adjust it. */
+export const BASE_REFRESH_SHOP_COST = 2;
+
 /**
  * Lucky shop rolls: each shop slot has a chance — Player.luckyFindChance, seeded from
  * baseLuckyFindChance and potentially scaled by talents — to arrive at a higher rarity.
