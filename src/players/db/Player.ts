@@ -333,10 +333,10 @@ export function snapshotPlayer(player: Player): Record<string, any> {
 }
 
 const TOP_PLAYERS_AGGREGATION: PipelineStage[] = [
-    {$sort: {wins: -1, originalPlayerId: -1, playerId: 1}},
+    {$sort: {playerId: -1}},                                   // pre-group: pick each character's LATEST snapshot
     {$group: {_id: '$originalPlayerId', doc: {$first: '$$ROOT'}}},
     {$replaceRoot: {newRoot: '$doc'}},
-    {$sort: {wins: -1, originalPlayerId: -1, playerId: 1}},
+    {$sort: {playerId: -1}},                                   // final order: most-recently-active character first
 ];
 
 export interface LeaderboardFilters {
@@ -382,23 +382,20 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
 
     let userRank: number | null = null;
     if (rankForOriginalPlayerId) {
-        // Find this player's best snapshot in the filtered set (same selection as dedupe $first)
+        // Find this player's latest snapshot in the filtered set (same selection as dedupe $first)
         const [userDoc] = await playerModel.aggregate([
             ...matchStage,
             { $match: { originalPlayerId: rankForOriginalPlayerId } },
-            { $sort: { wins: -1, playerId: 1 } },
+            { $sort: { playerId: -1 } },
             { $limit: 1 },
         ]).allowDiskUse(true).exec();
 
         if (userDoc) {
-            // Count deduped players that sort strictly above this player
+            // Count deduped players that sort strictly above this player (more recent = higher playerId)
             const [countResult] = await playerModel.aggregate([
                 ...matchStage,
                 ...TOP_PLAYERS_AGGREGATION,
-                { $match: { $or: [
-                    { wins: { $gt: userDoc.wins } },
-                    { wins: userDoc.wins, originalPlayerId: { $gt: rankForOriginalPlayerId } },
-                ]}},
+                { $match: { playerId: { $gt: userDoc.playerId } } },
                 { $count: 'n' },
             ]).allowDiskUse(true).exec();
             userRank = (countResult?.n ?? 0) + 1;
