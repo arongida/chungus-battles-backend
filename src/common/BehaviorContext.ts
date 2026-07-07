@@ -9,6 +9,7 @@ import {FightRoom} from '../rooms/FightRoom';
 import {DraftRoom} from '../rooms/DraftRoom';
 import {TriggerType} from "./types";
 import {StatsSnapshot} from './statsUtils';
+import {DamageType} from './MessageTypes';
 
 export {StatsSnapshot};
 
@@ -18,6 +19,8 @@ export interface BehaviorContext {
     defender?: Player;
     clock?: ClockTimer;
     damage?: number;
+    /** Source of the damage on ON_DAMAGE triggers — 'burn'/'poison' for DoT ticks, undefined for direct hits. */
+    damageType?: DamageType;
     shop?: ArraySchema<Item>;
     availableTalents?: Talent[];
     questItems?: ArraySchema<Item>;

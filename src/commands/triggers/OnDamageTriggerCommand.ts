@@ -5,17 +5,20 @@ import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
 import {BehaviorContext} from '../../common/BehaviorContext';
 import {triggerEquippedItems} from '../../common/triggerUtils';
+import {DamageType} from '../../common/MessageTypes';
 
 export class OnDamageTriggerCommand extends Command<
     FightRoom,
-    { defender: Player; attacker: Player; damage: number }
+    { defender: Player; attacker: Player; damage: number; damageType?: DamageType; isReflectedDamage?: boolean }
 > {
-    execute({defender, damage, attacker } = this.payload) {
+    execute({defender, damage, attacker, damageType, isReflectedDamage } = this.payload) {
         const onDamageTalentBehaviorContext: BehaviorContext = {
             client: this.state.playerClient,
             attacker: attacker,
             defender: defender,
             damage: damage,
+            damageType: damageType,
+            isReflectedDamage: isReflectedDamage,
             clock: this.clock,
             trigger: TriggerType.ON_DAMAGE,
             commandDispatcher: this.room.dispatcher,
