@@ -36,9 +36,12 @@ const PlayerSchema = new Schema({
     equippedItems: {type: Map, of: ItemSchema},
 });
 
-// Backs the leaderboard/wall-of-fame aggregation sorts ({$sort: {wins:-1, originalPlayerId:-1, playerId:1}})
+// Backs the wall-of-fame aggregation sorts ({$sort: {wins:-1, originalPlayerId:-1, playerId:1}})
 // so they run index-backed instead of blocking-sorting the whole collection in memory.
 PlayerSchema.index({ wins: -1, originalPlayerId: -1, playerId: 1 });
+// Backs the "All Characters" leaderboard recency sort ({$sort: {playerId:-1}}) and getNextPlayerId's
+// findOne().sort({playerId:-1}) — without it those blocking-sort the whole collection and exceed the 32MB sort limit.
+PlayerSchema.index({ playerId: -1 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
 
