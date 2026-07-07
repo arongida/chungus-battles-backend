@@ -335,9 +335,15 @@ export function snapshotPlayer(player: Player): Record<string, any> {
     };
 }
 
+// $top instead of $sort + $first: a pre-group sort has no supporting index, and the
+// prod Atlas shared tier caps in-memory sorts at 32MB and ignores allowDiskUse.
 const TOP_PLAYERS_AGGREGATION: PipelineStage[] = [
-    {$sort: {wins: -1, round: -1, playerId: -1}},              // pre-group: pick each character's best/final snapshot
-    {$group: {_id: '$originalPlayerId', doc: {$first: '$$ROOT'}, latestPlayerId: {$max: '$playerId'}}},
+    {$group: {
+        _id: '$originalPlayerId',
+        // each character's best/final snapshot (wins never decrease, so this is the live/original doc)
+        doc: {$top: {sortBy: {wins: -1, round: -1, playerId: -1}, output: '$$ROOT'}},
+        latestPlayerId: {$max: '$playerId'},
+    }},
     {$addFields: {'doc.latestPlayerId': '$latestPlayerId'}},
     {$replaceRoot: {newRoot: '$doc'}},
     {$sort: {latestPlayerId: -1}},                             // final order: most-recently-active character first
