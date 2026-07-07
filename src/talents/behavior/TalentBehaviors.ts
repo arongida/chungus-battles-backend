@@ -572,29 +572,73 @@ export const TalentBehaviors = {
         }
     },
 
+    // Martial Artist — AURA talent. Conjures a ghost fist into each hand slot (stripping any real
+    // item, like before the rework) and makes the fists "learn" from weapons stashed in the
+    // inventory: each fist gains activationRate× the stash's combined damage range and punches at
+    // the stash's average attack speed (0.8 with an empty stash), and the talent grants
+    // activationRate× their combined stat bonuses. Fist damage lives on the fist items so
+    // tryWeaponAttack reads it per punch; learned stats live on talent.affectedStats so
+    // UpdateStatsCommand applies them once (on both fists they'd double-count).
     [TalentType.MARTIAL_ARTIST]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
 
-            const mainHandItem = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
-            const offHandItem = attacker.equippedItems.get(EquipSlot.OFF_HAND);
-            if (mainHandItem || offHandItem) {
-                client.send('combat_log', { text: `${attacker.name} is a martial artist and doesn't need a weapon!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
-                if (mainHandItem) attacker.setItemUnequipped(mainHandItem, EquipSlot.MAIN_HAND);
-                if (offHandItem) attacker.setItemUnequipped(offHandItem, EquipSlot.OFF_HAND);
+            ensureMartialFists(attacker, client, talent);
+
+            let sumMin = 0;
+            let sumMax = 0;
+            let sumAttackSpeed = 0;
+            let attackSpeedCount = 0;
+            const learned = new AffectedStats();
+            let weaponCount = 0;
+            attacker.inventory.forEach((item) => {
+                if (item.type !== ItemType.WEAPON) return;
+                if (item.tags?.includes(MARTIAL_FIST_TAG) || item.tags?.includes('dual_wield_copy')) return;
+                weaponCount++;
+                sumMin += item.baseMinDamage;
+                sumMax += item.baseMaxDamage;
+                if (item.baseAttackSpeed > 0) {
+                    sumAttackSpeed += item.baseAttackSpeed;
+                    attackSpeedCount++;
+                }
+                if (item.affectedStats) {
+                    learned.strength += item.affectedStats.strength;
+                    learned.accuracy += item.affectedStats.accuracy;
+                    learned.maxHp += item.affectedStats.maxHp;
+                    learned.defense += item.affectedStats.defense;
+                    learned.dodgeRate += item.affectedStats.dodgeRate;
+                    learned.flatDmgReduction += item.affectedStats.flatDmgReduction;
+                    learned.income += item.affectedStats.income;
+                    learned.hpRegen += item.affectedStats.hpRegen;
+                }
+            });
+
+            for (const slot of [EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND]) {
+                const fist = attacker.equippedItems.get(slot);
+                if (!fist?.tags?.includes(MARTIAL_FIST_TAG)) continue;
+                // Mutate in place — fight attack timers hold this Item by reference and re-read
+                // its damage every punch, so the instance must never be swapped mid-fight.
+                fist.baseMinDamage = Math.round(attacker.level - 1 + talent.activationRate * sumMin);
+                fist.baseMaxDamage = Math.round(attacker.level + talent.activationRate * sumMax);
+                // Fists punch at the average speed of the stashed weapons; the attack timer
+                // re-reads baseAttackSpeed on every reschedule, so this applies next swing.
+                fist.baseAttackSpeed = attackSpeedCount > 0 ? sumAttackSpeed / attackSpeedCount : 0.6;
+                fist.description = weaponCount > 0
+                    ? `Learned from ${weaponCount} stashed weapon${weaponCount === 1 ? '' : 's'}.`
+                    : 'A martial artist\'s fist. Learns from weapons stashed in the inventory.';
+                attacker.equippedItems.set(slot, fist);
             }
 
-
-            talent.affectedStats.accuracy = attacker.level * 2;
-            talent.affectedStats.strength = attacker.level * 4;
-            talent.affectedStats.dodgeRate = attacker.level * 20;
-            talent.affectedStats.attackSpeed = 1 + attacker.level;
-
-
-            // client.send(
-            // 	'combat_log',
-            // 	`${attacker.name} trained hard and gets: ${attacker.accuracy} accuracy, ${attacker.strength} strength and ${attacker.attackSpeed} attack speed!`
-            // );
+            talent.affectedStats.strength = talent.activationRate * learned.strength;
+            talent.affectedStats.accuracy = talent.activationRate * learned.accuracy;
+            talent.affectedStats.maxHp = talent.activationRate * learned.maxHp;
+            talent.affectedStats.defense = talent.activationRate * learned.defense;
+            talent.affectedStats.flatDmgReduction = talent.activationRate * learned.flatDmgReduction;
+            talent.affectedStats.income = talent.activationRate * learned.income;
+            talent.affectedStats.hpRegen = talent.activationRate * learned.hpRegen;
+            talent.affectedStats.dodgeRate = talent.activationRate * learned.dodgeRate;
+            // Pre-rework saves carry a persisted 1+level multiplier here — always reset to neutral.
+            talent.affectedStats.attackSpeed = 1;
         },
 
     // Comrade — AURA trigger (ticks every ~1s in the draft room) so the bonus applies right after
@@ -1031,6 +1075,56 @@ export const TalentBehaviors = {
     },
 }
     ;
+
+export const MARTIAL_FIST_TAG = 'martial_fist';
+
+function createMartialFist(slot: EquipSlot): Item {
+    const fist = new Item();
+    fist.itemId = 0;
+    fist.name = slot === EquipSlot.MAIN_HAND ? 'Left Fist' : 'Right Fist';
+    fist.description = 'A martial artist\'s fist. Learns from weapons stashed in the inventory.';
+    fist.type = ItemType.WEAPON;
+    fist.baseAttackSpeed = 0.6;
+    fist.strengthScaling = 1;
+    fist.price = 0;
+    fist.sellPrice = 0;
+    fist.rarity = ItemRarity.COMMON;
+    fist.tier = 1;
+    fist.image = 'assets/talents/Icon_Warrior_basic_01.png';
+    fist.affectedStats = new AffectedStats();
+    fist.affectedEnemyStats = new AffectedStats();
+    (fist as any).itemCollections = new ArraySchema<number>();
+    (fist as any).equipOptions = new ArraySchema<string>(slot);
+    fist.triggerTypes = new ArraySchema<string>();
+    fist.tags = new ArraySchema<string>(MARTIAL_FIST_TAG);
+    return fist;
+}
+
+/** Keeps a Martial Artist's hands in their canonical state: any real item is stripped back to
+ *  inventory, both hand slots hold a tagged ghost fist, and fists that leaked into the inventory
+ *  (e.g. via a manual unequip) are removed. Idempotent — safe to run every aura tick, and also
+ *  called from FightRoom.startWeaponAttackTimers so opponent snapshots saved before the fists
+ *  existed still punch with both hands. */
+export function ensureMartialFists(player: Player, client?: Client, talent?: Talent) {
+    for (let i = player.inventory.length - 1; i >= 0; i--) {
+        if (player.inventory[i].tags?.includes(MARTIAL_FIST_TAG)) {
+            player.inventory.splice(i, 1);
+        }
+    }
+
+    for (const slot of [EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND]) {
+        const equipped = player.equippedItems.get(slot);
+        if (equipped && !equipped.tags?.includes(MARTIAL_FIST_TAG)) {
+            if (client && talent) {
+                client.send('combat_log', { text: `${player.name} is a martial artist and doesn't need a weapon!`, kind: 'talent', talentId: talent.talentId, attackerId: player.playerId } as CombatLogMessage);
+            }
+            player.setItemUnequipped(equipped, slot);
+        }
+        if (!player.equippedItems.get(slot)) {
+            player.setItemEquipped(createMartialFist(slot), slot);
+        }
+    }
+}
 
 function clonedAsGhost(source: Item): Item {
     const raw = source.toJSON() as any;
