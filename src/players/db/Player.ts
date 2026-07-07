@@ -241,7 +241,7 @@ function cleanRawTalent(talent: any): Record<string, any> | null {
 }
 
 function cleanRawPlayerDoc(doc: any): Record<string, any> {
-    const { _id, __v, equippedItems, inventory, talents, lockedShop, baseStats, ...rest } = doc;
+    const { _id, __v, latestPlayerId, equippedItems, inventory, talents, lockedShop, baseStats, ...rest } = doc;
     const cleanEquippedItems: Record<string, any> = {};
     if (equippedItems) {
         for (const [slot, item] of Object.entries(equippedItems)) {
@@ -336,10 +336,11 @@ export function snapshotPlayer(player: Player): Record<string, any> {
 }
 
 const TOP_PLAYERS_AGGREGATION: PipelineStage[] = [
-    {$sort: {playerId: -1}},                                   // pre-group: pick each character's LATEST snapshot
-    {$group: {_id: '$originalPlayerId', doc: {$first: '$$ROOT'}}},
+    {$sort: {wins: -1, round: -1, playerId: -1}},              // pre-group: pick each character's best/final snapshot
+    {$group: {_id: '$originalPlayerId', doc: {$first: '$$ROOT'}, latestPlayerId: {$max: '$playerId'}}},
+    {$addFields: {'doc.latestPlayerId': '$latestPlayerId'}},
     {$replaceRoot: {newRoot: '$doc'}},
-    {$sort: {playerId: -1}},                                   // final order: most-recently-active character first
+    {$sort: {latestPlayerId: -1}},                             // final order: most-recently-active character first
 ];
 
 export interface LeaderboardFilters {
@@ -385,7 +386,7 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
 
     let userRank: number | null = null;
     if (rankForOriginalPlayerId) {
-        // Find this player's latest snapshot in the filtered set (same selection as dedupe $first)
+        // Find this player's latest snapshot in the filtered set (its playerId = the dedupe's latestPlayerId recency key)
         const [userDoc] = await playerModel.aggregate([
             ...matchStage,
             { $match: { originalPlayerId: rankForOriginalPlayerId } },
@@ -394,11 +395,11 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
         ]).allowDiskUse(true).exec();
 
         if (userDoc) {
-            // Count deduped players that sort strictly above this player (more recent = higher playerId)
+            // Count deduped players that sort strictly above this player (more recently active = higher latestPlayerId)
             const [countResult] = await playerModel.aggregate([
                 ...matchStage,
                 ...TOP_PLAYERS_AGGREGATION,
-                { $match: { playerId: { $gt: userDoc.playerId } } },
+                { $match: { latestPlayerId: { $gt: userDoc.playerId } } },
                 { $count: 'n' },
             ]).allowDiskUse(true).exec();
             userRank = (countResult?.n ?? 0) + 1;

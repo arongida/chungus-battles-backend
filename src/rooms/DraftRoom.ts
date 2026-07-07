@@ -16,7 +16,6 @@ import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCo
 import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
-import { markFreeLuckyFindConsumed } from '../talents/behavior/TalentBehaviors';
 import { RewardGainMessage } from '../common/MessageTypes';
 
 export class DraftRoom extends Room {
@@ -170,9 +169,11 @@ export class DraftRoom extends Room {
     }
 
     private async updateShop(newShopSize: number) {
-        // Comrade / Gold Genie: each newly built shop grants a fresh free-item claim.
+        // Comrade / Gold Genie / Black Market Contact: each newly built shop grants a fresh
+        // free-item claim.
         this.state.player.comradeClaimUsed = false;
         this.state.player.goldGenieClaimUsed = false;
+        this.state.player.luckyFindClaimUsed = false;
         // Health potions are currently disabled from the shop.
         const excludeTypes = ['potion'];
         const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level, excludeTypes);
@@ -302,12 +303,14 @@ export class DraftRoom extends Room {
             client.send('error', 'Not possible to buy item!');
             return;
         }
-        // Comrade: a free-item claim is available for this shop — make this purchase free
-        // regardless of price, then latch the claim as spent (DraftRoom.updateShop resets it).
-        const comradeFree = this.state.player.comradeFreeClaim && !item.sold;
-        // Gold Genie: same idea, scoped to the first merchant-class item bought this shop.
-        const goldGenieFree = this.state.player.goldGenieFreeClaim && item.class === ItemClass.MERCHANT && !item.sold;
-        if (comradeFree || goldGenieFree) {
+        // Free-item claims: make this purchase free regardless of price, then latch the spent
+        // claim (DraftRoom.updateShop resets the latches each shop build). The three sources are
+        // mutually exclusive in priority order lucky-find > gold genie > comrade — matching the
+        // client's freeClaimSource() — so one purchase never burns more than one claim.
+        const luckyFree = this.state.player.luckyFindFreeClaim && item.luckyFind && !item.sold;
+        const goldGenieFree = !luckyFree && this.state.player.goldGenieFreeClaim && item.class === ItemClass.MERCHANT && !item.sold;
+        const comradeFree = !luckyFree && !goldGenieFree && this.state.player.comradeFreeClaim && !item.sold;
+        if (luckyFree || goldGenieFree || comradeFree) {
             item.price = 0;
             item.sellPrice = 0;
         }
@@ -316,15 +319,18 @@ export class DraftRoom extends Room {
             return;
         }
         this.state.player.getItem(item);
-        if (comradeFree) {
-            this.state.player.comradeClaimUsed = true;
-            this.state.player.comradeFreeClaim = false;
+        if (luckyFree) {
+            this.state.player.luckyFindClaimUsed = true;
+            this.state.player.luckyFindFreeClaim = false;
         }
         if (goldGenieFree) {
             this.state.player.goldGenieClaimUsed = true;
             this.state.player.goldGenieFreeClaim = false;
         }
-        markFreeLuckyFindConsumed(this.state.player, item);
+        if (comradeFree) {
+            this.state.player.comradeClaimUsed = true;
+            this.state.player.comradeFreeClaim = false;
+        }
         this.invalidateUndoSell();
     }
 

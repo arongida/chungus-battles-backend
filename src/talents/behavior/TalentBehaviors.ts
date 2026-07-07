@@ -38,14 +38,6 @@ export function track(
     }
 }
 
-/** Records that a shop purchase spent Black Market Contact's free lucky-find buy, so the
- *  aura behavior below won't free up another item this draft phase. Called once from
- *  DraftRoom.buyItem right after a purchase goes through — kept as a one-line delegation
- *  so DraftRoom doesn't need to know which talent (or whether any) granted the discount. */
-export function markFreeLuckyFindConsumed(player: Player, item: Item): void {
-    if (item.luckyFind && item.price === 0) player.usedFreeLuckyFind = true;
-}
-
 export const TalentBehaviors = {
     [TalentType.RAGE]: (context: TalentBehaviorContext) => {
         const { talent, defender, client } = context;
@@ -1054,24 +1046,17 @@ export const TalentBehaviors = {
         },
 
     // Black Market Contact — AURA talent (runs every draft tick via DraftAuraTriggerCommand):
-    // doubles the hidden lucky-find chance stat, and flips one not-yet-free lucky-find shop
-    // item to price 0 until the player buys it (markFreeLuckyFindConsumed, above, then stops
-    // it from happening again this draft phase). Guarded on `trigger === AURA` so legacy player
-    // copies still carrying the old `after-refresh` trigger simply no-op instead of throwing.
+    // doubles the hidden lucky-find chance stat, and exposes one free lucky-find claim per shop
+    // (`luckyFindClaimUsed` latched in DraftRoom.buyItem, reset in DraftRoom.updateShop — same
+    // pattern as Comrade above). The actual free purchase is applied in DraftRoom.buyItem so the
+    // player picks which lucky-find item. Guarded on `trigger === AURA` so legacy player copies
+    // still carrying the old `after-refresh` trigger simply no-op instead of throwing.
     [TalentType.MERCHANT_5B]: (context: TalentBehaviorContext) => {
         const { attacker, shop, trigger } = context;
         if (trigger !== TriggerType.AURA || !attacker || !shop) return;
 
         attacker.luckyFindChance *= 2;
-
-        if (attacker.usedFreeLuckyFind) return;
-        const alreadyFreeUnsold = shop.some((i) => i.luckyFind && !i.sold && i.price === 0);
-        if (alreadyFreeUnsold) return;
-        const candidate = shop.find((i) => i.luckyFind && !i.sold && i.price > 0);
-        if (candidate) {
-            candidate.price = 0;
-            candidate.sellPrice = 0;
-        }
+        attacker.luckyFindFreeClaim = !attacker.luckyFindClaimUsed;
     },
 }
     ;

@@ -49,9 +49,10 @@ export class Player extends Schema implements IStats {
     // doubled by Black Market Contact's aura behavior (TalentBehaviors). Read by
     // ShopUpgradeUtils.applyLuckyShopUpgrades. Resets to 0 every draft phase (new Player()).
     luckyFindChance: number = 0;
-    // Hidden per-draft-phase flag: true once a lucky-find item has been claimed for free via
-    // Black Market Contact (TalentBehaviors.markFreeLuckyFindConsumed).
-    usedFreeLuckyFind: boolean = false;
+    // Black Market Contact: true once the current shop's free lucky-find claim has been spent
+    // (DraftRoom.buyItem), reset per shop build (DraftRoom.updateShop). Same latch pattern as
+    // comradeClaimUsed.
+    luckyFindClaimUsed: boolean = false;
     // Unstoppable Force (WARRIOR_3): true for one weapon attack after the talent's ACTIVE tick
     // fires. Consumed in FightRoom.tryWeaponAttack (skips dodge, doubles damage).
     empoweredNextAttack: boolean = false;
@@ -145,6 +146,9 @@ export class Player extends Schema implements IStats {
     // Gold Genie: same latch as comradeFreeClaim, but the client only honors it on merchant-class
     // shop items (see TalentBehaviors.ts GOLD_GENIE).
     @type('boolean') goldGenieFreeClaim: boolean = false;
+    // Black Market Contact: same latch as comradeFreeClaim, but the client only honors it on
+    // lucky-find shop items (see TalentBehaviors.ts MERCHANT_5B).
+    @type('boolean') luckyFindFreeClaim: boolean = false;
 
     private _poisonStack: number = 0;
 
