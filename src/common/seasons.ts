@@ -34,7 +34,8 @@ export const SEASONS: SeasonInfo[] = [
       'Gold Genie: reworked — merchant items in the shop are now Legendary (with a lucky-find chance to roll Mythic), and the first merchant item you buy each shop is free',
       'Income Inequality: increased income bonus to 10',
       'Weapon Whisperer: weapon only keeps upgrade permanently if you fight with it once',
-      'Martial Artist: reworked — fights with two fists that learn 50% of the damage and stats of weapons stored in your inventory and punch at their average attack speed'
+      'Martial Artist: reworked — fights with two fists that learn 50% of the damage and stats of weapons stored in your inventory and punch at their average attack speed',
+      'Black Market Contact: fixed — the free lucky-find buy is now a claim on whichever lucky item you choose, refreshed every shop (was auto-applied to the first lucky item, once per draft phase)'
     ],
   },
   {
