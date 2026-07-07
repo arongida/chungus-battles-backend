@@ -460,7 +460,8 @@ export class FightRoom extends Room {
                 this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
                     defender: defender,
                     damage: poisonDamage,
-                    attacker: this.state.player,
+                    attacker: attacker,
+                    damageType: 'poison',
                 });
 
                 defender.takeDamage(poisonDamage, this.state.playerClient, 'poison');
@@ -480,7 +481,8 @@ export class FightRoom extends Room {
                 this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
                     defender: defender,
                     damage: burnDamage,
-                    attacker: this.state.player,
+                    attacker: attacker,
+                    damageType: 'burn',
                 });
 
                 defender.takeDamage(burnDamage, this.state.playerClient, 'burn');

@@ -35,7 +35,8 @@ export const SEASONS: SeasonInfo[] = [
       'Income Inequality: increased income bonus to 10',
       'Weapon Whisperer: weapon only keeps upgrade permanently if you fight with it once',
       'Martial Artist: reworked — fights with two fists that learn 50% of the damage and stats of weapons stored in your inventory and punch at their average attack speed',
-      'Black Market Contact: fixed — the free lucky-find buy is now a claim on whichever lucky item you choose, refreshed every shop (was auto-applied to the first lucky item, once per draft phase)'
+      'Black Market Contact: fixed — the free lucky-find buy is now a claim on whichever lucky item you choose, refreshed every shop (was auto-applied to the first lucky item, once per draft phase)',
+      'Eye for an Eye: fixed — no longer reflects burn/poison ticks or reflected damage (only direct hits), and burn/poison ticks no longer misattribute the attacker'
     ],
   },
   {

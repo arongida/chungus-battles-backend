@@ -431,6 +431,7 @@ export const TalentBehaviors = {
             defender: attacker,
             damage: reflectDamage,
             attacker: defender,
+            isReflectedDamage: true,
         });
         attacker.takeDamage(reflectDamage, client);
         track(talent, 1, reflectDamage);
@@ -443,12 +444,17 @@ export const TalentBehaviors = {
 
     [TalentType.EYE_FOR_AN_EYE]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, talent, damage, commandDispatcher } = context;
+        // Only direct enemy damage is reflected — DoT ticks and incoming reflects would
+        // otherwise re-trigger this talent in a loop.
+        if (context.isReflectedDamage) return;
+        if (context.damageType === 'burn' || context.damageType === 'poison') return;
         const random = Math.random();
         if (random < talent.activationRate) {
             commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
                 defender: attacker,
                 damage: damage,
                 attacker: defender,
+                isReflectedDamage: true,
             });
             attacker.takeDamage(damage, client);
             track(talent, 1, damage);
