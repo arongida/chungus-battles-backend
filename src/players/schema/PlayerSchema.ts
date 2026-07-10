@@ -63,6 +63,14 @@ export class Player extends Schema implements IStats {
     // Gold Genie: same latch pattern as comradeClaimUsed, but scoped to the first merchant-class
     // item bought each shop.
     goldGenieClaimUsed: boolean = false;
+    // Locked-in next-fight opponent (Next-Enemy Preview feature). Server-only: never add to
+    // playerToPlainObject/snapshotPlayer (would smear a stale pointer into matchmaking
+    // snapshots). Persisted via the targeted setNextFightEnemy() $set instead. Not @type —
+    // copyFrom() round-trips toJSON(), so these deliberately do NOT survive into
+    // FightRoom.state.player; FightRoom.pickEnemy reads them from the freshly loaded
+    // getPlayer() result instead (see FightRoom.onJoin).
+    nextFightEnemyId: number;
+    nextFightEnemyRound: number;
 
 
     get hp(): number {

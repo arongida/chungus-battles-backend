@@ -8,10 +8,10 @@ import {ArraySchema, MapSchema} from "@colyseus/schema";
 import {StatsSchema} from "../../common/db/Stats";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
-import {rollTheDice} from "../../common/utils";
 import {rollItemStats} from "../../items/stats/itemStatRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
+import {recalculatePlayerStats} from "../../common/statsUtils";
 
 
 const PlayerSchema = new Schema({
@@ -34,6 +34,11 @@ const PlayerSchema = new Schema({
     lockedShop: [ItemSchema],
     baseStats: StatsSchema,
     equippedItems: {type: Map, of: ItemSchema},
+    // Locked-in next-fight opponent (Next-Enemy Preview). Persisted via the targeted
+    // setNextFightEnemy() $set only — deliberately NOT part of playerToPlainObject/
+    // snapshotPlayer so matchmaking snapshots never carry a stale enemy pointer.
+    nextFightEnemyId: Number,
+    nextFightEnemyRound: Number,
 });
 
 // Backs the wall-of-fame aggregation sorts ({$sort: {wins:-1, originalPlayerId:-1, playerId:1}})
@@ -454,6 +459,29 @@ export async function getWallOfFame({ limit = 20, skip = 0 }: { limit?: number; 
     };
 }
 
+export const JOE_PLAYER_ID = 0;
+
+export async function buildJoe(forPlayerId: number): Promise<Player> {
+    const avatarArray = Array.from(Object.values(PlayerAvatar));
+    // Deterministic (not random) so the draft preview and the fight show the same portrait —
+    // the live player's playerId is stable across the whole run.
+    const joeModel = getNewPlayer(JOE_PLAYER_ID, 'Joe', '', avatarArray[Math.abs(forPlayerId) % 3], 10);
+    const joe = getPlayerSchemaObject(joeModel.toObject());
+    joe.baseStats.maxHp = 50;
+    joe.baseStats.strength = 2;
+    const weapon = await getItemById(81);
+    joe.setItemEquipped(weapon, EquipSlot.MAIN_HAND);
+    // Rooms recompute synced stats every tick (UpdateStatsCommand), but the draft preview is a
+    // plain copy — compute Joe's final stats here (50/50 HP incl. weapon bonuses) the same way
+    // the fight room later will, so preview and fight always agree.
+    recalculatePlayerStats(joe);
+    return joe;
+}
+
+export async function setNextFightEnemy(playerId: number, enemyId: number, round: number) {
+    await playerModel.updateOne({ playerId }, { $set: { nextFightEnemyId: enemyId, nextFightEnemyRound: round } });
+}
+
 export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
     if (round < 1) {
         const defaultPlayerClone = await playerModel
@@ -463,14 +491,7 @@ export async function getSameRoundPlayer(round: number, playerId: number): Promi
     }
 
     if (round === 1) {
-        const avatarArray = Array.from(Object.values(PlayerAvatar));
-        const joeModel = getNewPlayer(0, 'Joe', '', avatarArray[rollTheDice(0, 2)], 10);
-        const joe = getPlayerSchemaObject(joeModel.toObject());
-        joe.baseStats.maxHp = 50;
-        joe.baseStats.strength = 2;
-        const weapon = await getItemById(81);
-        joe.setItemEquipped(weapon, EquipSlot.MAIN_HAND);
-        return joe;
+        return buildJoe(playerId);
     }
 
     const baseMatch = {round, originalPlayerId: {$ne: playerId}};
