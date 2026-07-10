@@ -1,6 +1,6 @@
 import { Client, Room } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import { getPlayer, getSameRoundPlayer, snapshotPlayer, updatePlayer } from '../players/db/Player';
+import { buildJoe, getPlayer, getSameRoundPlayer, JOE_PLAYER_ID, snapshotPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
 import { FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
@@ -157,7 +157,9 @@ export class FightRoom extends Room {
 
         //set up enemy state
         if (!this.state.enemy.playerId) {
-            let enemy = await this.pickEnemy(options.enemyPlayerId);
+            // pass the freshly loaded player: copyFrom drops the plain (non-@type)
+            // nextFightEnemyId/Round fields, so state.player never carries them.
+            let enemy = await this.pickEnemy(options.enemyPlayerId, player);
             //set up enemy state
             await this.setUpState(enemy, true);
         }
@@ -191,16 +193,27 @@ export class FightRoom extends Room {
         }, 3500);
     }
 
-    // Dev-only debug tool: lets the client request a specific opponent (the "next fight
-    // picker") instead of random same-round matchmaking. Disabled in production regardless
-    // of what the client sends. Falls back to normal matchmaking if no override is given,
-    // not allowed, or the requested player doesn't exist.
-    async pickEnemy(enemyPlayerId: any): Promise<Player> {
+    // Priority order:
+    // 1. Dev-only debug override ("next fight picker") — client-requested opponent, ignored
+    //    in production regardless of what the client sends (spoof-proof).
+    // 2. The opponent locked in at draft start (Next-Enemy Preview): honored only while
+    //    nextFightEnemyRound matches the current round (round increments in onLeave, so a
+    //    stale pick from a previous round is never reused). JOE_PLAYER_ID (0 — falsy, hence
+    //    the != null checks) maps back to the deterministic buildJoe().
+    // 3. Random same-round matchmaking fallback (round 1 lands here → same deterministic Joe).
+    async pickEnemy(enemyPlayerId: any, player: Player): Promise<Player> {
         if (enemyPlayerId && process.env.NODE_ENV !== 'production') {
             const enemy = await getPlayer(Number(enemyPlayerId));
             if (enemy) return enemy;
         }
-        return getSameRoundPlayer(this.state.player.round, this.state.player.playerId);
+        if (player.nextFightEnemyRound === player.round && player.nextFightEnemyId != null) {
+            if (player.nextFightEnemyId === JOE_PLAYER_ID) return buildJoe(player.playerId);
+            const enemy = await getPlayer(player.nextFightEnemyId);
+            if (enemy) return enemy;
+            // Locked-in snapshot deleted before the fight — rare preview mismatch, fall through.
+            console.warn('[FightRoom] locked-in enemy', player.nextFightEnemyId, 'not found — falling back to random matchmaking');
+        }
+        return getSameRoundPlayer(player.round, player.playerId);
     }
 
     async sendFightEndToClient() {

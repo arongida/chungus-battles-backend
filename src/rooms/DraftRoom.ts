@@ -1,6 +1,7 @@
 import { Client, Room } from '@colyseus/core';
 import { DraftState } from './schema/DraftState';
-import { copyPlayer, createNewPlayer, getPlayer, updatePlayer } from '../players/db/Player';
+import { buildJoe, copyPlayer, createNewPlayer, getPlayer, getSameRoundPlayer, JOE_PLAYER_ID, setNextFightEnemy, updatePlayer } from '../players/db/Player';
+import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentClasses } from '../players/EnemyPreview';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
@@ -104,6 +105,7 @@ export class DraftRoom extends Room {
 
         await delay(1000, this.clock);
         const foundPlayer = await getPlayer(options.playerId);
+        let loadedPlayer: Player;
 
         //if player already exists, check if player is already playing
         if (foundPlayer) {
@@ -111,6 +113,7 @@ export class DraftRoom extends Room {
             if (foundPlayer.lives <= 0) throw new Error('Player has no lives left!');
 
             await this.setUpState(foundPlayer, client);
+            loadedPlayer = foundPlayer;
 
             //check levelup after battle
             await this.checkLevelUp();
@@ -118,7 +121,11 @@ export class DraftRoom extends Room {
             const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId, options.avatarUrl);
             this.state.remainingTalentPoints = options.avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
             await this.setUpState(newPlayer, client);
+            loadedPlayer = newPlayer;
         }
+
+        //pre-select and lock in the next fight opponent, sync its redacted preview
+        await this.prepareNextEnemyPreview(this.state.player.round, options.playerId, loadedPlayer);
 
         //set room state
         if (this.state.player.round === 1) await this.updateTalentSelection();
@@ -146,6 +153,40 @@ export class DraftRoom extends Room {
             await this.checkLevelUp();
         }, 500);
 
+    }
+
+    /** Pre-selects the next fight opponent at draft start and locks it in (persisted on the
+     *  player doc via setNextFightEnemy), then syncs a server-side-redacted preview on
+     *  DraftState. Round 1 is always Joe (deterministic avatar, full reveal); rounds >= 2 get
+     *  identity-only redaction. Pure state assignment — the 500ms deferred client.send gotcha
+     *  in onJoin doesn't apply here. */
+    private async prepareNextEnemyPreview(round: number, playerId: number, loadedPlayer: Player) {
+        let enemy: Player = null;
+        if (round === 1) {
+            enemy = await buildJoe(playerId); // deterministic, nothing to persist
+        } else {
+            // Rejoin/reconnect after room disposal: reuse the locked-in pick, no re-roll.
+            if (loadedPlayer.nextFightEnemyRound === round && loadedPlayer.nextFightEnemyId != null) {
+                enemy = loadedPlayer.nextFightEnemyId === JOE_PLAYER_ID
+                    ? await buildJoe(playerId)
+                    : await getPlayer(loadedPlayer.nextFightEnemyId);
+            }
+            if (!enemy) {
+                enemy = await getSameRoundPlayer(round, playerId); // existing pool + recursive fallback
+                await setNextFightEnemy(playerId, enemy?.playerId ?? null, round);
+            }
+        }
+        const revealLevel = round === 1 ? EnemyRevealLevel.FULL : EnemyRevealLevel.IDENTITY;
+        this.state.nextEnemy = buildEnemyPreview(enemy, revealLevel);
+        this.state.nextEnemyRevealLevel = revealLevel;
+        // Talent/item classes are revealed at every level (harmless at FULL, where the
+        // concrete talents/items are visible anyway).
+        this.state.nextEnemyTalentClasses.clear();
+        this.state.nextEnemyItemClasses.clear();
+        if (enemy) {
+            extractTalentClasses(enemy).forEach(c => this.state.nextEnemyTalentClasses.push(c));
+            extractItemClasses(enemy).forEach(c => this.state.nextEnemyItemClasses.push(c));
+        }
     }
 
     onDrop(client: Client) {
