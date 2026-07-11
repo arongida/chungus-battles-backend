@@ -125,12 +125,12 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         }
     },
 
-    // Magic Ring (702) — starts Common with one rolled stat that permanently
-    // stacks on every attack. LEVEL_UP bumps its rarity and rolls another
-    // stat into the mix, until all 5 are active at Mythic (level 5). Rolled
-    // stats live directly in affectedStats (no separate tracking needed) —
-    // see uniqueItemBalance.ts.
-    702: ({ attacker, item, trigger }) => {
+    // Magic Ring (702) — not a weapon, doesn't attack. Starts Common with one
+    // rolled stat that permanently stacks once per second (AURA) while in a
+    // fight. LEVEL_UP bumps its rarity and rolls another stat into the mix,
+    // until all 5 are active at Mythic (level 5). Rolled stats live directly
+    // in affectedStats (no separate tracking needed) — see uniqueItemBalance.ts.
+    702: ({ attacker, defender, item, trigger }) => {
         if (!attacker || !item) return;
 
         if (trigger === TriggerType.LEVEL_UP) {
@@ -138,6 +138,8 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
             item.rarity++;
             rollMagicRingBonus(item);
         } else {
+            // AURA fires in the draft/shop too — only stack while actually fighting.
+            if (!defender) return;
             stackMagicRingBonuses(item);
         }
 

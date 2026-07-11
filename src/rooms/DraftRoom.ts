@@ -537,6 +537,9 @@ export class DraftRoom extends Room {
         this.state.player.maxXp += this.state.player.level * 4 + 2;
         this.state.player.xp = leftoverXp;
 
+        // Every level grants a flat max HP bonus (Season 17)
+        this.state.player.baseStats.maxHp += 10;
+
         // Levels past 5 grant no talent points but give increasingly stronger stat bonuses
         if (this.state.player.level > 5) {
             const bonusRank = this.state.player.level - 5;

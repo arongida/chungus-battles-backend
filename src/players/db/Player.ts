@@ -128,13 +128,14 @@ function getNewPlayer(playerId: number,
                       sessionId: string,
                       avatarUrl: string,
                       startingGold: number) {
+    const startingLevel = avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
     return new playerModel({
         playerId: playerId,
         originalPlayerId: playerId,
         name: name,
         gold: startingGold,
         xp: 0,
-        level: avatarUrl === PlayerAvatar.THIEF ? 2 : 1,
+        level: startingLevel,
         sessionId: sessionId,
         maxXp: avatarUrl === PlayerAvatar.THIEF ? 20 : 10,
         round: 1,
@@ -150,7 +151,8 @@ function getNewPlayer(playerId: number,
         baseStats: {
             strength: 3,
             accuracy: 1,
-            maxHp: 100,
+            // +10 max HP per level, matching DraftRoom.levelUp (Season 17)
+            maxHp: 100 + (startingLevel - 1) * 10,
             defense: 0,
             attackSpeed: 1,
             flatDmgReduction: 0,

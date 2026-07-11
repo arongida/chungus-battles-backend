@@ -40,12 +40,24 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
             );
         });
 
-        player.equippedItems.forEach((item) => {
+        player.equippedItems.forEach((item, slot) => {
             if (item.triggerTypes?.includes(TriggerType.AURA)) {
                 this.state.skillsTimers.push(
                     this.clock.setInterval(() => {
                         try {
-                            item.executeBehavior(behaviorContext);
+                            const result = item.executeBehavior(behaviorContext);
+                            // Aura items don't attack, so this is their only visual cue —
+                            // mirrors the trigger_item send in triggerEquippedItems.
+                            const sendTrigger = () => behaviorContext.client?.send('trigger_item', {
+                                playerId: player.playerId,
+                                itemId: item.itemId,
+                                slot,
+                            });
+                            if (result instanceof Promise) {
+                                result.then(sendTrigger).catch((e) => console.error(e));
+                            } else {
+                                sendTrigger();
+                            }
                         } catch (e) {
                             console.error(e);
                         }

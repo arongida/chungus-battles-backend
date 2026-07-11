@@ -11,9 +11,10 @@ export function chungiHpDamageFraction(rarity: number): number {
 }
 
 /**
- * Magic Ring (702): starts Common with one randomly rolled stat that grows
- * permanently on every attack. Each level-up bumps its rarity and rolls
- * another stat into the mix, until all 5 are active at Mythic (level 5).
+ * Magic Ring (702): not a weapon, does not attack. Starts Common with one
+ * randomly rolled stat that grows permanently once per second (AURA) while
+ * in a fight. Each level-up bumps its rarity and rolls another stat into
+ * the mix, until all 5 are active at Mythic (level 5).
  *
  * No separate "which stats are active" tracking is kept — a stat counts as
  * rolled once its `affectedStats` value is non-zero, since that's what
@@ -21,7 +22,8 @@ export function chungiHpDamageFraction(rarity: number): number {
  * player via the normal item stat display.
  *
  * attackSpeed is excluded from the pool — stacking it would create a
- * feedback loop (faster attacks → more stacks → even faster attacks).
+ * feedback loop that no longer even applies now that the ring doesn't
+ * attack, but is kept excluded for consistency with other stacking effects.
  */
 const MAGIC_RING_STAT_POOL: RollableStat[] = [
     'strength', 'accuracy', 'defense', 'maxHp', 'dodgeRate', 'flatDmgReduction', 'hpRegen', 'income',
@@ -30,7 +32,7 @@ const MAGIC_RING_STAT_POOL: RollableStat[] = [
 /** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
 const MAGIC_RING_STACK_FRACTION = 0.04;
 
-export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats on every attack and evolves on level up.';
+export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats every second in combat and evolves on level up.';
 
 /** Picks a pool stat not yet rolled on this item (still zero), or null once the pool is exhausted. */
 function rollNextMagicRingStat(affectedStats: Item['affectedStats']): RollableStat | null {
@@ -39,7 +41,7 @@ function rollNextMagicRingStat(affectedStats: Item['affectedStats']): RollableSt
     return available[Math.floor(Math.random() * available.length)];
 }
 
-/** Per-attack growth for one active stat at the ring's current rarity. */
+/** Per-second growth for one active stat at the ring's current rarity. */
 function magicRingStackAmount(stat: RollableStat, rarity: number): number {
     const tier = Math.min(5, Math.max(1, rarity));
     return Math.round(STAT_RANGES[stat][tier].max * MAGIC_RING_STACK_FRACTION * 100) / 100;
@@ -52,7 +54,7 @@ export function rollMagicRingBonus(item: Item): void {
     (item.affectedStats as any)[stat] += 20 * magicRingStackAmount(stat, item.rarity);
 }
 
-/** Magic Ring (702): adds one attack's worth of growth to a random stat already rolled (non-zero) on this item. */
+/** Magic Ring (702): adds one second's worth of growth to a random stat already rolled (non-zero) on this item. */
 export function stackMagicRingBonuses(item: Item): void {
     const rolled = MAGIC_RING_STAT_POOL.filter((stat) => (item.affectedStats as any)[stat]);
     if (rolled.length === 0) return;

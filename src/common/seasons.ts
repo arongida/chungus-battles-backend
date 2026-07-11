@@ -18,6 +18,15 @@ export interface SeasonInfo {
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
   {
+    number: 17,
+    name: 'Balance is Temporary',
+    changes: [
+      'Max HP: characters now gain +10 max HP every level (base 100), shown on the level-up screen',
+      'Magic Ring: reworked — no longer a weapon and no longer attacks; now stacks its bonus stats via a once-per-second aura during fights (removes attack-speed scaling and Dual Wield interaction)',
+      'Wand of Fire: no longer grants +20 max HP',
+    ],
+  },
+  {
     number: 16,
     name: 'Race to Twelve',
     changes: [
