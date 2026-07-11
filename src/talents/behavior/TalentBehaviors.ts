@@ -587,6 +587,7 @@ export const TalentBehaviors = {
             let sumMax = 0;
             let sumAttackSpeed = 0;
             let attackSpeedCount = 0;
+            let sumAttackSpeedBonus = 0;
             const learned = new AffectedStats();
             let weaponCount = 0;
             attacker.inventory.forEach((item) => {
@@ -608,6 +609,9 @@ export const TalentBehaviors = {
                     learned.flatDmgReduction += item.affectedStats.flatDmgReduction;
                     learned.income += item.affectedStats.income;
                     learned.hpRegen += item.affectedStats.hpRegen;
+                    // attackSpeed is a multiplier (neutral = 1), so learn it as a bonus delta,
+                    // not an absolute — matches how increaseStats/attackSpeedMultiplier accumulate it.
+                    sumAttackSpeedBonus += item.affectedStats.attackSpeed - 1;
                 }
             });
 
@@ -635,8 +639,9 @@ export const TalentBehaviors = {
             talent.affectedStats.income = talent.activationRate * learned.income;
             talent.affectedStats.hpRegen = talent.activationRate * learned.hpRegen;
             talent.affectedStats.dodgeRate = talent.activationRate * learned.dodgeRate;
-            // Pre-rework saves carry a persisted 1+level multiplier here — always reset to neutral.
-            talent.affectedStats.attackSpeed = 1;
+            // Learned attack speed is rebuilt from scratch every run (not persisted/accumulated),
+            // which also neutralizes any pre-rework saves that carried a stale multiplier here.
+            talent.affectedStats.attackSpeed = 1 + talent.activationRate * sumAttackSpeedBonus;
         },
 
     // Comrade — AURA trigger (ticks every ~1s in the draft room) so the bonus applies right after

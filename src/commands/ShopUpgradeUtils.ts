@@ -117,6 +117,7 @@ export function getEquippedUpgradeableItems(player: Player): Array<{ item: Item;
     if (
       !NON_UPGRADEABLE_ITEM_IDS.has(item.itemId) &&
       !item.tags?.includes('quest') &&
+      !item.tags?.includes('dual_wield_copy') &&
       item.rarity < ItemRarity.MYTHIC
     ) {
       candidates.push({ item, slot });
@@ -134,7 +135,7 @@ export function findOwnedUpgradeTarget(player: Player, itemId: number): Item | n
   const candidates: Item[] = [];
 
   player.equippedItems.forEach((item) => {
-    if (item.itemId === itemId && item.rarity < ItemRarity.MYTHIC) {
+    if (item.itemId === itemId && item.rarity < ItemRarity.MYTHIC && !item.tags?.includes('dual_wield_copy')) {
       candidates.push(item);
     }
   });
