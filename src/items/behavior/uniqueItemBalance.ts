@@ -71,12 +71,12 @@ export const TWO_HANDED_WEAPON_IDS = new Set([4]); // Zwei-hander
 
 /**
  * Items excluded from the shop's owned-item rarity-upgrade path
- * (findOwnedUpgradeTarget). Health Potion (6) is a consumable whose rarity
+ * (findOwnedUpgradeTarget). Health Flask (6) is a consumable whose rarity
  * is meant to come from its shop roll, not from stacking upgrades; Ring of
  * Immortality (47) grants no stats and its rarity is irrelevant to its
  * SHOP_START transform, so upgrading it would only be confusing.
  */
-export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Potion, Ring of Immortality
+export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Flask, Ring of Immortality
 
 /** Flowering Staff (8): invulnerability window granted after each attack. */
 export function floweringStaffInvulnMs(rarity: number): number {
@@ -100,3 +100,25 @@ export const BURN_DAMAGE_PER_STACK = 2;
 
 /** Burn DoT: how long an application's stacks last. */
 export const BURN_DURATION_MS = 3000;
+
+/**
+ * Health Flask (6): drinking it banks an hpRegen bonus (PlayerSchema.pendingRegenBuff) that
+ * applies for the wearer's next fight only, then is spent (see FightRoom.handleFightEnd).
+ * +4/s at Common up to +12/s at Mythic.
+ */
+export function healthFlaskRegen(rarity: number): number {
+    return 2 + 2 * rarity;
+}
+
+/** Band of Vigor (27): HP fraction below which "Second Wind" can proc, once per fight. */
+export const SECOND_WIND_THRESHOLD = 0.3;
+
+/** Band of Vigor (27): burst heal on proc, as a fraction of the wearer's max HP. */
+export function secondWindHealFraction(rarity: number): number {
+    return 0.1 + 0.05 * rarity;
+}
+
+/** Band of Vigor (27): invulnerability window granted on proc. */
+export function secondWindInvulnMs(rarity: number): number {
+    return 500 + 300 * rarity;
+}

@@ -157,6 +157,12 @@ export class Player extends Schema implements IStats {
     // Black Market Contact: same latch as comradeFreeClaim, but the client only honors it on
     // lucky-find shop items (see TalentBehaviors.ts MERCHANT_5B).
     @type('boolean') luckyFindFreeClaim: boolean = false;
+    // Health Flask (itemId 6): hpRegen bonus banked in the draft, consumed by the wearer's very
+    // next fight. Folded into hpRegen every tick by statsUtils.recalculatePlayerStats and zeroed
+    // out in FightRoom.handleFightEnd once that fight concludes. Must stay @type (not a plain
+    // field) — same reasoning as `losses` above: copyFrom() round-trips through toJSON(), so a
+    // plain field would silently reset to 0 the moment FightRoom.onJoin loads the player.
+    @type('number') pendingRegenBuff: number = 0;
 
     private _poisonStack: number = 0;
 

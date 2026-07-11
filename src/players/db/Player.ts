@@ -39,6 +39,7 @@ const PlayerSchema = new Schema({
     // snapshotPlayer so matchmaking snapshots never carry a stale enemy pointer.
     nextFightEnemyId: Number,
     nextFightEnemyRound: Number,
+    pendingRegenBuff: {type: Number, default: 0},
 });
 
 // Backs the wall-of-fame aggregation sorts ({$sort: {wins:-1, originalPlayerId:-1, playerId:1}})
@@ -196,6 +197,10 @@ export async function copyPlayer(player: Player): Promise<Player> {
     const newPlayerObject = {
         ...playerToPlainObject(player),
         playerId: await getNextPlayerId(),
+        // This snapshot is only ever read back as a future opponent bot — it never plays through
+        // its own FightRoom.handleFightEnd, so a banked Health Flask regen buff would otherwise
+        // leak in permanently and grant free regen every time this snapshot is drawn as an enemy.
+        pendingRegenBuff: 0,
     };
 
     const newPlayer = new playerModel(newPlayerObject);
@@ -296,6 +301,7 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         defense: player.defense,
         attackSpeed: player.attackSpeed,
         flatDmgReduction: player.flatDmgReduction,
+        pendingRegenBuff: player.pendingRegenBuff,
         baseStats: player.baseStats?.toJSON() || {},
         equippedItems,
         inventory: player.inventory.map(item => item.toJSON()),

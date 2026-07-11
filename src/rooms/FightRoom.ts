@@ -599,6 +599,10 @@ export class FightRoom extends Room {
     }
 
     private async handleFightEnd() {
+        // Health Flask's regen buff is a one-fight consumable — spent the moment this fight
+        // concludes (win, lose, or draw), regardless of whether it actually procced any healing.
+        this.state.player.pendingRegenBuff = 0;
+
         if (!this.state.fightResult) {
             if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
                 this.state.fightResult = FightResultType.DRAW;

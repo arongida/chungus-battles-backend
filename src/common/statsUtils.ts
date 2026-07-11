@@ -60,6 +60,10 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     }
 
     player.attackSpeed = player.attackSpeedMultiplier;
+    // Health Flask: a banked one-fight regen buff (see PlayerSchema.pendingRegenBuff) folds
+    // straight into the recomputed hpRegen, so it shows up immediately in the draft UI and
+    // drives FightRoom.startRegenTimer during the player's next fight with no separate field.
+    player.hpRegen += player.pendingRegenBuff || 0;
     player.hp = player.maxHp - damageTaken;
     player.healingEffectiveness = Math.max(0, 1 - player.poisonStack * 0.01);
 }

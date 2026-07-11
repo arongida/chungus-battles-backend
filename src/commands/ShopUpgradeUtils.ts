@@ -9,13 +9,17 @@ import {
   chungiHpDamageFraction,
   FLOWERING_STAFF_INVULN_COOLDOWN_MS,
   floweringStaffInvulnMs,
+  healthFlaskRegen,
   NON_UPGRADEABLE_ITEM_IDS,
+  secondWindHealFraction,
+  secondWindInvulnMs,
+  SECOND_WIND_THRESHOLD,
   TWO_HANDED_WEAPON_IDS,
   wandOfFireBurnStacks,
 } from '../items/behavior/uniqueItemBalance';
 
 const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Player) => string>> = {
-  6: (item) => `Drink it to regain ${item.rarity} lives!`,
+  6: (item) => `Drink it for a surge of regeneration (+${healthFlaskRegen(item.rarity)} HP/s) in your next fight.`,
   7: (item) => `Max damage equals ${Math.round(chungiHpDamageFraction(item.rarity) * 100)}% of your max HP.`,
   8: (item) => `2-handed. Attacks shield you for ${(floweringStaffInvulnMs(item.rarity) / 1000).toFixed(1)}s (once every ${FLOWERING_STAFF_INVULN_COOLDOWN_MS / 1000}s).`,
   14: (item) => {
@@ -32,6 +36,11 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
     return multiplier === 1
       ? 'Max damage equals your current income.'
       : `Max damage equals ${multiplier}x your current income.`;
+  },
+  27: (item) => {
+    const healPct = Math.round(secondWindHealFraction(item.rarity) * 100);
+    const invulnSec = (secondWindInvulnMs(item.rarity) / 1000).toFixed(1);
+    return `The first time you fall below ${Math.round(SECOND_WIND_THRESHOLD * 100)}% HP in a fight, heal ${healPct}% of your max HP and become invulnerable for ${invulnSec}s. Once per fight.`;
   },
 };
 
