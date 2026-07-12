@@ -353,8 +353,11 @@ const TOP_PLAYERS_AGGREGATION: PipelineStage[] = [
         // each character's best/final snapshot (wins never decrease, so this is the live/original doc)
         doc: {$top: {sortBy: {wins: -1, round: -1, playerId: -1}, output: '$$ROOT'}},
         latestPlayerId: {$max: '$playerId'},
+        // ObjectId embeds its creation time, and a fresh snapshot doc is written each round,
+        // so the newest snapshot's _id timestamp is this character's "last played" time.
+        lastPlayedAt: {$max: {$toDate: '$_id'}},
     }},
-    {$addFields: {'doc.latestPlayerId': '$latestPlayerId'}},
+    {$addFields: {'doc.latestPlayerId': '$latestPlayerId', 'doc.lastPlayedAt': '$lastPlayedAt'}},
     {$replaceRoot: {newRoot: '$doc'}},
     {$sort: {latestPlayerId: -1}},                             // final order: most-recently-active character first
 ];
@@ -449,6 +452,9 @@ export async function getWallOfFame({ limit = 20, skip = 0 }: { limit?: number; 
         { $sort: { losses: 1, wins: -1, playerId: 1 } },
         { $group: { _id: '$originalPlayerId', doc: { $first: '$$ROOT' } } },
         { $replaceRoot: { newRoot: '$doc' } },
+        // ObjectId embeds its creation time; for a finished (12-win) run this is when the
+        // finishing snapshot was saved, i.e. this character's "last played" time.
+        { $addFields: { lastPlayedAt: { $toDate: '$_id' } } },
         { $sort: { losses: 1, round: 1, originalPlayerId: 1 } },
         { $facet: {
             players: [{ $skip: skip }, { $limit: clampedLimit }],
