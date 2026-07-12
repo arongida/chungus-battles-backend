@@ -11,9 +11,10 @@ export function chungiHpDamageFraction(rarity: number): number {
 }
 
 /**
- * Magic Ring (702): starts Common with one randomly rolled stat that grows
- * permanently on every attack. Each level-up bumps its rarity and rolls
- * another stat into the mix, until all 5 are active at Mythic (level 5).
+ * Magic Ring (702): not a weapon, does not attack. Starts Common with one
+ * randomly rolled stat that grows permanently once per second (AURA) while
+ * in a fight. Each level-up bumps its rarity and rolls another stat into
+ * the mix, until all 5 are active at Mythic (level 5).
  *
  * No separate "which stats are active" tracking is kept — a stat counts as
  * rolled once its `affectedStats` value is non-zero, since that's what
@@ -21,16 +22,17 @@ export function chungiHpDamageFraction(rarity: number): number {
  * player via the normal item stat display.
  *
  * attackSpeed is excluded from the pool — stacking it would create a
- * feedback loop (faster attacks → more stacks → even faster attacks).
+ * feedback loop that no longer even applies now that the ring doesn't
+ * attack, but is kept excluded for consistency with other stacking effects.
  */
 const MAGIC_RING_STAT_POOL: RollableStat[] = [
-    'strength', 'accuracy', 'defense', 'maxHp', 'dodgeRate', 'flatDmgReduction', 'hpRegen', 'income',
+    'strength', 'accuracy', 'defense', 'maxHp', 'dodgeRate', 'hpRegen', 'income',
 ];
 
 /** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
-const MAGIC_RING_STACK_FRACTION = 0.04;
+const MAGIC_RING_STACK_FRACTION = 0.05;
 
-export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats on every attack and evolves on level up.';
+export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats every second in combat and evolves on level up.';
 
 /** Picks a pool stat not yet rolled on this item (still zero), or null once the pool is exhausted. */
 function rollNextMagicRingStat(affectedStats: Item['affectedStats']): RollableStat | null {
@@ -39,7 +41,7 @@ function rollNextMagicRingStat(affectedStats: Item['affectedStats']): RollableSt
     return available[Math.floor(Math.random() * available.length)];
 }
 
-/** Per-attack growth for one active stat at the ring's current rarity. */
+/** Per-second growth for one active stat at the ring's current rarity. */
 function magicRingStackAmount(stat: RollableStat, rarity: number): number {
     const tier = Math.min(5, Math.max(1, rarity));
     return Math.round(STAT_RANGES[stat][tier].max * MAGIC_RING_STACK_FRACTION * 100) / 100;
@@ -52,7 +54,7 @@ export function rollMagicRingBonus(item: Item): void {
     (item.affectedStats as any)[stat] += 20 * magicRingStackAmount(stat, item.rarity);
 }
 
-/** Magic Ring (702): adds one attack's worth of growth to a random stat already rolled (non-zero) on this item. */
+/** Magic Ring (702): adds one second's worth of growth to a random stat already rolled (non-zero) on this item. */
 export function stackMagicRingBonuses(item: Item): void {
     const rolled = MAGIC_RING_STAT_POOL.filter((stat) => (item.affectedStats as any)[stat]);
     if (rolled.length === 0) return;
@@ -69,12 +71,12 @@ export const TWO_HANDED_WEAPON_IDS = new Set([4]); // Zwei-hander
 
 /**
  * Items excluded from the shop's owned-item rarity-upgrade path
- * (findOwnedUpgradeTarget). Health Potion (6) is a consumable whose rarity
+ * (findOwnedUpgradeTarget). Health Flask (6) is a consumable whose rarity
  * is meant to come from its shop roll, not from stacking upgrades; Ring of
  * Immortality (47) grants no stats and its rarity is irrelevant to its
  * SHOP_START transform, so upgrading it would only be confusing.
  */
-export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Potion, Ring of Immortality
+export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Flask, Ring of Immortality
 
 /** Flowering Staff (8): invulnerability window granted after each attack. */
 export function floweringStaffInvulnMs(rarity: number): number {
@@ -98,3 +100,27 @@ export const BURN_DAMAGE_PER_STACK = 2;
 
 /** Burn DoT: how long an application's stacks last. */
 export const BURN_DURATION_MS = 3000;
+
+/**
+ * Health Flask (6): flat price, flat effect — drinking it banks an hpRegen bonus
+ * (PlayerSchema.pendingRegenBuff) that applies for the wearer's next fight only, then is spent
+ * (see FightRoom.handleFightEnd). Priced like any other item (HEALTH_FLASK_PRICE) rather than
+ * scaled by level/gold. Roughly 3x the hpRegen a normal tier-3 item gives at a comparable price
+ * (tier 3 gear costs 8 and rolls up to 4 hpRegen — see STAT_RANGES.hpRegen in itemStatPool.ts),
+ * since this bonus only lasts one fight instead of being permanent.
+ */
+export const HEALTH_FLASK_PRICE = 10;
+export const HEALTH_FLASK_REGEN_PER_SECOND = 10;
+
+/** Band of Vigor (27): HP fraction below which "Second Wind" can proc, once per fight. */
+export const SECOND_WIND_THRESHOLD = 0.3;
+
+/** Band of Vigor (27): burst heal on proc, as a fraction of the wearer's max HP. */
+export function secondWindHealFraction(rarity: number): number {
+    return 0.1 + 0.05 * rarity;
+}
+
+/** Band of Vigor (27): invulnerability window granted on proc. */
+export function secondWindInvulnMs(rarity: number): number {
+    return 500 + 300 * rarity;
+}

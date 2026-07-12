@@ -17,7 +17,6 @@ export class Player extends Schema implements IStats {
     @type('string') name: string;
     @type('number') xp: number;
     @type('string') sessionId: string;
-    @type('number') flatDmgReduction: number = 0;
     @type('number') maxXp: number;
     @type('number') round: number;
     @type('number') lives: number;
@@ -157,6 +156,12 @@ export class Player extends Schema implements IStats {
     // Black Market Contact: same latch as comradeFreeClaim, but the client only honors it on
     // lucky-find shop items (see TalentBehaviors.ts MERCHANT_5B).
     @type('boolean') luckyFindFreeClaim: boolean = false;
+    // Health Flask (itemId 6): hpRegen bonus banked in the draft, consumed by the wearer's very
+    // next fight. Folded into hpRegen every tick by statsUtils.recalculatePlayerStats and zeroed
+    // out in FightRoom.handleFightEnd once that fight concludes. Must stay @type (not a plain
+    // field) — same reasoning as `losses` above: copyFrom() round-trips through toJSON(), so a
+    // plain field would silently reset to 0 the moment FightRoom.onJoin loads the player.
+    @type('number') pendingRegenBuff: number = 0;
 
     private _poisonStack: number = 0;
 
@@ -167,8 +172,8 @@ export class Player extends Schema implements IStats {
     set poisonStack(value: number) {
         if (value < 0) {
             this._poisonStack = 0;
-        } else if (value > 100) {
-            this._poisonStack = 100;
+        } else if (value > 1000) {
+            this._poisonStack = 1000;
         } else {
             this._poisonStack = value;
         }
@@ -183,8 +188,8 @@ export class Player extends Schema implements IStats {
     set burnStack(value: number) {
         if (value < 0) {
             this._burnStack = 0;
-        } else if (value > 100) {
-            this._burnStack = 100;
+        } else if (value > 1000) {
+            this._burnStack = 1000;
         } else {
             this._burnStack = value;
         }
@@ -226,7 +231,7 @@ export class Player extends Schema implements IStats {
         const prevented = amount - healed;
         if (prevented > 0 && poisonSource) {
             poisonSource.talents.forEach((t) => {
-                if (t.talentId === TalentType.POISON || t.talentId === TalentType.ROGUE_3) {
+                if (t.talentId === TalentType.POISON || t.talentId === TalentType.POISON_2) {
                     t.statHealingPrevented += prevented;
                     t.totalHealingPrevented += prevented;
                 }
@@ -262,12 +267,10 @@ export class Player extends Schema implements IStats {
 
     getDamageAfterDefense(initialDamage: number): number {
         const afterPct = initialDamage * (100 / (100 + this.defense));
-        const damage = afterPct - this.flatDmgReduction;
         if (initialDamage > 0 && !this.invincible) {
             this.fightStats.damageReducedByDefense += initialDamage - afterPct;
-            this.fightStats.damageReducedByFlat += Math.min(this.flatDmgReduction, Math.max(afterPct, 0));
         }
-        return damage > 0 ? damage : 0;
+        return afterPct > 0 ? afterPct : 0;
     }
 
     addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {

@@ -6,7 +6,6 @@ export const StatsSchema = new Schema({
     maxHp: Number,
     defense: Number,
     attackSpeed: Number,
-    flatDmgReduction: Number,
     dodgeRate: Number,
     income: Number,
     hpRegen: Number,

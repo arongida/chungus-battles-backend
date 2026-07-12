@@ -39,6 +39,7 @@ const PlayerSchema = new Schema({
     // snapshotPlayer so matchmaking snapshots never carry a stale enemy pointer.
     nextFightEnemyId: Number,
     nextFightEnemyRound: Number,
+    pendingRegenBuff: {type: Number, default: 0},
 });
 
 // Backs the wall-of-fame aggregation sorts ({$sort: {wins:-1, originalPlayerId:-1, playerId:1}})
@@ -128,13 +129,14 @@ function getNewPlayer(playerId: number,
                       sessionId: string,
                       avatarUrl: string,
                       startingGold: number) {
+    const startingLevel = avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
     return new playerModel({
         playerId: playerId,
         originalPlayerId: playerId,
         name: name,
         gold: startingGold,
         xp: 0,
-        level: avatarUrl === PlayerAvatar.THIEF ? 2 : 1,
+        level: startingLevel,
         sessionId: sessionId,
         maxXp: avatarUrl === PlayerAvatar.THIEF ? 20 : 10,
         round: 1,
@@ -150,10 +152,10 @@ function getNewPlayer(playerId: number,
         baseStats: {
             strength: 3,
             accuracy: 1,
-            maxHp: 100,
+            // +10 max HP per level, matching DraftRoom.levelUp (Season 17)
+            maxHp: 100 + (startingLevel - 1) * 10,
             defense: 0,
             attackSpeed: 1,
-            flatDmgReduction: 0,
             dodgeRate: 0,
             income: avatarUrl === PlayerAvatar.MERCHANT ? 7 : 4,
             hpRegen: 0,
@@ -194,6 +196,10 @@ export async function copyPlayer(player: Player): Promise<Player> {
     const newPlayerObject = {
         ...playerToPlainObject(player),
         playerId: await getNextPlayerId(),
+        // This snapshot is only ever read back as a future opponent bot — it never plays through
+        // its own FightRoom.handleFightEnd, so a banked Health Flask regen buff would otherwise
+        // leak in permanently and grant free regen every time this snapshot is drawn as an enemy.
+        pendingRegenBuff: 0,
     };
 
     const newPlayer = new playerModel(newPlayerObject);
@@ -293,7 +299,7 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         accuracy: player.accuracy,
         defense: player.defense,
         attackSpeed: player.attackSpeed,
-        flatDmgReduction: player.flatDmgReduction,
+        pendingRegenBuff: player.pendingRegenBuff,
         baseStats: player.baseStats?.toJSON() || {},
         equippedItems,
         inventory: player.inventory.map(item => item.toJSON()),
@@ -326,7 +332,6 @@ export function snapshotPlayer(player: Player): Record<string, any> {
         accuracy: player.accuracy,
         defense: player.defense,
         attackSpeed: player.attackSpeed,
-        flatDmgReduction: player.flatDmgReduction,
         dodgeRate: player.dodgeRate,
         hpRegen: player.hpRegen,
         income: player.income,

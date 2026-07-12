@@ -314,7 +314,6 @@ export class FightRoom extends Room {
             },
             healingReceived: Math.round(self.fightStats.healingReceived),
             damageReducedByDefense: Math.round(self.fightStats.damageReducedByDefense),
-            damageReducedByFlat: Math.round(self.fightStats.damageReducedByFlat),
             attacksDodged: self.fightStats.attacksDodged,
             damageBlockedByInvincible: Math.round(self.fightStats.damageBlockedByInvincible),
         });
@@ -463,7 +462,7 @@ export class FightRoom extends Room {
     checkPoison(attacker: Player, defender: Player) {
         if (defender.poisonStack <= 0) return;
         const poisonTalents = attacker.talents.filter(t =>
-            t.talentId === TalentType.POISON || t.talentId === TalentType.ROGUE_3
+            t.talentId === TalentType.POISON || t.talentId === TalentType.POISON_2
         );
 
         if (!defender.poisonTimer) {
@@ -599,6 +598,10 @@ export class FightRoom extends Room {
     }
 
     private async handleFightEnd() {
+        // Health Flask's regen buff is a one-fight consumable — spent the moment this fight
+        // concludes (win, lose, or draw), regardless of whether it actually procced any healing.
+        this.state.player.pendingRegenBuff = 0;
+
         if (!this.state.fightResult) {
             if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {
                 this.state.fightResult = FightResultType.DRAW;

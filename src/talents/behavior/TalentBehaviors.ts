@@ -412,14 +412,14 @@ export const TalentBehaviors = {
 
     // Hidden Vials — ON_DODGE trigger. `defender` is the dodger (talent owner); the enemy who
     // missed is `attacker`. Applies the DoT stacks to the enemy.
-    [TalentType.RESILIENCE]: (context: TalentBehaviorContext) => {
+    [TalentType.HIDDEN_VIALS]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, clock, talent } = context;
-        attacker.addBurnStacks(clock, client, 1);
-        attacker.addPoisonStacks(clock, client, 1);
+        attacker.addBurnStacks(clock, client, talent.activationRate);
+        attacker.addPoisonStacks(clock, client, talent.activationRate);
         track(talent, 1);
         client.send('trigger_talent', {
             playerId: defender.playerId,
-            talentId: TalentType.RESILIENCE,
+            talentId: TalentType.HIDDEN_VIALS,
         });
     },
 
@@ -606,7 +606,6 @@ export const TalentBehaviors = {
                     learned.maxHp += item.affectedStats.maxHp;
                     learned.defense += item.affectedStats.defense;
                     learned.dodgeRate += item.affectedStats.dodgeRate;
-                    learned.flatDmgReduction += item.affectedStats.flatDmgReduction;
                     learned.income += item.affectedStats.income;
                     learned.hpRegen += item.affectedStats.hpRegen;
                     // attackSpeed is a multiplier (neutral = 1), so learn it as a bonus delta,
@@ -635,7 +634,6 @@ export const TalentBehaviors = {
             talent.affectedStats.accuracy = talent.activationRate * learned.accuracy;
             talent.affectedStats.maxHp = talent.activationRate * learned.maxHp;
             talent.affectedStats.defense = talent.activationRate * learned.defense;
-            talent.affectedStats.flatDmgReduction = talent.activationRate * learned.flatDmgReduction;
             talent.affectedStats.income = talent.activationRate * learned.income;
             talent.affectedStats.hpRegen = talent.activationRate * learned.hpRegen;
             talent.affectedStats.dodgeRate = talent.activationRate * learned.dodgeRate;
@@ -719,7 +717,7 @@ export const TalentBehaviors = {
             let stat = "";
             let amount = 0;
 
-            const randomBonus = rollTheDice(1, 9);
+            const randomBonus = rollTheDice(1, 8);
             if (randomBonus === 1) {
                 amount = 10 * attacker.level;
                 talent.affectedStats.maxHp += amount;
@@ -737,22 +735,18 @@ export const TalentBehaviors = {
                 talent.affectedStats.defense += amount;
                 stat = "defense";
             } else if (randomBonus === 5) {
-                amount = attacker.level * 0.15;
-                talent.affectedStats.flatDmgReduction += amount;
-                stat = "flat damage reduction";
-            } else if (randomBonus === 6) {
                 amount = 10 * attacker.level;
                 talent.affectedStats.dodgeRate += amount;
                 stat = "dodge rate";
-            } else if (randomBonus === 7) {
+            } else if (randomBonus === 6) {
                 amount = attacker.level * 0.05;
                 talent.affectedStats.attackSpeed += amount;
                 stat = "attack speed";
-            } else if (randomBonus === 8) {
+            } else if (randomBonus === 7) {
                 amount = attacker.level;
                 talent.affectedStats.income += amount;
                 stat = "income";
-            } else if (randomBonus === 9) {
+            } else if (randomBonus === 8) {
                 amount = attacker.level * 0.15;
                 talent.affectedStats.hpRegen += amount;
                 stat = "hp regeneration";
@@ -832,7 +826,6 @@ export const TalentBehaviors = {
             talent.affectedStats.maxHp = 0;
             talent.affectedStats.defense = 0;
             talent.affectedStats.dodgeRate = 0;
-            talent.affectedStats.flatDmgReduction = 0;
             talent.affectedStats.income = 0;
             talent.affectedStats.hpRegen = 0;
 
@@ -843,7 +836,6 @@ export const TalentBehaviors = {
                     talent.affectedStats.maxHp += item.affectedStats.maxHp * talent.activationRate;
                     talent.affectedStats.defense += item.affectedStats.defense * talent.activationRate;
                     talent.affectedStats.dodgeRate += item.affectedStats.dodgeRate * talent.activationRate;
-                    talent.affectedStats.flatDmgReduction += item.affectedStats.flatDmgReduction * talent.activationRate;
                     talent.affectedStats.income += item.affectedStats.income * talent.activationRate;
                     talent.affectedStats.hpRegen += item.affectedStats.hpRegen * talent.activationRate;
                 }
@@ -940,14 +932,14 @@ export const TalentBehaviors = {
             }
         },
 
-    [TalentType.ROGUE_3]:
+    [TalentType.POISON_2]:
         (context: TalentBehaviorContext) => {
             const { attacker, defender, client, clock, talent } = context;
-            defender.addPoisonStacks(clock, client);
+            defender.addPoisonStacks(clock, client, talent.activationRate);
             track(talent, 1, 0, 0, 0);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
-                talentId: TalentType.ROGUE_3,
+                talentId: TalentType.POISON_2,
             });
         },
 
@@ -983,9 +975,9 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent, attackerSnapshot } = context;
             const base = attackerSnapshot ?? attacker;
-            const below = attacker.hp < attacker.maxHp * 0.5;
-            talent.affectedStats.strength = below ? base.strength : 0;
-            talent.affectedStats.attackSpeed = below ? 2 : 1;
+            const below = attacker.hp < attacker.maxHp * talent.activationRate;
+            talent.affectedStats.strength = below ? base.strength * talent.scaling : 0;
+            talent.affectedStats.attackSpeed = below ? 1 + talent.scaling : 1;
             if (below) {
                 client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -1019,7 +1011,6 @@ export const TalentBehaviors = {
             talent.affectedStats.maxHp = Math.ceil(base.maxHp * bonusCoefficent);
             talent.affectedStats.dodgeRate = Math.ceil(base.dodgeRate * bonusCoefficent);
             talent.affectedStats.hpRegen = Math.ceil(base.hpRegen * bonusCoefficent);
-            talent.affectedStats.flatDmgReduction = Math.ceil(base.flatDmgReduction * bonusCoefficent);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.MERCHANT_3,
@@ -1032,14 +1023,29 @@ export const TalentBehaviors = {
             talent.affectedStats.strength = 100;
         },
 
-    [TalentType.ROGUE_5]:
+    [TalentType.GRAND_ROBBERY]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent } = context;
-            talent.affectedStats.dodgeRate += 1;
+            const { attacker, client, shop, talent } = context;
+            if (!shop) return; // undefined outside draft
+            if (talent.tags?.includes('grand-robbery-used')) return; // one-shot latch
+
+            let stolen = 0;
+            [...shop].forEach((item) => { // copy: getItem mutates sold/shop state as it goes
+                if (item.sold) return;
+                attacker.gold += item.price; // refund so getItem nets to free
+                attacker.getItem(item);
+                stolen++;
+            });
+
+            talent.tags?.push('grand-robbery-used');
+            talent.description = `Grand Robbery! Stole ${stolen} item(s) from the shop!`
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
-                talentId: TalentType.ROGUE_5,
+                talentId: TalentType.GRAND_ROBBERY,
             });
+            if (stolen > 0) {
+                client.send('draft_log', `Grand Robbery! Stole ${stolen} item(s) from the shop!`);
+            }
         },
 
     [TalentType.JUST_A_SCRATCH]:

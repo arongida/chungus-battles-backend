@@ -18,6 +18,7 @@ import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 import { RewardGainMessage } from '../common/MessageTypes';
+import { HEALTH_FLASK_REGEN_PER_SECOND } from '../items/behavior/uniqueItemBalance';
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -215,8 +216,7 @@ export class DraftRoom extends Room {
         this.state.player.comradeClaimUsed = false;
         this.state.player.goldGenieClaimUsed = false;
         this.state.player.luckyFindClaimUsed = false;
-        // Health potions are currently disabled from the shop.
-        const excludeTypes = ['potion'];
+        const excludeTypes: string[] = [];
         const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level, excludeTypes);
         const lockedShop = this.state.player.lockedShop;
         if (lockedShop.length > 0) {
@@ -226,10 +226,6 @@ export class DraftRoom extends Room {
         } else if (this.state.shop.length < 6) {
             this.state.shop.clear();
             for (const rolledItem of shopFromDb) {
-                if (rolledItem.type === 'potion') {
-                    rolledItem.price = this.calculatePotionPrice(this.state.player);
-                    rolledItem.sellPrice = Math.floor(rolledItem.price * 0.7);
-                }
                 const slot = this.state.shop.length;
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
                 // Lucky find is disabled for potions and rings.
@@ -469,13 +465,6 @@ export class DraftRoom extends Room {
         client.send('message', 'shop unlocked');
     }
 
-    private calculatePotionPrice(player: Player): number {
-        const base = 8 * player.level;
-        const discountFactor = player.lives === 1 ? 0.5 : player.lives === 2 ? 0.75 : 1;
-        const goldFactor = 1 + player.gold * 0.01;
-        return Math.max(1, Math.round(base * discountFactor * goldFactor));
-    }
-
     private async drinkItem(itemId: number, client: Client) {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) {
@@ -487,9 +476,9 @@ export class DraftRoom extends Room {
         }
         const idx = this.state.player.inventory.indexOf(item);
         this.state.player.inventory.splice(idx, 1);
-        this.state.player.lives += 1 * item.rarity;
+        this.state.player.pendingRegenBuff += HEALTH_FLASK_REGEN_PER_SECOND;
         await this.resetStaleUpgradePreviews(itemId);
-        client.send('draft_log', `You drank the ${item.name} and regained a life! Lives: ${this.state.player.lives} ❤️`);
+        client.send('draft_log', `You drank the ${item.name} — +${HEALTH_FLASK_REGEN_PER_SECOND} HP regen for your next fight!`);
     }
 
     private async selectTalent(talentId: number) {
@@ -536,6 +525,9 @@ export class DraftRoom extends Room {
         this.state.player.level++;
         this.state.player.maxXp += this.state.player.level * 4 + 2;
         this.state.player.xp = leftoverXp;
+
+        // Every level grants a flat max HP bonus (Season 17)
+        this.state.player.baseStats.maxHp += 10;
 
         // Levels past 5 grant no talent points but give increasingly stronger stat bonuses
         if (this.state.player.level > 5) {

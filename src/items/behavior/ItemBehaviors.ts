@@ -7,6 +7,9 @@ import {
     FLOWERING_STAFF_INVULN_COOLDOWN_MS,
     floweringStaffInvulnMs,
     rollMagicRingBonus,
+    secondWindHealFraction,
+    secondWindInvulnMs,
+    SECOND_WIND_THRESHOLD,
     stackMagicRingBonuses,
     wandOfFireBurnStacks,
 } from './uniqueItemBalance';
@@ -16,6 +19,11 @@ import type { Item } from '../schema/ItemSchema';
 // Last invulnerability proc per staff instance (clock-elapsed ms). Keyed by
 // item instance so each fight's fresh state starts clean.
 const floweringStaffLastProcMs = new WeakMap<Item, number>();
+
+// Band of Vigor (27): whether this ring instance has already procced Second Wind in the
+// current fight. Keyed by item instance and cleared on FIGHT_START, same pattern as the
+// Flowering Staff's proc-cooldown map above.
+const secondWindUsed = new WeakMap<Item, boolean>();
 
 export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContext) => void | Promise<void>> = {
     // All shields — FIGHT_START: grant invulnerability (500 + 500*tier ms).
@@ -116,7 +124,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
 
     // Soulstealer's Scythe (59) — rarity 2+: heals for (rarity*5+5)% of damage dealt + 1 on hit.
     59: ({ attacker, defender, damage, client, item }) => {
-        if (!attacker || !damage || !item || item.rarity <= 1) return;
+        if (!attacker || !damage || !item) return;
         const heal = Math.floor(damage * (item.rarity * 5 + 5) / 100) + 1;
         const scytheHealed = attacker.heal(heal, defender);
         if (scytheHealed > 0) {
@@ -125,12 +133,12 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         }
     },
 
-    // Magic Ring (702) — starts Common with one rolled stat that permanently
-    // stacks on every attack. LEVEL_UP bumps its rarity and rolls another
-    // stat into the mix, until all 5 are active at Mythic (level 5). Rolled
-    // stats live directly in affectedStats (no separate tracking needed) —
-    // see uniqueItemBalance.ts.
-    702: ({ attacker, item, trigger }) => {
+    // Magic Ring (702) — not a weapon, doesn't attack. Starts Common with one
+    // rolled stat that permanently stacks once per second (AURA) while in a
+    // fight. LEVEL_UP bumps its rarity and rolls another stat into the mix,
+    // until all 5 are active at Mythic (level 5). Rolled stats live directly
+    // in affectedStats (no separate tracking needed) — see uniqueItemBalance.ts.
+    702: ({ attacker, defender, item, trigger }) => {
         if (!attacker || !item) return;
 
         if (trigger === TriggerType.LEVEL_UP) {
@@ -138,6 +146,8 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
             item.rarity++;
             rollMagicRingBonus(item);
         } else {
+            // AURA fires in the draft/shop too — only stack while actually fighting.
+            if (!defender) return;
             stackMagicRingBonuses(item);
         }
 
@@ -177,6 +187,40 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         attacker.inventory.push(newItem);
 
         client?.send('draft_log', `Your Ring of Immortality transforms into ${newItem.name} (Mythic)!`);
+    },
+
+    // Band of Vigor (27) — a ring, not a weapon. FIGHT_START: resets its once-per-fight proc.
+    // ON_DAMAGE (fires on the wearer as `defender`, covers weapon hits and poison/burn DoT): the
+    // first time HP drops below SECOND_WIND_THRESHOLD, heal a chunk of max HP and grant a brief
+    // window of invulnerability.
+    27: ({ defender, item, trigger, clock, client }) => {
+        if (!item) return;
+
+        if (trigger === TriggerType.FIGHT_START) {
+            secondWindUsed.delete(item);
+            return;
+        }
+
+        if (trigger !== TriggerType.ON_DAMAGE) return;
+        if (!defender || !clock) return;
+        if (secondWindUsed.get(item)) return;
+        if (defender.hp <= 0 || defender.hp / defender.maxHp >= SECOND_WIND_THRESHOLD) return;
+
+        secondWindUsed.set(item, true);
+        const healed = defender.heal(Math.round(defender.maxHp * secondWindHealFraction(item.rarity)));
+        const durationMs = secondWindInvulnMs(item.rarity);
+        defender.setInvincible(clock, durationMs, client);
+
+        if (healed > 0) {
+            client?.send('healing', { playerId: defender.playerId, healing: healed });
+        }
+        client?.send('combat_log', {
+            text: `${defender.name}'s ${item.name} triggers Second Wind: ${fmt(healed)} hp and ${(durationMs / 1000).toFixed(1)}s invulnerability!`,
+            kind: 'item',
+            defenderId: defender.playerId,
+            itemId: item.itemId,
+            healing: healed,
+        } as CombatLogMessage);
     },
 
 };

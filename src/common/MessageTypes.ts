@@ -106,7 +106,6 @@ export type FightSideStats = {
   damageDealt: { weapon: number; burn: number; poison: number };
   healingReceived: number;
   damageReducedByDefense: number;
-  damageReducedByFlat: number;
   attacksDodged: number;
   damageBlockedByInvincible: number;
 };

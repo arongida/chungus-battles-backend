@@ -8,7 +8,6 @@ export type RollableStat =
     | 'attackSpeed'
     | 'defense'
     | 'maxHp'
-    | 'flatDmgReduction'
     | 'income'
     | 'dodgeRate'
     | 'hpRegen';
@@ -28,9 +27,9 @@ export type WeaponArchetype = ItemClass | 'default';
 /** Base eligible-stat pool for each item type (offensive vs. defensive). */
 export const TYPE_STAT_POOL: Record<ItemType, RollableStat[]> = {
     [ItemType.WEAPON]: ['strength', 'accuracy', 'attackSpeed'],
-    [ItemType.ARMOR]:  ['defense', 'maxHp', 'flatDmgReduction'],
-    [ItemType.HELMET]: ['defense', 'maxHp', 'flatDmgReduction'],
-    [ItemType.SHIELD]: ['defense', 'maxHp', 'flatDmgReduction'],
+    [ItemType.ARMOR]:  ['defense', 'maxHp'],
+    [ItemType.HELMET]: ['defense', 'maxHp'],
+    [ItemType.SHIELD]: ['defense', 'maxHp'],
 };
 
 /**
@@ -56,7 +55,7 @@ export const AFFIX_COUNT_BY_TIER: Record<number, number> = {
 
 /**
  * Per-stat, per-tier value ranges.
- * Float stats (attackSpeed, flatDmgReduction, hpRegen) are marked isFloat=true
+ * Float stats (attackSpeed, hpRegen) are marked isFloat=true
  * so the roller can use two-decimal precision instead of integer rounding.
  */
 export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
@@ -96,13 +95,6 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
         3: { min: 40, max: 80  },
         4: { min: 80, max: 160  },
         5: { min: 160, max: 320 },
-    },
-    flatDmgReduction: {
-        1: { min: 0.3, max: 0.6, isFloat: true },
-        2: { min: 0.6, max: 1.2, isFloat: true },
-        3: { min: 1.2, max: 2.4, isFloat: true },
-        4: { min: 2.4, max: 4.8, isFloat: true },
-        5: { min: 4.8, max: 9.6, isFloat: true },
     },
     income: {
         1: { min: 1, max: 1  },
