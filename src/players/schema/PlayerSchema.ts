@@ -17,7 +17,6 @@ export class Player extends Schema implements IStats {
     @type('string') name: string;
     @type('number') xp: number;
     @type('string') sessionId: string;
-    @type('number') flatDmgReduction: number = 0;
     @type('number') maxXp: number;
     @type('number') round: number;
     @type('number') lives: number;
@@ -268,12 +267,10 @@ export class Player extends Schema implements IStats {
 
     getDamageAfterDefense(initialDamage: number): number {
         const afterPct = initialDamage * (100 / (100 + this.defense));
-        const damage = afterPct - this.flatDmgReduction;
         if (initialDamage > 0 && !this.invincible) {
             this.fightStats.damageReducedByDefense += initialDamage - afterPct;
-            this.fightStats.damageReducedByFlat += Math.min(this.flatDmgReduction, Math.max(afterPct, 0));
         }
-        return damage > 0 ? damage : 0;
+        return afterPct > 0 ? afterPct : 0;
     }
 
     addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {

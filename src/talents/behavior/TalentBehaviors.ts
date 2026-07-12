@@ -606,7 +606,6 @@ export const TalentBehaviors = {
                     learned.maxHp += item.affectedStats.maxHp;
                     learned.defense += item.affectedStats.defense;
                     learned.dodgeRate += item.affectedStats.dodgeRate;
-                    learned.flatDmgReduction += item.affectedStats.flatDmgReduction;
                     learned.income += item.affectedStats.income;
                     learned.hpRegen += item.affectedStats.hpRegen;
                     // attackSpeed is a multiplier (neutral = 1), so learn it as a bonus delta,
@@ -635,7 +634,6 @@ export const TalentBehaviors = {
             talent.affectedStats.accuracy = talent.activationRate * learned.accuracy;
             talent.affectedStats.maxHp = talent.activationRate * learned.maxHp;
             talent.affectedStats.defense = talent.activationRate * learned.defense;
-            talent.affectedStats.flatDmgReduction = talent.activationRate * learned.flatDmgReduction;
             talent.affectedStats.income = talent.activationRate * learned.income;
             talent.affectedStats.hpRegen = talent.activationRate * learned.hpRegen;
             talent.affectedStats.dodgeRate = talent.activationRate * learned.dodgeRate;
@@ -719,7 +717,7 @@ export const TalentBehaviors = {
             let stat = "";
             let amount = 0;
 
-            const randomBonus = rollTheDice(1, 9);
+            const randomBonus = rollTheDice(1, 8);
             if (randomBonus === 1) {
                 amount = 10 * attacker.level;
                 talent.affectedStats.maxHp += amount;
@@ -737,22 +735,18 @@ export const TalentBehaviors = {
                 talent.affectedStats.defense += amount;
                 stat = "defense";
             } else if (randomBonus === 5) {
-                amount = attacker.level * 0.15;
-                talent.affectedStats.flatDmgReduction += amount;
-                stat = "flat damage reduction";
-            } else if (randomBonus === 6) {
                 amount = 10 * attacker.level;
                 talent.affectedStats.dodgeRate += amount;
                 stat = "dodge rate";
-            } else if (randomBonus === 7) {
+            } else if (randomBonus === 6) {
                 amount = attacker.level * 0.05;
                 talent.affectedStats.attackSpeed += amount;
                 stat = "attack speed";
-            } else if (randomBonus === 8) {
+            } else if (randomBonus === 7) {
                 amount = attacker.level;
                 talent.affectedStats.income += amount;
                 stat = "income";
-            } else if (randomBonus === 9) {
+            } else if (randomBonus === 8) {
                 amount = attacker.level * 0.15;
                 talent.affectedStats.hpRegen += amount;
                 stat = "hp regeneration";
@@ -832,7 +826,6 @@ export const TalentBehaviors = {
             talent.affectedStats.maxHp = 0;
             talent.affectedStats.defense = 0;
             talent.affectedStats.dodgeRate = 0;
-            talent.affectedStats.flatDmgReduction = 0;
             talent.affectedStats.income = 0;
             talent.affectedStats.hpRegen = 0;
 
@@ -843,7 +836,6 @@ export const TalentBehaviors = {
                     talent.affectedStats.maxHp += item.affectedStats.maxHp * talent.activationRate;
                     talent.affectedStats.defense += item.affectedStats.defense * talent.activationRate;
                     talent.affectedStats.dodgeRate += item.affectedStats.dodgeRate * talent.activationRate;
-                    talent.affectedStats.flatDmgReduction += item.affectedStats.flatDmgReduction * talent.activationRate;
                     talent.affectedStats.income += item.affectedStats.income * talent.activationRate;
                     talent.affectedStats.hpRegen += item.affectedStats.hpRegen * talent.activationRate;
                 }
@@ -1019,7 +1011,6 @@ export const TalentBehaviors = {
             talent.affectedStats.maxHp = Math.ceil(base.maxHp * bonusCoefficent);
             talent.affectedStats.dodgeRate = Math.ceil(base.dodgeRate * bonusCoefficent);
             talent.affectedStats.hpRegen = Math.ceil(base.hpRegen * bonusCoefficent);
-            talent.affectedStats.flatDmgReduction = Math.ceil(base.flatDmgReduction * bonusCoefficent);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.MERCHANT_3,

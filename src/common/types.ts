@@ -18,7 +18,6 @@ export interface IStats {
 	attackSpeed: number;
 	income: number;
 	hpRegen: number;
-  	flatDmgReduction: number;
 	maxHp?: number;
 	baseAttackSpeed?: number;
 }

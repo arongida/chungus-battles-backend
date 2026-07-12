@@ -7,7 +7,6 @@ export class AffectedStats extends Schema {
     @type('number') maxHp: number = 0;
     @type('number') defense: number = 0;
     @type('number') dodgeRate: number = 0;
-    @type('number') flatDmgReduction: number = 0;
     @type('number') income: number = 0;
     @type('number') hpRegen: number = 0;
 
@@ -21,7 +20,6 @@ export class AffectedStats extends Schema {
         this.hpRegen += affectedStatsToMerge.hpRegen;
         this.defense += affectedStatsToMerge.defense;
         this.dodgeRate += affectedStatsToMerge.dodgeRate;
-        this.flatDmgReduction += affectedStatsToMerge.flatDmgReduction;
 
         let attackSpeedToMerge = affectedStatsToMerge.attackSpeed ?? 1;
         if (attackSpeedToMerge === 0) attackSpeedToMerge = 1;

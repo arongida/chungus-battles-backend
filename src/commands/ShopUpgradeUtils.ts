@@ -9,7 +9,6 @@ import {
   chungiHpDamageFraction,
   FLOWERING_STAFF_INVULN_COOLDOWN_MS,
   floweringStaffInvulnMs,
-  healthFlaskRegen,
   NON_UPGRADEABLE_ITEM_IDS,
   secondWindHealFraction,
   secondWindInvulnMs,
@@ -18,8 +17,10 @@ import {
   wandOfFireBurnStacks,
 } from '../items/behavior/uniqueItemBalance';
 
+// Note: Health Flask (6) has no entry here — its rarity is pinned to Common (it's in
+// NON_UPGRADEABLE_ITEM_IDS and excluded from shop lucky-find), so updateRarityDescription's
+// `rarity <= 1` guard means it would never fire; the DB-authored description is always accurate.
 const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Player) => string>> = {
-  6: (item) => `Drink it for a surge of regeneration (+${healthFlaskRegen(item.rarity)} HP/s) in your next fight.`,
   7: (item) => `Max damage equals ${Math.round(chungiHpDamageFraction(item.rarity) * 100)}% of your max HP.`,
   8: (item) => `2-handed. Attacks shield you for ${(floweringStaffInvulnMs(item.rarity) / 1000).toFixed(1)}s (once every ${FLOWERING_STAFF_INVULN_COOLDOWN_MS / 1000}s).`,
   14: (item) => {

@@ -8,7 +8,6 @@ export interface StatsSnapshot {
     maxHp: number;
     dodgeRate: number;
     hpRegen: number;
-    flatDmgReduction: number;
     income: number;
 }
 
@@ -19,7 +18,6 @@ export function addStats(target: StatsSnapshot, source: AffectedStats): void {
     target.maxHp += source.maxHp;
     target.dodgeRate += source.dodgeRate;
     target.hpRegen += source.hpRegen;
-    target.flatDmgReduction += source.flatDmgReduction;
     target.income += source.income;
 }
 
@@ -89,7 +87,6 @@ function setStats(player: Player, affectedStats: AffectedStats): void {
         player.attackSpeed = affectedStats.attackSpeed;
         player.attackSpeedMultiplier = affectedStats.attackSpeed;
         player.dodgeRate = affectedStats.dodgeRate;
-        player.flatDmgReduction = affectedStats.flatDmgReduction;
         player.income = affectedStats.income;
         player.hpRegen = affectedStats.hpRegen;
     } catch (e) {
@@ -106,7 +103,6 @@ export function buildBaseAndItemsSnapshot(player: Player): StatsSnapshot {
         maxHp: player.baseStats.maxHp,
         dodgeRate: player.baseStats.dodgeRate,
         hpRegen: player.baseStats.hpRegen,
-        flatDmgReduction: player.baseStats.flatDmgReduction,
         income: player.baseStats.income,
     };
     player.equippedItems.forEach((item) => {

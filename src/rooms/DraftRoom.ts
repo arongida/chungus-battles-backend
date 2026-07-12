@@ -18,7 +18,7 @@ import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 import { RewardGainMessage } from '../common/MessageTypes';
-import { healthFlaskRegen } from '../items/behavior/uniqueItemBalance';
+import { HEALTH_FLASK_REGEN_PER_SECOND } from '../items/behavior/uniqueItemBalance';
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -226,10 +226,6 @@ export class DraftRoom extends Room {
         } else if (this.state.shop.length < 6) {
             this.state.shop.clear();
             for (const rolledItem of shopFromDb) {
-                if (rolledItem.type === 'potion') {
-                    rolledItem.price = this.calculatePotionPrice(this.state.player);
-                    rolledItem.sellPrice = Math.floor(rolledItem.price * 0.7);
-                }
                 const slot = this.state.shop.length;
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
                 // Lucky find is disabled for potions and rings.
@@ -469,15 +465,6 @@ export class DraftRoom extends Room {
         client.send('message', 'shop unlocked');
     }
 
-    // Scales with level (like other shop pricing) and gold (anti-hoarding, same factor used
-    // elsewhere in the shop). The old lives-based discount belonged to the extra-life effect
-    // this potion no longer grants (see drinkItem) and has been dropped.
-    private calculatePotionPrice(player: Player): number {
-        const base = 8 * player.level;
-        const goldFactor = 1 + player.gold * 0.01;
-        return Math.max(1, Math.round(base * goldFactor));
-    }
-
     private async drinkItem(itemId: number, client: Client) {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) {
@@ -489,10 +476,9 @@ export class DraftRoom extends Room {
         }
         const idx = this.state.player.inventory.indexOf(item);
         this.state.player.inventory.splice(idx, 1);
-        const regen = healthFlaskRegen(item.rarity);
-        this.state.player.pendingRegenBuff += regen;
+        this.state.player.pendingRegenBuff += HEALTH_FLASK_REGEN_PER_SECOND;
         await this.resetStaleUpgradePreviews(itemId);
-        client.send('draft_log', `You drank the ${item.name} — +${regen} HP regen for your next fight!`);
+        client.send('draft_log', `You drank the ${item.name} — +${HEALTH_FLASK_REGEN_PER_SECOND} HP regen for your next fight!`);
     }
 
     private async selectTalent(talentId: number) {

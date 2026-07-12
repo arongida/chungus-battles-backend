@@ -24,8 +24,9 @@ export const SEASONS: SeasonInfo[] = [
       'Max HP: characters now gain +10 max HP every level (base 100), shown on the level-up screen',
       'Magic Ring: reworked — no longer a weapon and no longer attacks; now stacks its bonus stats via a once-per-second aura during fights (removes attack-speed scaling and Dual Wield interaction)',
       'Wand of Fire: no longer grants +20 max HP',
-      'Health Flask: reworked and re-enabled in the shop — drinking it now grants a burst of HP regen for your next fight only, instead of a permanent extra life',
-      'Band of Vigor: new ring — the first time you drop below 30% HP in a fight, heal a portion of your max HP and become briefly invulnerable (once per fight)',
+      'Health Flask: reworked and re-enabled in the shop — flat gold price, drinking it now grants HP regen for your next fight only, instead of a permanent extra life',
+      'Band of Vigor: new ring — the first time you drop below 30% HP in a fight, heal % of your max HP and become invulnerable (once per fight)',
+      'Flat Damage Reduction: removed from the game — items, talents, and the end-of-fight stats no longer use it (defense/percentage reduction unchanged)',
     ],
   },
   {

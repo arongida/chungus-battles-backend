@@ -314,7 +314,6 @@ export class FightRoom extends Room {
             },
             healingReceived: Math.round(self.fightStats.healingReceived),
             damageReducedByDefense: Math.round(self.fightStats.damageReducedByDefense),
-            damageReducedByFlat: Math.round(self.fightStats.damageReducedByFlat),
             attacksDodged: self.fightStats.attacksDodged,
             damageBlockedByInvincible: Math.round(self.fightStats.damageBlockedByInvincible),
         });

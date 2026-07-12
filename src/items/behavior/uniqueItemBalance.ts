@@ -26,7 +26,7 @@ export function chungiHpDamageFraction(rarity: number): number {
  * attack, but is kept excluded for consistency with other stacking effects.
  */
 const MAGIC_RING_STAT_POOL: RollableStat[] = [
-    'strength', 'accuracy', 'defense', 'maxHp', 'dodgeRate', 'flatDmgReduction', 'hpRegen', 'income',
+    'strength', 'accuracy', 'defense', 'maxHp', 'dodgeRate', 'hpRegen', 'income',
 ];
 
 /** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
@@ -102,13 +102,15 @@ export const BURN_DAMAGE_PER_STACK = 2;
 export const BURN_DURATION_MS = 3000;
 
 /**
- * Health Flask (6): drinking it banks an hpRegen bonus (PlayerSchema.pendingRegenBuff) that
- * applies for the wearer's next fight only, then is spent (see FightRoom.handleFightEnd).
- * +4/s at Common up to +12/s at Mythic.
+ * Health Flask (6): flat price, flat effect — drinking it banks an hpRegen bonus
+ * (PlayerSchema.pendingRegenBuff) that applies for the wearer's next fight only, then is spent
+ * (see FightRoom.handleFightEnd). Priced like any other item (HEALTH_FLASK_PRICE) rather than
+ * scaled by level/gold. Roughly 3x the hpRegen a normal tier-3 item gives at a comparable price
+ * (tier 3 gear costs 8 and rolls up to 4 hpRegen — see STAT_RANGES.hpRegen in itemStatPool.ts),
+ * since this bonus only lasts one fight instead of being permanent.
  */
-export function healthFlaskRegen(rarity: number): number {
-    return 2 + 2 * rarity;
-}
+export const HEALTH_FLASK_PRICE = 10;
+export const HEALTH_FLASK_REGEN_PER_SECOND = 10;
 
 /** Band of Vigor (27): HP fraction below which "Second Wind" can proc, once per fight. */
 export const SECOND_WIND_THRESHOLD = 0.3;
