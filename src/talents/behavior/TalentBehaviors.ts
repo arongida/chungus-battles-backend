@@ -412,14 +412,14 @@ export const TalentBehaviors = {
 
     // Hidden Vials — ON_DODGE trigger. `defender` is the dodger (talent owner); the enemy who
     // missed is `attacker`. Applies the DoT stacks to the enemy.
-    [TalentType.RESILIENCE]: (context: TalentBehaviorContext) => {
+    [TalentType.HIDDEN_VIALS]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, clock, talent } = context;
-        attacker.addBurnStacks(clock, client, 1);
-        attacker.addPoisonStacks(clock, client, 1);
+        attacker.addBurnStacks(clock, client, talent.activationRate);
+        attacker.addPoisonStacks(clock, client, talent.activationRate);
         track(talent, 1);
         client.send('trigger_talent', {
             playerId: defender.playerId,
-            talentId: TalentType.RESILIENCE,
+            talentId: TalentType.HIDDEN_VIALS,
         });
     },
 
@@ -932,14 +932,14 @@ export const TalentBehaviors = {
             }
         },
 
-    [TalentType.ROGUE_3]:
+    [TalentType.POISON_2]:
         (context: TalentBehaviorContext) => {
             const { attacker, defender, client, clock, talent } = context;
-            defender.addPoisonStacks(clock, client);
+            defender.addPoisonStacks(clock, client, talent.activationRate);
             track(talent, 1, 0, 0, 0);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
-                talentId: TalentType.ROGUE_3,
+                talentId: TalentType.POISON_2,
             });
         },
 
@@ -975,9 +975,9 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent, attackerSnapshot } = context;
             const base = attackerSnapshot ?? attacker;
-            const below = attacker.hp < attacker.maxHp * 0.5;
-            talent.affectedStats.strength = below ? base.strength : 0;
-            talent.affectedStats.attackSpeed = below ? 2 : 1;
+            const below = attacker.hp < attacker.maxHp * talent.activationRate;
+            talent.affectedStats.strength = below ? base.strength * talent.scaling : 0;
+            talent.affectedStats.attackSpeed = below ? 1 + talent.scaling : 1;
             if (below) {
                 client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -1023,14 +1023,29 @@ export const TalentBehaviors = {
             talent.affectedStats.strength = 100;
         },
 
-    [TalentType.ROGUE_5]:
+    [TalentType.GRAND_ROBBERY]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent } = context;
-            talent.affectedStats.dodgeRate += 1;
+            const { attacker, client, shop, talent } = context;
+            if (!shop) return; // undefined outside draft
+            if (talent.tags?.includes('grand-robbery-used')) return; // one-shot latch
+
+            let stolen = 0;
+            [...shop].forEach((item) => { // copy: getItem mutates sold/shop state as it goes
+                if (item.sold) return;
+                attacker.gold += item.price; // refund so getItem nets to free
+                attacker.getItem(item);
+                stolen++;
+            });
+
+            talent.tags?.push('grand-robbery-used');
+            talent.description = `Grand Robbery! Stole ${stolen} item(s) from the shop!`
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
-                talentId: TalentType.ROGUE_5,
+                talentId: TalentType.GRAND_ROBBERY,
             });
+            if (stolen > 0) {
+                client.send('draft_log', `Grand Robbery! Stole ${stolen} item(s) from the shop!`);
+            }
         },
 
     [TalentType.JUST_A_SCRATCH]:

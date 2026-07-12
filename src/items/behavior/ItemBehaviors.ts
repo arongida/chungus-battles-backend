@@ -124,7 +124,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
 
     // Soulstealer's Scythe (59) — rarity 2+: heals for (rarity*5+5)% of damage dealt + 1 on hit.
     59: ({ attacker, defender, damage, client, item }) => {
-        if (!attacker || !damage || !item || item.rarity <= 1) return;
+        if (!attacker || !damage || !item) return;
         const heal = Math.floor(damage * (item.rarity * 5 + 5) / 100) + 1;
         const scytheHealed = attacker.heal(heal, defender);
         if (scytheHealed > 0) {

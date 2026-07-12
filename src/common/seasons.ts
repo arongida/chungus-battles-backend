@@ -23,10 +23,13 @@ export const SEASONS: SeasonInfo[] = [
     changes: [
       'Max HP: characters now gain +10 max HP every level (base 100), shown on the level-up screen',
       'Magic Ring: reworked — no longer a weapon and no longer attacks; now stacks its bonus stats via a once-per-second aura during fights (removes attack-speed scaling and Dual Wield interaction)',
-      'Wand of Fire: no longer grants +20 max HP',
+      'Wand of Fire: no longer grants max HP bonus stat',
+      'Rogue V. replaced with Grand Robbery - steal all items from the shop',
       'Health Flask: reworked and re-enabled in the shop — flat gold price, drinking it now grants HP regen for your next fight only, instead of a permanent extra life',
       'Band of Vigor: new ring — the first time you drop below 30% HP in a fight, heal % of your max HP and become invulnerable (once per fight)',
       'Flat Damage Reduction: removed from the game — items, talents, and the end-of-fight stats no longer use it (defense/percentage reduction unchanged)',
+      'Minor item changes: Chungi - increased damage, more hp+less defense bonus, Soulstealer Scythe - healing effect works for common rarity as well',
+      'Minor talent changes: Snitch - cooldown reduced, Rogue III. - renamted to Poison II., poison stack increased to 2, Berserk - slightly buffed numbers, Hidden Vials - doubled poison and burn stacks'
     ],
   },
   {

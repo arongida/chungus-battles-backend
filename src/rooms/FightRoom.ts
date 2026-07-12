@@ -462,7 +462,7 @@ export class FightRoom extends Room {
     checkPoison(attacker: Player, defender: Player) {
         if (defender.poisonStack <= 0) return;
         const poisonTalents = attacker.talents.filter(t =>
-            t.talentId === TalentType.POISON || t.talentId === TalentType.ROGUE_3
+            t.talentId === TalentType.POISON || t.talentId === TalentType.POISON_2
         );
 
         if (!defender.poisonTimer) {

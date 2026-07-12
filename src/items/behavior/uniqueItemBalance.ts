@@ -30,7 +30,7 @@ const MAGIC_RING_STAT_POOL: RollableStat[] = [
 ];
 
 /** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
-const MAGIC_RING_STACK_FRACTION = 0.04;
+const MAGIC_RING_STACK_FRACTION = 0.05;
 
 export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats every second in combat and evolves on level up.';
 

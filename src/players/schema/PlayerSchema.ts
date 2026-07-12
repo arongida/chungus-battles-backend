@@ -172,8 +172,8 @@ export class Player extends Schema implements IStats {
     set poisonStack(value: number) {
         if (value < 0) {
             this._poisonStack = 0;
-        } else if (value > 100) {
-            this._poisonStack = 100;
+        } else if (value > 1000) {
+            this._poisonStack = 1000;
         } else {
             this._poisonStack = value;
         }
@@ -188,8 +188,8 @@ export class Player extends Schema implements IStats {
     set burnStack(value: number) {
         if (value < 0) {
             this._burnStack = 0;
-        } else if (value > 100) {
-            this._burnStack = 100;
+        } else if (value > 1000) {
+            this._burnStack = 1000;
         } else {
             this._burnStack = value;
         }
@@ -231,7 +231,7 @@ export class Player extends Schema implements IStats {
         const prevented = amount - healed;
         if (prevented > 0 && poisonSource) {
             poisonSource.talents.forEach((t) => {
-                if (t.talentId === TalentType.POISON || t.talentId === TalentType.ROGUE_3) {
+                if (t.talentId === TalentType.POISON || t.talentId === TalentType.POISON_2) {
                     t.statHealingPrevented += prevented;
                     t.totalHealingPrevented += prevented;
                 }
