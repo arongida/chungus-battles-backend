@@ -58,7 +58,8 @@ export const server = defineServer({
         app.get('/wallOfFame', async (req, res) => {
             const limit = req.query.limit !== undefined ? Number(req.query.limit) : 20;
             const skip = req.query.skip !== undefined ? Number(req.query.skip) : 0;
-            const result = await getWallOfFame({ limit, skip });
+            const season = req.query.season !== undefined ? Number(req.query.season) : undefined;
+            const result = await getWallOfFame({ limit, skip, season });
             res.status(200).json(result);
         });
 
