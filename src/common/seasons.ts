@@ -18,6 +18,16 @@ export interface SeasonInfo {
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
   {
+    number: 18,
+    name: 'Slow and Steady',
+    changes: [
+      'Class-based level-up bonuses: every level still grants +10 max HP, plus a class bonus — Warrior +20 HP/+4 strength, Rogue +10% attack speed/+10 dodge, Merchant +2 income',
+      'Removed the generic level 6+ stat scaling block (strength/accuracy/maxHp/defense/attackSpeed) — replaced by the class bonuses above',
+      'XP curve reworked: early levels are unchanged or slightly faster, but reaching level 5 now requires significantly more XP (~2.3x total), making it a true late-game milestone',
+      'Wall of Fame: added a season selector, defaulting to the current season'
+    ],
+  },
+  {
     number: 17,
     name: 'Balance is Temporary',
     changes: [

@@ -523,21 +523,28 @@ export class DraftRoom extends Room {
 
     private async levelUp(leftoverXp: number = 0) {
         this.state.player.level++;
-        this.state.player.maxXp += this.state.player.level * 4 + 2;
+        // Cubic curve: early levels stay fast, level 5 is a deliberate wall (Season 18)
+        this.state.player.maxXp += (this.state.player.level - 1) ** 3 * 5;
         this.state.player.xp = leftoverXp;
 
-        // Every level grants a flat max HP bonus (Season 17)
-        this.state.player.baseStats.maxHp += 10;
+        const base = this.state.player.baseStats;
 
-        // Levels past 5 grant no talent points but give increasingly stronger stat bonuses
-        if (this.state.player.level > 5) {
-            const bonusRank = this.state.player.level - 5;
-            const base = this.state.player.baseStats;
-            base.strength += bonusRank * 4;
-            base.accuracy += bonusRank * 2;
-            base.maxHp += bonusRank * 40;
-            base.defense += bonusRank * 4;
-            base.attackSpeed += bonusRank * 0.2;
+        // Every level grants a flat max HP bonus
+        base.maxHp += 10;
+
+        // Class-specific level-up bonuses (Season 18)
+        switch (this.state.player.avatarUrl) {
+            case PlayerAvatar.WARRIOR:
+                base.maxHp += 20;
+                base.strength += 4;
+                break;
+            case PlayerAvatar.THIEF:
+                base.attackSpeed += 0.1;
+                base.dodgeRate += 10;
+                break;
+            case PlayerAvatar.MERCHANT:
+                base.income += 2;
+                break;
         }
 
         this.dispatcher.dispatch(new LevelUpTriggerCommand());

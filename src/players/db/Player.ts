@@ -138,7 +138,7 @@ function getNewPlayer(playerId: number,
         xp: 0,
         level: startingLevel,
         sessionId: sessionId,
-        maxXp: avatarUrl === PlayerAvatar.THIEF ? 20 : 10,
+        maxXp: avatarUrl === PlayerAvatar.THIEF ? 15 : 10,
         round: 1,
         lives: avatarUrl === PlayerAvatar.WARRIOR ? 4 : 3,
         wins: 0,
@@ -155,8 +155,9 @@ function getNewPlayer(playerId: number,
             // +10 max HP per level, matching DraftRoom.levelUp (Season 17)
             maxHp: 100 + (startingLevel - 1) * 10,
             defense: 0,
-            attackSpeed: 1,
-            dodgeRate: 0,
+            // Thief starts at level 2, so it must already have its free level's class bonus baked in (Season 18)
+            attackSpeed: avatarUrl === PlayerAvatar.THIEF ? 1.1 : 1,
+            dodgeRate: avatarUrl === PlayerAvatar.THIEF ? 10 : 0,
             income: avatarUrl === PlayerAvatar.MERCHANT ? 7 : 4,
             hpRegen: 0,
         }
@@ -440,13 +441,15 @@ export async function getPlayerRank(playerId: number): Promise<number> {
 
 /** "Wall of Fame": finished (12-win) characters ranked by fewest losses.
  *  gameVersion >= 16 + losses field presence excludes pre-Season-16 record-chasing
- *  snapshots that could otherwise have wins >= WINS_TO_WIN from an old, different win condition. */
-export async function getWallOfFame({ limit = 20, skip = 0 }: { limit?: number; skip?: number } = {}):
+ *  snapshots that could otherwise have wins >= WINS_TO_WIN from an old, different win condition.
+ *  Pass `season` to scope the wall to one specific season (exact gameVersion match); omit it
+ *  (or pass undefined) to show all seasons since Wall of Fame was introduced. */
+export async function getWallOfFame({ limit = 20, skip = 0, season }: { limit?: number; skip?: number; season?: number } = {}):
     Promise<{ players: Record<string, any>[]; total: number }> {
     const clampedLimit = Math.min(Math.max(1, limit), 100);
 
     const pipeline: PipelineStage[] = [
-        { $match: { gameVersion: { $gte: 16 }, wins: { $gte: WINS_TO_WIN }, losses: { $exists: true } } },
+        { $match: { gameVersion: season !== undefined ? season : { $gte: 16 }, wins: { $gte: WINS_TO_WIN }, losses: { $exists: true } } },
         // Dedupe insurance: exactly one >=12-win doc per character is expected, but keep
         // the best (fewest-losses) doc per originalPlayerId in case of a double-save.
         { $sort: { losses: 1, wins: -1, playerId: 1 } },
