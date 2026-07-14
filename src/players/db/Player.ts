@@ -40,6 +40,16 @@ const PlayerSchema = new Schema({
     nextFightEnemyId: Number,
     nextFightEnemyRound: Number,
     pendingRegenBuff: {type: Number, default: 0},
+    // "Runs ended" leaderboard stat: how many other characters' final loss this character
+    // delivered. Mutated ONLY via incrementRunsEnded's targeted $inc on the killer's original
+    // doc — deliberately excluded from playerToPlainObject so a concurrent live save from the
+    // killer's own session can never clobber it.
+    runsEnded: {type: Number, default: 0},
+    // This character's nemesis — the enemy that dealt their final game-over hit. Set once in
+    // FightRoom.handleLoose, persisted normally via playerToPlainObject/updatePlayer.
+    killedByPlayerId: Number,
+    killedByOriginalPlayerId: Number,
+    killedByName: String,
 });
 
 // Backs the wall-of-fame aggregation sorts ({$sort: {wins:-1, originalPlayerId:-1, playerId:1}})
@@ -219,6 +229,17 @@ export async function updatePlayer(player: Player): Promise<Player> {
     return player;
 }
 
+// Credits the killer's canonical (original) document. runsEnded lives ONLY here + is read via
+// $max in the leaderboard aggregation; it is deliberately never written through
+// playerToPlainObject, so a concurrent updatePlayer() from the killer's own live session can't
+// clobber this increment.
+export async function incrementRunsEnded(killerOriginalPlayerId: number): Promise<void> {
+    if (killerOriginalPlayerId === undefined || killerOriginalPlayerId === null) return;
+    if (killerOriginalPlayerId === JOE_PLAYER_ID) return; // round-1 bot isn't persisted
+    await playerModel.updateOne({playerId: killerOriginalPlayerId}, {$inc: {runsEnded: 1}})
+        .catch(err => console.error('[incrementRunsEnded]', err));
+}
+
 export async function getNextPlayerId(): Promise<number> {
     const lastPlayer = await playerModel.findOne().sort({playerId: -1}).limit(1).lean().catch((e) => {
         console.error(e);
@@ -301,6 +322,9 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         defense: player.defense,
         attackSpeed: player.attackSpeed,
         pendingRegenBuff: player.pendingRegenBuff,
+        killedByPlayerId: player.killedByPlayerId,
+        killedByOriginalPlayerId: player.killedByOriginalPlayerId,
+        killedByName: player.killedByName,
         baseStats: player.baseStats?.toJSON() || {},
         equippedItems,
         inventory: player.inventory.map(item => item.toJSON()),
@@ -357,8 +381,16 @@ const TOP_PLAYERS_AGGREGATION: PipelineStage[] = [
         // ObjectId embeds its creation time, and a fresh snapshot doc is written each round,
         // so the newest snapshot's _id timestamp is this character's "last played" time.
         lastPlayedAt: {$max: {$toDate: '$_id'}},
+        // runsEnded is only ever incremented on the character's original doc (see
+        // incrementRunsEnded), but $top above may have picked a different round's snapshot as
+        // `doc` — take the max across every snapshot so the count always shows up.
+        runsEnded: {$max: '$runsEnded'},
     }},
-    {$addFields: {'doc.latestPlayerId': '$latestPlayerId', 'doc.lastPlayedAt': '$lastPlayedAt'}},
+    {$addFields: {
+        'doc.latestPlayerId': '$latestPlayerId',
+        'doc.lastPlayedAt': '$lastPlayedAt',
+        'doc.runsEnded': {$ifNull: ['$runsEnded', 0]},
+    }},
     {$replaceRoot: {newRoot: '$doc'}},
     {$sort: {latestPlayerId: -1}},                             // final order: most-recently-active character first
 ];
@@ -453,7 +485,14 @@ export async function getWallOfFame({ limit = 20, skip = 0, season }: { limit?: 
         // Dedupe insurance: exactly one >=12-win doc per character is expected, but keep
         // the best (fewest-losses) doc per originalPlayerId in case of a double-save.
         { $sort: { losses: 1, wins: -1, playerId: 1 } },
-        { $group: { _id: '$originalPlayerId', doc: { $first: '$$ROOT' } } },
+        { $group: {
+            _id: '$originalPlayerId',
+            doc: { $first: '$$ROOT' },
+            // Same reasoning as TOP_PLAYERS_AGGREGATION: runsEnded is only incremented on the
+            // character's original doc, which may not be the $first-picked doc here.
+            runsEnded: { $max: '$runsEnded' },
+        } },
+        { $addFields: { 'doc.runsEnded': { $ifNull: ['$runsEnded', 0] } } },
         { $replaceRoot: { newRoot: '$doc' } },
         // ObjectId embeds its creation time; for a finished (12-win) run this is when the
         // finishing snapshot was saved, i.e. this character's "last played" time.

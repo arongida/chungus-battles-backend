@@ -1,6 +1,6 @@
 import { Client, Room } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import { buildJoe, getPlayer, getSameRoundPlayer, JOE_PLAYER_ID, snapshotPlayer, updatePlayer } from '../players/db/Player';
+import { buildJoe, getPlayer, getSameRoundPlayer, incrementRunsEnded, JOE_PLAYER_ID, snapshotPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
 import { END_BURN_START_MS, FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
@@ -697,6 +697,14 @@ export class FightRoom extends Room {
         this.state.player.losses++;
         this.state.player.lives--;
         if (this.state.player.lives <= 0) {
+            // Run truly over — credit the enemy who delivered the final blow and remember them
+            // as this character's nemesis. Set directly on state.player (not via copyFrom, so
+            // the fields don't need @type) and persisted once by the normal onLeave -> updatePlayer.
+            const killer = this.state.enemy;
+            this.state.player.killedByPlayerId = killer.playerId;
+            this.state.player.killedByOriginalPlayerId = killer.originalPlayerId;
+            this.state.player.killedByName = killer.name;
+            incrementRunsEnded(killer.originalPlayerId); // fire-and-forget, like saveReplay
             this.broadcast('game_over', 'You have lost the game!');
         } else {
             const goldAmount = this.state.player.lives === 1 ? 30
