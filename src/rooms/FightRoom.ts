@@ -3,7 +3,7 @@ import { FightState } from './schema/FightState';
 import { buildJoe, getPlayer, getSameRoundPlayer, JOE_PLAYER_ID, snapshotPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
-import { FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
+import { END_BURN_START_MS, FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
 import { Dispatcher } from '@colyseus/command';
 import { ReplayRecorder } from '../replay/ReplayRecorder';
 import { saveReplay } from '../replay/db/Replay';
@@ -228,7 +228,7 @@ export class FightRoom extends Room {
             // Reconnect after a loss: resend the pending options (or the resolved outcome).
             this.broadcast('end_battle', this.buildLossEndBattlePayload());
         } else {
-            this.broadcast('end_battle', { result: this.state.fightResult ?? 'win', replayId: this.currentReplayId, stats: this.currentFightStats });
+            this.broadcast('end_battle', { result: this.state.fightResult ?? 'win', replayId: this.currentReplayId, stats: this.currentFightStats, wins: this.state.player.wins });
         }
     }
 
@@ -343,7 +343,9 @@ export class FightRoom extends Room {
             this.checkBurn(this.state.player, this.state.enemy);
             this.checkBurn(this.state.enemy, this.state.player);
 
-            if (this.clock.elapsedTime > 65000 && !this.state.endBurnTimer) {
+            this.state.endBurnCountdownMs = Math.max(0, END_BURN_START_MS - this.clock.elapsedTime);
+
+            if (this.clock.elapsedTime > END_BURN_START_MS && !this.state.endBurnTimer) {
                 this.startEndBurnTimer();
             }
 
@@ -367,6 +369,8 @@ export class FightRoom extends Room {
         this.state.player.burnTimer?.clear();
         this.state.enemy.burnTimer?.clear();
         this.state.endBurnTimer?.clear();
+        this.state.endBurnActive = false;
+        this.state.endBurnCountdownMs = END_BURN_START_MS;
         this.state.skillsTimers.forEach((timer) => timer.clear());
         this.state.player.regenTimer?.clear();
         this.state.enemy.regenTimer?.clear();
@@ -376,6 +380,8 @@ export class FightRoom extends Room {
 
     startEndBurnTimer() {
         if (this.state.endBurnTimer) return;
+        this.state.endBurnActive = true;
+        this.state.endBurnCountdownMs = 0;
         this.state.endBurnTimer = this.clock.setInterval(() => {
             const burnDamage = this.state.endBurnDamage;
             const increment = Math.pow(10, Math.floor(Math.log10(burnDamage)));
@@ -682,7 +688,7 @@ export class FightRoom extends Room {
             return;
         }
 
-        this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId, stats: this.currentFightStats });
+        this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId, stats: this.currentFightStats, wins: this.state.player.wins });
     }
 
     private handleLoose() {
