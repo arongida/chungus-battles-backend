@@ -70,6 +70,17 @@ export class Player extends Schema implements IStats {
     // getPlayer() result instead (see FightRoom.onJoin).
     nextFightEnemyId: number;
     nextFightEnemyRound: number;
+    // "Runs ended" leaderboard stat. Persisted ONLY via Player.ts's incrementRunsEnded ($inc on
+    // the killer's original doc) + read back via the leaderboard's $max aggregation. Deliberately
+    // NOT @type and NOT in playerToPlainObject — it must never round-trip through live room state
+    // or a live save, or a concurrent updatePlayer() from the killer's own session could clobber it.
+    runsEnded: number = 0;
+    // This character's nemesis — the enemy that dealt their final game-over hit. Set directly on
+    // state.player in FightRoom.handleLoose (not via copyFrom, so @type isn't needed) and
+    // persisted once via the normal onLeave -> updatePlayer save.
+    killedByPlayerId: number;
+    killedByOriginalPlayerId: number;
+    killedByName: string;
 
 
     get hp(): number {
