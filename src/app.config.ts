@@ -72,8 +72,9 @@ export const server = defineServer({
 
         app.get('/rank', async (req, res) => {
             const playerId = Number(req.query.playerId);
-            const rank = await getPlayerRank(playerId);
             const player = await getPlayer(playerId);
+            if (!player) return res.status(404).send({error: 'Player not found'});
+            const rank = await getPlayerRank(playerId);
             res.status(200).send({rank: rank, name: player.name, wins: player.wins, originalPlayerId: player.originalPlayerId});
         });
 
