@@ -535,11 +535,11 @@ export class DraftRoom extends Room {
         // Class-specific level-up bonuses (Season 18)
         switch (this.state.player.avatarUrl) {
             case PlayerAvatar.WARRIOR:
-                base.maxHp += 20;
-                base.strength += 4;
+                base.maxHp += 30;
+                base.strength += 6;
                 break;
             case PlayerAvatar.THIEF:
-                base.attackSpeed += 0.1;
+                base.attackSpeed += 0.2;
                 base.dodgeRate += 10;
                 break;
             case PlayerAvatar.MERCHANT:

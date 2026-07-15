@@ -7,7 +7,7 @@ import {Talent} from '../talents/schema/TalentSchema';
 import {Dispatcher} from '@colyseus/command';
 import {FightRoom} from '../rooms/FightRoom';
 import {DraftRoom} from '../rooms/DraftRoom';
-import {TriggerType} from "./types";
+import {TriggerType, FightResultType} from "./types";
 import {StatsSnapshot} from './statsUtils';
 import {DamageType} from './MessageTypes';
 
@@ -33,4 +33,6 @@ export interface BehaviorContext {
     performWeaponAttack?: (attacker: Player, defender: Player, weapon: Item, slot: string) => void;
     /** True when this trigger chain originates from a counter-attack — prevents counter loops. */
     isCounterAttack?: boolean;
+    /** Outcome of the fight — set on FIGHT_END so talents can condition rewards on winning. */
+    fightResult?: FightResultType;
 }

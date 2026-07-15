@@ -165,7 +165,7 @@ export class Player extends Schema implements IStats {
     // shop items (see TalentBehaviors.ts GOLD_GENIE).
     @type('boolean') goldGenieFreeClaim: boolean = false;
     // Black Market Contact: same latch as comradeFreeClaim, but the client only honors it on
-    // lucky-find shop items (see TalentBehaviors.ts MERCHANT_5B).
+    // lucky-find shop items (see TalentBehaviors.ts BLACK MARKET CONTRACT).
     @type('boolean') luckyFindFreeClaim: boolean = false;
     // Health Flask (itemId 6): hpRegen bonus banked in the draft, consumed by the wearer's very
     // next fight. Folded into hpRegen every tick by statsUtils.recalculatePlayerStats and zeroed
@@ -242,7 +242,7 @@ export class Player extends Schema implements IStats {
         const prevented = amount - healed;
         if (prevented > 0 && poisonSource) {
             poisonSource.talents.forEach((t) => {
-                if (t.talentId === TalentType.POISON || t.talentId === TalentType.POISON_2) {
+                if (t.talentId === TalentType.POISON_2) {
                     t.statHealingPrevented += prevented;
                     t.totalHealingPrevented += prevented;
                 }

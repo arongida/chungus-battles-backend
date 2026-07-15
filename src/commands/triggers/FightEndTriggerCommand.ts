@@ -11,7 +11,8 @@ export class FightEndTriggerCommand extends Command<FightRoom> {
             client: this.state.playerClient,
             attacker: this.state.player,
             defender: this.state.enemy,
-            trigger: TriggerType.FIGHT_END
+            trigger: TriggerType.FIGHT_END,
+            fightResult: this.state.fightResult,
         };
 
         const fightEndTalents: Talent[] = this.state.player.talents.filter((talent) =>
