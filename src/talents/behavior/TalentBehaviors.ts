@@ -1,7 +1,8 @@
 import { TalentType } from '../types/TalentTypes';
 import { Item } from '../../items/schema/ItemSchema';
 import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerCommand';
-import { TriggerType } from "../../common/types";
+import { TriggerType, FightResultType } from "../../common/types";
+import { PlayerAvatar } from "../../players/types/PlayerTypes";
 import { EquipSlot, ItemClass, ItemRarity, ItemType } from "../../items/types/ItemTypes";
 import { rollTheDice } from "../../common/utils";
 import { TalentBehaviorContext } from "./TalentBehaviorContext";
@@ -101,13 +102,36 @@ export const TalentBehaviors = {
         }
     },
 
-    [TalentType.POISON]: (context: TalentBehaviorContext) => {
-        const { attacker, defender, client, clock, talent } = context;
-        defender.addPoisonStacks(clock, client);
-        track(talent, 1, 0, 0);
+    [TalentType.WITS_END]: (context: TalentBehaviorContext) => {
+        const { attacker, defender, client, talent, fightResult } = context;
+        if (fightResult !== FightResultType.WIN) return;
+
+        let goldGained = 0;
+        let xpGained = 0;
+
+        switch (defender.avatarUrl) {
+            case PlayerAvatar.MERCHANT:
+                talent.affectedStats.income += 2;
+                client.send('combat_log', { text: `${attacker.name}'s wit brings in +2 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
+                break;
+            case PlayerAvatar.WARRIOR:
+                goldGained = 6;
+                attacker.gold += goldGained;
+                client.send('combat_log', { text: `${attacker.name} earns 6 gold for outwitting the warrior!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldGained } as CombatLogMessage);
+                break;
+            case PlayerAvatar.THIEF:
+                xpGained = 8;
+                attacker.xp += xpGained;
+                client.send('combat_log', { text: `${attacker.name} gains 8 xp for outwitting the rogue!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
+                break;
+            default:
+                return;
+        }
+
+        track(talent, 1, 0, 0, goldGained, xpGained, { client, playerId: attacker.playerId });
         client.send('trigger_talent', {
             playerId: attacker.playerId,
-            talentId: TalentType.POISON,
+            talentId: TalentType.WITS_END,
         });
     },
 
@@ -955,15 +979,15 @@ export const TalentBehaviors = {
             });
         },
 
-    [TalentType.MERCHANT_4]:
+    [TalentType.LEARN_BY_DOING]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
-            attacker.xp += 2;
+            attacker.xp += talent.base;
             track(talent, 1, 0, 0, 0, 2, { client, playerId: attacker.playerId });
             client.send('combat_log', { text: `${attacker.name} gains +2 XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: 2 } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
-                talentId: TalentType.MERCHANT_4,
+                talentId: TalentType.LEARN_BY_DOING,
             });
         },
 
@@ -998,7 +1022,7 @@ export const TalentBehaviors = {
             });
         },
 
-    [TalentType.MERCHANT_3]:
+    [TalentType.MERCHANT_5]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent, attackerSnapshot } = context;
             talent.affectedStats.income = talent.base;
@@ -1013,7 +1037,7 @@ export const TalentBehaviors = {
             talent.affectedStats.hpRegen = Math.ceil(base.hpRegen * bonusCoefficent);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
-                talentId: TalentType.MERCHANT_3,
+                talentId: TalentType.MERCHANT_5,
             });
         },
 
@@ -1068,7 +1092,7 @@ export const TalentBehaviors = {
     // pattern as Comrade above). The actual free purchase is applied in DraftRoom.buyItem so the
     // player picks which lucky-find item. Guarded on `trigger === AURA` so legacy player copies
     // still carrying the old `after-refresh` trigger simply no-op instead of throwing.
-    [TalentType.MERCHANT_5B]: (context: TalentBehaviorContext) => {
+    [TalentType.BLACK_MARKET_CONTRACT]: (context: TalentBehaviorContext) => {
         const { attacker, shop, trigger } = context;
         if (trigger !== TriggerType.AURA || !attacker || !shop) return;
 

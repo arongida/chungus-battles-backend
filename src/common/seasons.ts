@@ -19,12 +19,17 @@ export interface SeasonInfo {
 export const SEASONS: SeasonInfo[] = [
   {
     number: 18,
-    name: 'Slow and Steady',
+    name: 'Warrior and Rogue are stronger ;)',
     changes: [
       'Class-based level-up bonuses: every level still grants +10 max HP, plus a class bonus — Warrior +20 HP/+4 strength, Rogue +10% attack speed/+10 dodge, Merchant +2 income',
       'Removed the generic level 6+ stat scaling block (strength/accuracy/maxHp/defense/attackSpeed) — replaced by the class bonuses above',
       'XP curve reworked: early levels are unchanged or slightly faster, but reaching level 5 now requires significantly more XP (~2.3x total), making it a true late-game milestone',
-      'Wall of Fame: added a season selector, defaulting to the current season'
+      'Wall of Fame: added a season selector, defaulting to the current season',
+      'Show runs ended by each character',
+      'Increased rogues and warriors bonus stats on level-up',
+      'Increased rolled stats on items for tier 1-4: Defense, Dodge, Attack speed by about 20%, hp regen by about 10%',
+      'Renamed Merchant III. to Learn by doing and icnreased bonus xp from 2 to 3',
+      'Replaced Poison talent with Wits End: Get reward when winning based on enemy class'
     ],
   },
   {

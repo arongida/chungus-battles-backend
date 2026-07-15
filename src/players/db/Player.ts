@@ -166,7 +166,7 @@ function getNewPlayer(playerId: number,
             maxHp: 100 + (startingLevel - 1) * 10,
             defense: 0,
             // Thief starts at level 2, so it must already have its free level's class bonus baked in (Season 18)
-            attackSpeed: avatarUrl === PlayerAvatar.THIEF ? 1.1 : 1,
+            attackSpeed: avatarUrl === PlayerAvatar.THIEF ? 1.2 : 1,
             dodgeRate: avatarUrl === PlayerAvatar.THIEF ? 10 : 0,
             income: avatarUrl === PlayerAvatar.MERCHANT ? 7 : 4,
             hpRegen: 0,
