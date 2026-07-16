@@ -167,7 +167,6 @@ export const TalentBehaviors = {
                 talentId: TalentType.SNITCH,
             });
         } else if (trigger === TriggerType.FIGHT_END) {
-            talent.affectedEnemyStats.strength = 0;
             talent.affectedStats.strength = 0;
         }
     },
@@ -983,8 +982,8 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
             attacker.xp += talent.base;
-            track(talent, 1, 0, 0, 0, 2, { client, playerId: attacker.playerId });
-            client.send('combat_log', { text: `${attacker.name} gains +2 XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: 2 } as CombatLogMessage);
+            track(talent, 1, 0, 0, 0, talent.base, { client, playerId: attacker.playerId });
+            client.send('combat_log', { text: `${attacker.name} gains + ${talent.base}XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: talent.base } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.LEARN_BY_DOING,
