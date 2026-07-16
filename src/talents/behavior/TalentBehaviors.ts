@@ -167,7 +167,7 @@ export const TalentBehaviors = {
                 talentId: TalentType.SNITCH,
             });
         } else if (trigger === TriggerType.FIGHT_END) {
-            talent.affectedStats.strength = 0;
+            talent.affectedEnemyStats.strength = 0;
         }
     },
 
