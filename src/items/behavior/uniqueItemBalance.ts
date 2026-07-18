@@ -32,7 +32,7 @@ const MAGIC_RING_STAT_POOL: RollableStat[] = [
 /** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
 const MAGIC_RING_STACK_FRACTION = 0.05;
 
-export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats every second in combat and evolves on level up.';
+export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats every second in combat and evolves on level up. Unequip for one fight and stats will be rerolled.';
 
 /** Picks a pool stat not yet rolled on this item (still zero), or null once the pool is exhausted. */
 function rollNextMagicRingStat(affectedStats: Item['affectedStats']): RollableStat | null {
@@ -51,7 +51,7 @@ function magicRingStackAmount(stat: RollableStat, rarity: number): number {
 export function rollMagicRingBonus(item: Item): void {
     const stat = rollNextMagicRingStat(item.affectedStats);
     if (!stat) return;
-    (item.affectedStats as any)[stat] += 20 * magicRingStackAmount(stat, item.rarity);
+    (item.affectedStats as any)[stat] += 10 * magicRingStackAmount(stat, item.rarity);
 }
 
 /** Magic Ring (702): adds one second's worth of growth to a random stat already rolled (non-zero) on this item. */
@@ -60,6 +60,28 @@ export function stackMagicRingBonuses(item: Item): void {
     if (rolled.length === 0) return;
     const stat = rolled[Math.floor(Math.random() * rolled.length)];
     (item.affectedStats as any)[stat] += magicRingStackAmount(stat, item.rarity);
+}
+
+/**
+ * Magic Ring (702): rerolls a fresh random set of stats at the ring's current
+ * rarity, discarding all accumulated stacking bonuses. Keeps the same number
+ * of active stats it already had (one per rarity level), just re-drawn from
+ * the pool and reset to the fresh-roll baseline. Fired from SHOP_START while
+ * the ring sits unequipped in inventory (see ItemBehaviors.ts).
+ */
+export function rerollMagicRingStats(item: Item): void {
+    const activeCount = MAGIC_RING_STAT_POOL.filter((stat) => (item.affectedStats as any)[stat]).length;
+    if (activeCount === 0) return;
+
+    for (const stat of MAGIC_RING_STAT_POOL) {
+        (item.affectedStats as any)[stat] = 0;
+    }
+
+    const pool = [...MAGIC_RING_STAT_POOL];
+    for (let i = 0; i < activeCount; i++) {
+        const [stat] = pool.splice(Math.floor(Math.random() * pool.length), 1);
+        (item.affectedStats as any)[stat] = 10 * magicRingStackAmount(stat, item.rarity);
+    }
 }
 
 /**

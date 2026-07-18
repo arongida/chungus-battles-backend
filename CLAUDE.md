@@ -186,7 +186,7 @@ Stats are **recalculated from scratch on every tick**:
 ### Talents
 
 - **Tiers**: one per level (gained on level up, one point to spend)
-- **Refresh cost**: `level * 2` gold, draws from a pool of 2 excluding already-shown talents
+- **Offer**: 3 talents shown at once, excluding already-shown talents. Each of the 3 slots can be individually rerolled once, for free (`refresh_talent_slot`); rerolling a slot excludes all 3 currently-visible talents so the replacement can't duplicate one of the others
 - **IDs 1–99**: regular talents; **IDs 101–503**: item-set collection bonuses (pattern: `CLASS_TIER`)
 - Each talent carries `triggerTypes: ArraySchema<string>` — the talent fires when any listed `TriggerType` is dispatched
 
@@ -268,7 +268,7 @@ All served over HTTP on the same port as the WebSocket server.
 | `refresh_shop`   | —                          | Refresh shop (costs `refreshShopCost` gold) |
 | `buy_xp`         | —                          | +4 XP for 4 gold                   |
 | `select_talent`  | `{ talentId: number }`     | Choose a talent                    |
-| `refresh_talents`| —                          | Re-roll talent options             |
+| `refresh_talent_slot` | `{ talentId: number }` | Re-roll one offered talent slot (once per slot, free) |
 | `lock-shop`      | —                          | Lock current shop items            |
 | `unlock-shop`    | —                          | Unlock shop                        |
 

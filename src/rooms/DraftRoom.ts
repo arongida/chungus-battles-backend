@@ -26,6 +26,11 @@ export class DraftRoom extends Room {
 
     dispatcher = new Dispatcher(this);
     private talentSelectionGeneration: number = 0;
+    // Every talent ever offered in the current talent-selection generation — the 3 initially
+    // shown plus any rerolled away since. Rerolls exclude this whole set (not just the 3
+    // currently visible) so repeated/cross-slot rerolls can't bring back a talent already seen.
+    // Reset whenever updateTalentSelection regenerates a fresh batch (level-up/select).
+    private talentSelectionSeen: Set<number> = new Set();
     // Stack of recently-sold items, kept around so accidental sales can be undone in
     // reverse order. Cleared by any gold-spending action (see invalidateUndoSell).
     private soldItemStack: Item[] = [];
@@ -67,8 +72,8 @@ export class DraftRoom extends Room {
             await this.selectTalent(message.talentId);
         });
 
-        this.onMessage('refresh_talents', async (client) => {
-            await this.handleRefreshTalentSelection(client);
+        this.onMessage('refresh_talent_slot', async (client, message) => {
+            await this.handleRefreshTalentSlot(client, message.talentId);
         });
         this.onMessage('lock-shop', (client) => {
             this.handleLockShop(client);
@@ -271,23 +276,39 @@ export class DraftRoom extends Room {
         this.clients[0]?.send('shop_floating', { slot, text: `Lucky find! Rarity up!`, rarity: item.rarity });
     }
 
-    private async handleRefreshTalentSelection(client: Client) {
-        const price = this.state.hasFreeTalentReroll ? 0 : this.state.player.level * 2;
-        if (this.state.player.gold < price) {
-            client.send('error', 'Not enough gold!');
-        } else if (this.state.remainingTalentPoints === 0) {
-            client.send('error', 'No talent points left!');
-        } else {
-            this.state.player.gold -= price;
-            this.state.hasFreeTalentReroll = false;
-            this.updateTalentRerollCost();
-            this.invalidateUndoSell();
-            await this.updateTalentSelection();
-        }
+    /** Tier to draw talents from: one past the highest tier the player already owns. */
+    private nextTalentLevel(): number {
+        if (this.state.player.talents.length === 0) return 1;
+        const maxTier = this.state.player.talents.reduce((max, t) => Math.max(max, t.tier), 0);
+        return maxTier + 1;
     }
 
-    private updateTalentRerollCost() {
-        this.state.talentRerollCost = this.state.hasFreeTalentReroll ? 0 : this.state.player.level * 2;
+    private async handleRefreshTalentSlot(client: Client, talentId: number) {
+        const index = this.state.availableTalents.findIndex((talent) => talent.talentId === talentId);
+        if (index === -1) {
+            client.send('error', 'Not possible to reroll talent!');
+            return;
+        }
+        if (this.state.talentRerollUsed[index] && process.env.NODE_ENV === 'production') {
+            client.send('error', 'Already rerolled!');
+            return;
+        }
+
+        const generation = this.talentSelectionGeneration;
+        // Exclude every talent shown so far this generation (currently visible + previously
+        // rerolled away in any slot) so a reroll can never bring back a talent already seen.
+        const exceptions = Array.from(this.talentSelectionSeen);
+        const [newTalent] = await getRandomTalents(1, this.nextTalentLevel(), exceptions);
+        // Bail if a full regen (level-up/select) raced this reroll while we awaited the DB.
+        if (generation !== this.talentSelectionGeneration || !newTalent) return;
+
+        // Re-find the slot by id in case the array shifted while we awaited.
+        const freshIndex = this.state.availableTalents.findIndex((talent) => talent.talentId === talentId);
+        if (freshIndex === -1) return;
+
+        this.state.availableTalents[freshIndex] = newTalent;
+        this.state.talentRerollUsed[freshIndex] = true;
+        this.talentSelectionSeen.add(newTalent.talentId);
     }
 
     private async updateTalentSelection() {
@@ -295,26 +316,28 @@ export class DraftRoom extends Room {
         //if player has no talent points, return
         if (this.state.remainingTalentPoints <= 0) {
             this.state.availableTalents.clear();
+            this.state.talentRerollUsed.clear();
+            this.talentSelectionSeen.clear();
             return;
         }
 
         const generation = ++this.talentSelectionGeneration;
 
-        //get next talent level to choose from
-        let nextTalentLevel = 1;
-        if (this.state.player.talents.length > 0) {
-            const maxTier = this.state.player.talents.reduce((max, t) => Math.max(max, t.tier), 0);
-            nextTalentLevel = maxTier + 1;
-        }
         //assign talents from db to state
-        const talents = await getRandomTalents(2, nextTalentLevel, exceptions);
+        const talents = await getRandomTalents(3, this.nextTalentLevel(), exceptions);
         if (generation !== this.talentSelectionGeneration) return;
         // Clear and repopulate back-to-back (no await between them) so clients never observe
         // an empty availableTalents mid-reroll — that transient emptiness was being
         // misread by the frontend as "talent was picked" and closing the modal.
         this.state.availableTalents.clear();
+        this.state.talentRerollUsed.clear();
+        this.talentSelectionSeen.clear();
         talents.forEach((talent) => {
-            if (this.state.availableTalents.length < 2) this.state.availableTalents.push(talent);
+            if (this.state.availableTalents.length < 3) {
+                this.state.availableTalents.push(talent);
+                this.state.talentRerollUsed.push(false);
+                this.talentSelectionSeen.add(talent.talentId);
+            }
         });
     }
 
@@ -327,12 +350,10 @@ export class DraftRoom extends Room {
             : 0;
 
         this.state.remainingTalentPoints = player.level - highestTalentTier;
-        this.state.hasFreeTalentReroll = this.state.remainingTalentPoints > 0;
         // Seed the hidden shop-roll stat for the very first shop of this draft phase — the
         // draft aura tick (which keeps it current afterward) hasn't run yet at this point.
         this.state.player.luckyFindChance = baseLuckyFindChance(this.state.player.level);
         this.state.player.refreshShopCost = BASE_REFRESH_SHOP_COST;
-        this.updateTalentRerollCost();
         await this.updateTalentSelection();
 
         this.state.player.sessionId = client.sessionId;
@@ -492,8 +513,6 @@ export class DraftRoom extends Room {
         if (talent) {
             this.state.player.talents.push(talent);
             this.state.remainingTalentPoints--;
-            this.state.hasFreeTalentReroll = this.state.remainingTalentPoints > 0;
-            this.updateTalentRerollCost();
             await this.updateTalentSelection();
         }
     }
@@ -521,8 +540,6 @@ export class DraftRoom extends Room {
             leveled = true;
         }
         if (leveled) {
-            this.state.hasFreeTalentReroll = true;
-            this.updateTalentRerollCost();
             await this.updateTalentSelection();
         }
     }
