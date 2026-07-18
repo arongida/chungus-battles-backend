@@ -6,6 +6,7 @@ import {
     chungiHpDamageFraction,
     FLOWERING_STAFF_INVULN_COOLDOWN_MS,
     floweringStaffInvulnMs,
+    rerollMagicRingStats,
     rollMagicRingBonus,
     secondWindHealFraction,
     secondWindInvulnMs,
@@ -75,7 +76,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
 
     // Chungi (7) — AURA: max damage scales with the wielder's max HP.
     7: ({ attacker, trigger, item }) => {
-        if (trigger !== TriggerType.AURA || !attacker || !item) return;
+        if (trigger !== TriggerType.ON_ATTACK || !attacker || !item) return;
         item.baseMaxDamage = Math.round(attacker.maxHp * chungiHpDamageFraction(item.rarity));
     },
 
@@ -138,8 +139,19 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     // fight. LEVEL_UP bumps its rarity and rolls another stat into the mix,
     // until all 5 are active at Mythic (level 5). Rolled stats live directly
     // in affectedStats (no separate tracking needed) — see uniqueItemBalance.ts.
+    // SHOP_START — while it sits unequipped in inventory, rerolls a fresh set
+    // of stats for its current rarity, losing all stacking bonuses.
     702: ({ attacker, defender, item, trigger }) => {
         if (!attacker || !item) return;
+
+        if (trigger === TriggerType.SHOP_START) {
+            let equipped = false;
+            attacker.equippedItems.forEach((equippedItem) => {
+                if (equippedItem === item) equipped = true;
+            });
+            if (!equipped) rerollMagicRingStats(item);
+            return;
+        }
 
         if (trigger === TriggerType.LEVEL_UP) {
             if (item.rarity >= ItemRarity.MYTHIC) return;

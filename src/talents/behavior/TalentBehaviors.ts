@@ -10,7 +10,8 @@ import { ArraySchema } from "@colyseus/schema";
 import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
-import { applyRarityUpgrade, applyLuckyShopUpgrades } from "../../commands/ShopUpgradeUtils";
+import { WEAPON_BASE_RANGES, clampTier } from "../../items/stats/itemStatPool";
+import { applyRarityUpgrade, applyLuckyShopUpgrades, shieldDescription } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, RewardGainMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
@@ -115,12 +116,12 @@ export const TalentBehaviors = {
                 client.send('combat_log', { text: `${attacker.name}'s wit brings in +2 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
                 break;
             case PlayerAvatar.WARRIOR:
-                goldGained = 6;
+                goldGained = 8;
                 attacker.gold += goldGained;
-                client.send('combat_log', { text: `${attacker.name} earns 6 gold for outwitting the warrior!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldGained } as CombatLogMessage);
+                client.send('combat_log', { text: `${attacker.name} earns ${goldGained} gold for outwitting the warrior!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldGained } as CombatLogMessage);
                 break;
             case PlayerAvatar.THIEF:
-                xpGained = 8;
+                xpGained = 12;
                 attacker.xp += xpGained;
                 client.send('combat_log', { text: `${attacker.name} gains 8 xp for outwitting the rogue!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
                 break;
@@ -593,76 +594,81 @@ export const TalentBehaviors = {
         }
     },
 
-    // Martial Artist — AURA talent. Conjures a ghost fist into each hand slot (stripping any real
-    // item, like before the rework) and makes the fists "learn" from weapons stashed in the
-    // inventory: each fist gains activationRate× the stash's combined damage range and punches at
-    // the stash's average attack speed (0.8 with an empty stash), and the talent grants
-    // activationRate× their combined stat bonuses. Fist damage lives on the fist items so
-    // tryWeaponAttack reads it per punch; learned stats live on talent.affectedStats so
-    // UpdateStatsCommand applies them once (on both fists they'd double-count).
+    // Martial Artist — two triggers on the same talent:
+    // AURA: conjures a ghost fist into each hand slot (stripping any real item, like before the
+    // rework) and scales them like a rolled rogue-archetype weapon of tier === player.level
+    // (levels 1-5 map onto tiers/rarities 1-5 exactly) — using the midpoint of that tier's
+    // damage/attack-speed ranges so the fists grow deterministically each level-up instead of
+    // re-rolling every aura tick. Also neutralizes talent.affectedStats every tick in case an
+    // older save still carries stats learned under the pre-rework version.
+    // ON_ATTACK: fires whenever a fist lands a hit. Picks a random weapon stashed in the
+    // inventory and unleashes a full extra attack with it via performWeaponAttack — that attack
+    // re-enters the normal trigger dispatch, so the weapon's own on-hit effects (poison,
+    // invulnerability, burn, lifesteal, ...) apply exactly as if it had been equipped. Guarded on
+    // context.weapon being a fist so the extra attack (made with a real weapon) can't recurse.
     [TalentType.MARTIAL_ARTIST]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent } = context;
+            const { attacker, client, talent, trigger, defender, weapon, performWeaponAttack } = context;
 
-            ensureMartialFists(attacker, client, talent);
+            if (trigger === TriggerType.AURA) {
+                if (!attacker) return;
+                ensureMartialFists(attacker, client, talent);
 
-            let sumMin = 0;
-            let sumMax = 0;
-            let sumAttackSpeed = 0;
-            let attackSpeedCount = 0;
-            let sumAttackSpeedBonus = 0;
-            const learned = new AffectedStats();
-            let weaponCount = 0;
-            attacker.inventory.forEach((item) => {
-                if (item.type !== ItemType.WEAPON) return;
-                if (item.tags?.includes(MARTIAL_FIST_TAG) || item.tags?.includes('dual_wield_copy')) return;
-                weaponCount++;
-                sumMin += item.baseMinDamage;
-                sumMax += item.baseMaxDamage;
-                if (item.baseAttackSpeed > 0) {
-                    sumAttackSpeed += item.baseAttackSpeed;
-                    attackSpeedCount++;
+                const tier = clampTier(attacker.level);
+                const range = WEAPON_BASE_RANGES[ItemClass.ROGUE][tier];
+                const baseMinDamage = Math.round((range.minDamage.min + range.minDamage.max) / 2);
+                const baseMaxDamage = baseMinDamage + Math.round((range.maxDamageSpread.min + range.maxDamageSpread.max) / 2);
+                const baseAttackSpeed = Math.round(((range.attackSpeed.min + range.attackSpeed.max) / 2) * 100) / 100;
+
+                for (const slot of [EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND]) {
+                    const fist = attacker.equippedItems.get(slot);
+                    if (!fist?.tags?.includes(MARTIAL_FIST_TAG)) continue;
+                    // Left fist (main hand) hits twice as fast; right fist (off hand) hits twice
+                    // as hard — same total output, different rhythm.
+                    const isRightFist = slot === EquipSlot.OFF_HAND;
+                    // Mutate in place — fight attack timers hold this Item by reference and
+                    // re-read its damage every punch, so the instance must never be swapped
+                    // mid-fight.
+                    fist.tier = tier;
+                    fist.rarity = tier;
+                    fist.baseMinDamage = isRightFist ? baseMinDamage * 2 : baseMinDamage;
+                    fist.baseMaxDamage = isRightFist ? baseMaxDamage * 2 : baseMaxDamage;
+                    fist.baseAttackSpeed = isRightFist ? baseAttackSpeed : baseAttackSpeed * 2;
+                    fist.description = 'A martial artist\'s fist. Each hit unleashes an extra strike with a random weapon from your inventory.';
+                    attacker.equippedItems.set(slot, fist);
                 }
-                if (item.affectedStats) {
-                    learned.strength += item.affectedStats.strength;
-                    learned.accuracy += item.affectedStats.accuracy;
-                    learned.maxHp += item.affectedStats.maxHp;
-                    learned.defense += item.affectedStats.defense;
-                    learned.dodgeRate += item.affectedStats.dodgeRate;
-                    learned.income += item.affectedStats.income;
-                    learned.hpRegen += item.affectedStats.hpRegen;
-                    // attackSpeed is a multiplier (neutral = 1), so learn it as a bonus delta,
-                    // not an absolute — matches how increaseStats/attackSpeedMultiplier accumulate it.
-                    sumAttackSpeedBonus += item.affectedStats.attackSpeed - 1;
-                }
-            });
 
-            for (const slot of [EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND]) {
-                const fist = attacker.equippedItems.get(slot);
-                if (!fist?.tags?.includes(MARTIAL_FIST_TAG)) continue;
-                // Mutate in place — fight attack timers hold this Item by reference and re-read
-                // its damage every punch, so the instance must never be swapped mid-fight.
-                fist.baseMinDamage = Math.round(attacker.level - 1 + talent.activationRate * sumMin);
-                fist.baseMaxDamage = Math.round(attacker.level + talent.activationRate * sumMax);
-                // Fists punch at the average speed of the stashed weapons; the attack timer
-                // re-reads baseAttackSpeed on every reschedule, so this applies next swing.
-                fist.baseAttackSpeed = attackSpeedCount > 0 ? sumAttackSpeed / attackSpeedCount : 0.6;
-                fist.description = weaponCount > 0
-                    ? `Learned from ${weaponCount} stashed weapon${weaponCount === 1 ? '' : 's'}.`
-                    : 'A martial artist\'s fist. Learns from weapons stashed in the inventory.';
-                attacker.equippedItems.set(slot, fist);
+                // Rebuilt from scratch every tick — clears any stats learned under the
+                // pre-rework version of this talent.
+                talent.affectedStats.strength = 0;
+                talent.affectedStats.accuracy = 0;
+                talent.affectedStats.maxHp = 0;
+                talent.affectedStats.defense = 0;
+                talent.affectedStats.income = 0;
+                talent.affectedStats.hpRegen = 0;
+                talent.affectedStats.dodgeRate = 0;
+                talent.affectedStats.attackSpeed = 1;
+                return;
             }
 
-            talent.affectedStats.strength = talent.activationRate * learned.strength;
-            talent.affectedStats.accuracy = talent.activationRate * learned.accuracy;
-            talent.affectedStats.maxHp = talent.activationRate * learned.maxHp;
-            talent.affectedStats.defense = talent.activationRate * learned.defense;
-            talent.affectedStats.income = talent.activationRate * learned.income;
-            talent.affectedStats.hpRegen = talent.activationRate * learned.hpRegen;
-            talent.affectedStats.dodgeRate = talent.activationRate * learned.dodgeRate;
-            // Learned attack speed is rebuilt from scratch every run (not persisted/accumulated),
-            // which also neutralizes any pre-rework saves that carried a stale multiplier here.
-            talent.affectedStats.attackSpeed = 1 + talent.activationRate * sumAttackSpeedBonus;
+            if (trigger === TriggerType.ON_ATTACK) {
+                if (!attacker || !defender || !performWeaponAttack) return;
+                if (!weapon?.tags?.includes(MARTIAL_FIST_TAG)) return;
+
+                const eligible = attacker.inventory.filter((item) =>
+                    item.type === ItemType.WEAPON &&
+                    !item.tags?.includes(MARTIAL_FIST_TAG) &&
+                    !item.tags?.includes('dual_wield_copy')
+                );
+                if (eligible.length === 0) return;
+
+                const extraWeapon = eligible[Math.floor(Math.random() * eligible.length)];
+                let fistSlot = 'martial';
+                attacker.equippedItems.forEach((equipped, slot) => {
+                    if (equipped === weapon) fistSlot = slot;
+                });
+                performWeaponAttack(attacker, defender, extraWeapon, fistSlot);
+            }
         },
 
     // Comrade — AURA trigger (ticks every ~1s in the draft room) so the bonus applies right after
@@ -782,9 +788,13 @@ export const TalentBehaviors = {
             });
         },
 
+    // Shady Shields — AURA trigger (ticks every ~1s in the draft room). The shield-as-weapon
+    // upgrade re-applies every tick (idempotent). The free starter shield is one-shot, latched
+    // via `talent.tags` (same pattern as Grand Robbery) so it's only granted once, right after
+    // the talent is picked.
     [TalentType.SHADY_SHIELDS]:
-        (context: TalentBehaviorContext) => {
-            const { attacker, shop } = context;
+        async (context: TalentBehaviorContext) => {
+            const { attacker, shop, talent, client } = context;
 
             const upgradeShield = (item: Item) => {
                 if (item.type !== ItemType.SHIELD) return;
@@ -800,6 +810,23 @@ export const TalentBehaviors = {
             attacker.inventory.forEach(upgradeShield);
             attacker.equippedItems.forEach(upgradeShield);
             shop?.forEach(upgradeShield);
+
+            if (!talent.tags?.includes('shady-shields-granted')) {
+                talent.tags?.push('shady-shields-granted');
+                const baseShield = await getItemById(76); // Buckler shield
+                if (baseShield) {
+                    const shield = cloneItem(baseShield);
+                    upgradeShield(shield);
+                    shield.description = shieldDescription(shield.tier); // normally set by rollItemStats when a shield rolls into the shop
+                    attacker.gold += shield.price; // refund so getItem nets to free
+                    attacker.getItem(shield);
+                    client?.send('draft_log', `${attacker.name} got a free shield from Shady Shields!`);
+                    client?.send('trigger_talent', {
+                        playerId: attacker.playerId,
+                        talentId: TalentType.SHADY_SHIELDS,
+                    });
+                }
+            }
         },
 
     [TalentType.DUAL_WIELD]:
@@ -1107,9 +1134,9 @@ function createMartialFist(slot: EquipSlot): Item {
     const fist = new Item();
     fist.itemId = 0;
     fist.name = slot === EquipSlot.MAIN_HAND ? 'Left Fist' : 'Right Fist';
-    fist.description = 'A martial artist\'s fist. Learns from weapons stashed in the inventory.';
+    fist.description = 'A martial artist\'s fist. Each hit unleashes an extra strike with a random weapon from your inventory.';
     fist.type = ItemType.WEAPON;
-    fist.baseAttackSpeed = 0.6;
+    fist.baseAttackSpeed = 0.8;
     fist.strengthScaling = 1;
     fist.price = 0;
     fist.sellPrice = 0;

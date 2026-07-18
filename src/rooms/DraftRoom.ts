@@ -26,6 +26,11 @@ export class DraftRoom extends Room {
 
     dispatcher = new Dispatcher(this);
     private talentSelectionGeneration: number = 0;
+    // Every talent ever offered in the current talent-selection generation — the 3 initially
+    // shown plus any rerolled away since. Rerolls exclude this whole set (not just the 3
+    // currently visible) so repeated/cross-slot rerolls can't bring back a talent already seen.
+    // Reset whenever updateTalentSelection regenerates a fresh batch (level-up/select).
+    private talentSelectionSeen: Set<number> = new Set();
     // Stack of recently-sold items, kept around so accidental sales can be undone in
     // reverse order. Cleared by any gold-spending action (see invalidateUndoSell).
     private soldItemStack: Item[] = [];
@@ -284,15 +289,15 @@ export class DraftRoom extends Room {
             client.send('error', 'Not possible to reroll talent!');
             return;
         }
-        if (this.state.talentRerollUsed[index]) {
+        if (this.state.talentRerollUsed[index] && process.env.NODE_ENV === 'production') {
             client.send('error', 'Already rerolled!');
             return;
         }
 
         const generation = this.talentSelectionGeneration;
-        // Exclude every currently-visible talent (including the one being replaced) so the
-        // reroll can never produce a duplicate of the other two offered talents.
-        const exceptions = this.state.availableTalents.map((talent) => talent.talentId);
+        // Exclude every talent shown so far this generation (currently visible + previously
+        // rerolled away in any slot) so a reroll can never bring back a talent already seen.
+        const exceptions = Array.from(this.talentSelectionSeen);
         const [newTalent] = await getRandomTalents(1, this.nextTalentLevel(), exceptions);
         // Bail if a full regen (level-up/select) raced this reroll while we awaited the DB.
         if (generation !== this.talentSelectionGeneration || !newTalent) return;
@@ -303,6 +308,7 @@ export class DraftRoom extends Room {
 
         this.state.availableTalents[freshIndex] = newTalent;
         this.state.talentRerollUsed[freshIndex] = true;
+        this.talentSelectionSeen.add(newTalent.talentId);
     }
 
     private async updateTalentSelection() {
@@ -311,6 +317,7 @@ export class DraftRoom extends Room {
         if (this.state.remainingTalentPoints <= 0) {
             this.state.availableTalents.clear();
             this.state.talentRerollUsed.clear();
+            this.talentSelectionSeen.clear();
             return;
         }
 
@@ -324,10 +331,12 @@ export class DraftRoom extends Room {
         // misread by the frontend as "talent was picked" and closing the modal.
         this.state.availableTalents.clear();
         this.state.talentRerollUsed.clear();
+        this.talentSelectionSeen.clear();
         talents.forEach((talent) => {
             if (this.state.availableTalents.length < 3) {
                 this.state.availableTalents.push(talent);
                 this.state.talentRerollUsed.push(false);
+                this.talentSelectionSeen.add(talent.talentId);
             }
         });
     }

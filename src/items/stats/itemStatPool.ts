@@ -60,15 +60,15 @@ export const AFFIX_COUNT_BY_TIER: Record<number, number> = {
  */
 export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
     strength: {
-        1: { min: 1,  max: 2  },
-        2: { min: 2,  max: 4  },
+        1: { min: 1,  max: 3  },
+        2: { min: 2,  max: 5  },
         3: { min: 4,  max: 8  },
         4: { min: 8,  max: 16  },
         5: { min: 16,  max: 32 },
     },
     accuracy: {
-        1: { min: 1,  max: 2  },
-        2: { min: 2,  max: 4  },
+        1: { min: 1,  max: 3  },
+        2: { min: 2,  max: 5  },
         3: { min: 4,  max: 8  },
         4: { min: 8,  max: 16  },
         5: { min: 16,  max: 32 },
@@ -90,16 +90,16 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
         5: { min: 88, max: 160  },
     },
     maxHp: {
-        1: { min: 10, max: 20  },
-        2: { min: 20, max: 40  },
+        1: { min: 10, max: 25  },
+        2: { min: 20, max: 45  },
         3: { min: 40, max: 80  },
         4: { min: 80, max: 160  },
         5: { min: 160, max: 320 },
     },
     income: {
         1: { min: 1, max: 1  },
-        2: { min: 1, max: 2  },
-        3: { min: 2, max: 4  },
+        2: { min: 2, max: 2  },
+        3: { min: 3, max: 4  },
         4: { min: 4, max: 8  },
         5: { min: 8, max: 16 },
     },

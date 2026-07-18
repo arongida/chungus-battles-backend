@@ -24,7 +24,9 @@ export class OnAttackTriggerCommand extends Command<
             clock: this.clock,
             commandDispatcher: this.room.dispatcher,
             trigger: TriggerType.ON_ATTACK,
-            weapon: weapon
+            weapon: weapon,
+            performWeaponAttack: (a, d, w, slot) =>
+                this.room.tryWeaponAttack(a, d, w, slot),
         };
 
         const talentsToTrigger: Talent[] = attacker.talents.filter((talent) =>

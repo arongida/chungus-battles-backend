@@ -3,7 +3,7 @@ import {DraftRoom} from '../../rooms/DraftRoom';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {TriggerType} from '../../common/types';
 import {BehaviorContext} from "../../common/BehaviorContext";
-import {triggerEquippedItems} from '../../common/triggerUtils';
+import {triggerEquippedItems, triggerInventoryItems} from '../../common/triggerUtils';
 
 export class ShopStartTriggerCommand extends Command<DraftRoom> {
     async execute() {
@@ -26,5 +26,6 @@ export class ShopStartTriggerCommand extends Command<DraftRoom> {
         });
 
         await triggerEquippedItems(this.state.player, onShopStartTalentsContext, TriggerType.SHOP_START);
+        triggerInventoryItems(this.state.player, onShopStartTalentsContext, TriggerType.SHOP_START);
     }
 }
