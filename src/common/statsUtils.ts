@@ -30,33 +30,71 @@ export function addStats(target: StatsSnapshot, source: AffectedStats): void {
  *
  * Extracted from UpdateStatsCommand (which delegates here every room tick) so out-of-room
  * code — e.g. buildJoe()'s draft preview — computes exactly the same final stats a room would.
+ *
+ * Stats are accumulated into a plain (unclamped) StatsSnapshot rather than written
+ * incrementally onto the player. Player.strength/accuracy setters cross-clamp to enforce
+ * accuracy <= strength; assigning through them on every single item/talent (in an order that
+ * depends on iteration order and the previous tick's residual values) let an accuracy bonus
+ * ratchet strength upward tick after tick. Accumulating on a plain object first and assigning
+ * once at the end applies that clamp exactly once, deterministically.
  */
 export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     const previousMaxHp = player.maxHp ?? player.hp;
     const previousHp = player.hp ?? player.maxHp;
     const damageTaken = previousMaxHp - previousHp;
 
-    player.attackSpeedMultiplier = 1;
+    const snapshot: StatsSnapshot = {
+        strength: player.baseStats.strength,
+        accuracy: player.baseStats.accuracy,
+        defense: player.baseStats.defense,
+        maxHp: player.baseStats.maxHp,
+        dodgeRate: player.baseStats.dodgeRate,
+        hpRegen: player.baseStats.hpRegen,
+        income: player.baseStats.income,
+    };
+    let attackSpeedMultiplier = player.baseStats.attackSpeed;
 
-    setStats(player, player.baseStats);
+    const accumulate = (affectedStats: AffectedStats) => {
+        try {
+            addStats(snapshot, affectedStats);
+            if (affectedStats.attackSpeed !== 0 && affectedStats.attackSpeed !== 1) {
+                attackSpeedMultiplier += affectedStats.attackSpeed - 1;
+            }
+        } catch (e) {
+            console.error('Failed to accumulate stats for player: ', player?.name);
+            console.error(e);
+        }
+    };
 
     player.equippedItems.forEach((value) => {
-        increaseStats(player, value.affectedStats);
+        accumulate(value.affectedStats);
     });
     player.talents.forEach((talent) => {
-        increaseStats(player, talent.affectedStats);
+        accumulate(talent.affectedStats);
     });
     if (enemy) {
         enemy.talents.forEach((talent) => {
-            increaseStats(player, talent.affectedEnemyStats);
+            accumulate(talent.affectedEnemyStats);
         });
         enemy.equippedItems.forEach((item) => {
             if (item.affectedEnemyStats) {
-                increaseStats(player, item.affectedEnemyStats);
+                accumulate(item.affectedEnemyStats);
             }
         });
     }
 
+    // Assign once: neutralize accuracy first so the strength setter can't clamp up to a
+    // stale value, then strength, then accuracy (its setter clamps to min(accuracy, strength)).
+    player.accuracy = 1;
+    player.strength = snapshot.strength;
+    player.accuracy = snapshot.accuracy;
+    player.maxHp = snapshot.maxHp;
+    player.defense = snapshot.defense;
+    player.dodgeRate = snapshot.dodgeRate;
+    player.income = snapshot.income;
+    player.hpRegen = snapshot.hpRegen;
+
+    player.attackSpeedMultiplier = attackSpeedMultiplier;
     player.attackSpeed = player.attackSpeedMultiplier;
     // Health Flask: a banked one-fight regen buff (see PlayerSchema.pendingRegenBuff) folds
     // straight into the recomputed hpRegen, so it shows up immediately in the draft UI and
@@ -64,35 +102,6 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     player.hpRegen += player.pendingRegenBuff || 0;
     player.hp = player.maxHp - damageTaken;
     player.healingEffectiveness = Math.max(0, 1 - player.poisonStack * 0.01);
-}
-
-function increaseStats(player: Player, affectedStats: AffectedStats): void {
-    try {
-        addStats(player, affectedStats);
-        if (affectedStats.attackSpeed !== 0 && affectedStats.attackSpeed !== 1) {
-            player.attackSpeedMultiplier += affectedStats.attackSpeed - 1;
-        }
-    } catch (e) {
-        console.error('Failed to increase stats for player: ', player?.name);
-        console.error(e);
-    }
-}
-
-function setStats(player: Player, affectedStats: AffectedStats): void {
-    try {
-        player.strength = affectedStats.strength;
-        player.accuracy = affectedStats.accuracy;
-        player.maxHp = affectedStats.maxHp;
-        player.defense = affectedStats.defense;
-        player.attackSpeed = affectedStats.attackSpeed;
-        player.attackSpeedMultiplier = affectedStats.attackSpeed;
-        player.dodgeRate = affectedStats.dodgeRate;
-        player.income = affectedStats.income;
-        player.hpRegen = affectedStats.hpRegen;
-    } catch (e) {
-        console.error('Failed to set stats for player: ', player?.name);
-        console.error(e);
-    }
 }
 
 export function buildBaseAndItemsSnapshot(player: Player): StatsSnapshot {

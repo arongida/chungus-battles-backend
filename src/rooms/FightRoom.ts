@@ -712,8 +712,9 @@ export class FightRoom extends Room {
                              : 10;
             this.state.lossRewardOptions = {
                 goldAmount,
-                xpAmount: Math.round(goldAmount * 1.2),
+                xpAmount: Math.round(goldAmount * 1.5),
                 itemUpgradeAvailable: getEquippedUpgradeableItems(this.state.player).length > 0,
+                itemUpgradeCount: this.lossItemUpgradeRolls(),
             };
             this.state.lossRewardPending = true;
             this.broadcast('end_battle', this.buildLossEndBattlePayload());
@@ -773,27 +774,57 @@ export class FightRoom extends Room {
         this.broadcast('loss_reward_result', this.state.lossRewardOutcome as LossRewardResultMessage);
     }
 
+    // The fewer lives remaining, the more random items the loss-reward item-upgrade rolls —
+    // last life rolls 3 times, second-to-last rolls 2, otherwise just 1 (unchanged). Shared
+    // between handleLoose (to show the count on the option) and applyLossItemUpgrade (to
+    // actually do the rolls).
+    private lossItemUpgradeRolls(): number {
+        const lives = this.state.player.lives;
+        return lives === 1 ? 3 : lives === 2 ? 2 : 1;
+    }
+
     private async applyLossItemUpgrade(fallbackGold: number) {
         const player = this.state.player;
-        const candidates = getEquippedUpgradeableItems(player);
-        const picked = candidates[Math.floor(Math.random() * candidates.length)];
-        const base = picked ? await getItemById(picked.item.itemId) : null;
-        if (!base) {
-            // No candidate or missing template — fall back to the gold option.
-            this.grantLossReward('gold', fallbackGold);
-            return;
+        // Each roll re-samples the eligible pool, so the same item can be picked again
+        // and climb multiple rarity steps in one loss.
+        const upgradeRolls = this.lossItemUpgradeRolls();
+        const upgradedBySlot = new Map<string, { item: Item; slot: string }>();
+
+        for (let i = 0; i < upgradeRolls; i++) {
+            const candidates = getEquippedUpgradeableItems(player);
+            const picked = candidates[Math.floor(Math.random() * candidates.length)];
+            const base = picked ? await getItemById(picked.item.itemId) : null;
+            if (!base) {
+                if (upgradedBySlot.size === 0) {
+                    // No candidate or missing template — fall back to the gold option.
+                    this.grantLossReward('gold', fallbackGold);
+                    return;
+                }
+                // Pool exhausted (e.g. everything hit MYTHIC) after upgrading at least
+                // one item already — report what was upgraded instead of failing out.
+                break;
+            }
+
+            // Merge a freshly rolled copy of the template, same as lucky shop finds.
+            const rolled = cloneItem(base);
+            rollItemStats(rolled);
+            applyRarityUpgrade(picked.item, rolled, player, false);
+            if (picked.slot) player.equippedItems.set(picked.slot, picked.item);
+            upgradedBySlot.set(picked.slot, picked);
         }
 
-        // Merge a freshly rolled copy of the template, same as lucky shop finds.
-        const rolled = cloneItem(base);
-        rollItemStats(rolled);
-        applyRarityUpgrade(picked.item, rolled, player, false);
-        if (picked.slot) player.equippedItems.set(picked.slot, picked.item);
-
-        this.logCombat('broadcast', { text: `Your ${picked.item.name} was upgraded for losing!`, kind: 'reward', itemId: picked.item.itemId });
+        const upgradedItems = Array.from(upgradedBySlot.values()).map(({ item }) => ({
+            itemId: item.itemId,
+            name: item.name,
+            rarity: item.rarity,
+        }));
+        upgradedItems.forEach((entry) => {
+            this.logCombat('broadcast', { text: `Your ${entry.name} was upgraded for losing!`, kind: 'reward', itemId: entry.itemId });
+        });
         this.state.lossRewardOutcome = {
             choice: 'item_upgrade',
-            item: { itemId: picked.item.itemId, name: picked.item.name, rarity: picked.item.rarity },
+            item: upgradedItems[0],
+            items: upgradedItems,
         };
         this.broadcast('loss_reward_result', this.state.lossRewardOutcome as LossRewardResultMessage);
     }

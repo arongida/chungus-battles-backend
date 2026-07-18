@@ -35,8 +35,9 @@ export type LossRewardChoice = 'gold' | 'xp' | 'item_upgrade';
 /** Offered to the losing player on end_battle — pick one via select_loss_reward. */
 export type LossRewardOptions = {
   goldAmount: number;
-  xpAmount: number; // 20% more than gold — gold is the more flexible pick
+  xpAmount: number; // 50% more than gold — gold is the more flexible pick
   itemUpgradeAvailable: boolean;
+  itemUpgradeCount: number; // how many rarity-upgrade rolls this pick grants (1-3, scales with lives left)
 };
 
 export type SelectLossRewardMessage = {
@@ -47,12 +48,15 @@ export type SetFightSpeedMessage = {
   speed: number;
 };
 
-/** Resolution of the loss-reward choice; for item_upgrade reveals which item got upgraded. */
+/** Resolution of the loss-reward choice; for item_upgrade reveals which item(s) got
+ *  upgraded. `item` holds the first upgraded item for back-compat; `items` holds all of
+ *  them (more than one when the player was on their last or second-to-last life). */
 export type LossRewardResultMessage = {
   choice: LossRewardChoice;
   gold?: number;
   xp?: number;
   item?: { itemId: number; name: string; rarity: number };
+  items?: { itemId: number; name: string; rarity: number }[];
 };
 
 export type TriggerTalentMessage = {

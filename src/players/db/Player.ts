@@ -471,7 +471,7 @@ export async function getPlayerRank(playerId: number): Promise<number> {
     return rank + 1;
 }
 
-/** "Wall of Fame": finished (12-win) characters ranked by fewest losses.
+/** "Wall of Fame": finished (12-win) characters ranked by most runs ended, most recent first.
  *  gameVersion >= 16 + losses field presence excludes pre-Season-16 record-chasing
  *  snapshots that could otherwise have wins >= WINS_TO_WIN from an old, different win condition.
  *  Pass `season` to scope the wall to one specific season (exact gameVersion match); omit it
@@ -491,13 +491,13 @@ export async function getWallOfFame({ limit = 20, skip = 0, season }: { limit?: 
             // Same reasoning as TOP_PLAYERS_AGGREGATION: runsEnded is only incremented on the
             // character's original doc, which may not be the $first-picked doc here.
             runsEnded: { $max: '$runsEnded' },
+            // ObjectId embeds its creation time; take the max across every snapshot so
+            // this reflects the character's most recent activity, not just the $first-picked doc.
+            lastPlayedAt: { $max: { $toDate: '$_id' } },
         } },
-        { $addFields: { 'doc.runsEnded': { $ifNull: ['$runsEnded', 0] } } },
+        { $addFields: { 'doc.runsEnded': { $ifNull: ['$runsEnded', 0] }, 'doc.lastPlayedAt': '$lastPlayedAt' } },
         { $replaceRoot: { newRoot: '$doc' } },
-        // ObjectId embeds its creation time; for a finished (12-win) run this is when the
-        // finishing snapshot was saved, i.e. this character's "last played" time.
-        { $addFields: { lastPlayedAt: { $toDate: '$_id' } } },
-        { $sort: { losses: 1, round: 1, originalPlayerId: 1 } },
+        { $sort: { runsEnded: -1, lastPlayedAt: -1, originalPlayerId: -1 } },
         { $facet: {
             players: [{ $skip: skip }, { $limit: clampedLimit }],
             totalCount: [{ $count: 'n' }],
