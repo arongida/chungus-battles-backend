@@ -30,7 +30,8 @@ export const SEASONS: SeasonInfo[] = [
       'Increased rolled stats on items for tier 1-4: Defense, Dodge, Attack speed by about 20%, hp regen by about 10%',
       'Renamed Merchant III. to Learn by doing and icnreased bonus xp from 2 to 3',
       'Replaced Poison talent with Wits End: Get reward when winning based on enemy class',
-      'Small buff: Snitch, Burning Blood'
+      'Small buff: Snitch, Burning Blood',
+      'Loss consolation buffed: bonus XP raised to 1.5x the gold amount, and the random item-upgrade now upgrades more items the lower your lives (3 on your last life, 2 on your second-to-last)'
     ],
   },
   {
