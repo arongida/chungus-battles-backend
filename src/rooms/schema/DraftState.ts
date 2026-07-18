@@ -12,8 +12,9 @@ export class DraftState extends Schema {
     @type('number') shopSize: number = 6;
     @type('number') shopRefreshCost: number = 2;
     @type('number') remainingTalentPoints: number = 0;
-    @type('boolean') hasFreeTalentReroll: boolean = false;
-    @type('number') talentRerollCost: number = 0;
+    // Per-slot reroll tracker, aligned by index with availableTalents — true once that
+    // slot's single free reroll has been used.
+    @type(['boolean']) talentRerollUsed: ArraySchema<boolean> = new ArraySchema<boolean>();
     @type([Item]) questItems: ArraySchema<Item> = new ArraySchema<Item>();
     // Drives the "Undo sell" button — true while the most recent sale can still be reverted.
     @type('boolean') canUndoSell: boolean = false;
