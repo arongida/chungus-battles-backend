@@ -254,6 +254,12 @@ export class DraftRoom extends Room {
         }
 
         this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
+        // Comrade / Gold Genie / Black Market Contact latches were just reset above, but the
+        // synced *FreeClaim flags they gate are only (re)computed by DraftAuraTriggerCommand,
+        // which otherwise wouldn't run again until the next 1s aura tick. Run it once here so
+        // a freshly built shop's free-item claim is immediately claimable instead of racing a
+        // ~1s window where the item still looks unaffordable.
+        this.dispatcher.dispatch(new DraftAuraTriggerCommand());
     }
 
     private announceLuckyUpgrade(item: { name: string; rarity: number }, steps: number, slot: number) {
