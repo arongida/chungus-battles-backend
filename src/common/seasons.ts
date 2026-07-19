@@ -22,7 +22,6 @@ export const SEASONS: SeasonInfo[] = [
     name: 'Quick Reset',
     changes: [
       'Martial Artist - reduced fist base attack speed and damage',
-      'Slightly increase tier 1-2 items power',
       'Slightly reduce tier 5 item power',
       'Ring of Immortality reworked: now an equippable ring (no weapon damage) that grants +50% XP gained and +50% lucky find chance while equipped'
     ],
