@@ -17,7 +17,17 @@ export interface SeasonInfo {
 
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
-    {
+  {
+    number: 20,
+    name: 'Quick Reset',
+    changes: [
+      'Martial Artist - reduced fist base attack speed and damage',
+      'Slightly increase tier 1-2 items power',
+      'Slightly reduce tier 5 item power',
+      'Ring of Immortality reworked: now an equippable ring (no weapon damage) that grants +50% XP gained and +50% lucky find chance while equipped'
+    ],
+  },
+  {
     number: 19,
     name: 'Less Magical Ring',
     changes: [
@@ -25,7 +35,9 @@ export const SEASONS: SeasonInfo[] = [
       'Small buff: Wits End',
       'Loss consolation buffed: bonus XP raised to 1.5x the gold amount, and the random item-upgrade now upgrades more items the lower your lives (3 on your last life, 2 on your second-to-last)',
       'Martial Artist reworked: fists no longer copy weapon stats — instead each fist hit unleashes an extra attack with a random weapon from your inventory, triggering that weapon\'s on-hit effects (poison, invulnerability, burn, etc.);',
-      'Slightly increase tier 1-2 items power'
+      'Slightly increase tier 1-2 items power',
+      'Slightly reduce tier 5 item power',
+      'Ring of Immortality reworked: now an equippable ring (no weapon damage) that grants +50% XP gained and +50% lucky find chance while equipped'
     ],
   },
   {
@@ -42,7 +54,7 @@ export const SEASONS: SeasonInfo[] = [
       'Renamed Merchant III. to Learn by doing and icnreased bonus xp from 2 to 3',
       'Replaced Poison talent with Wits End: Get reward when winning based on enemy class',
       'Small buff: Snitch, Burning Blood',
-     ],
+    ],
   },
   {
     number: 17,

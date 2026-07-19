@@ -121,9 +121,9 @@ export const TalentBehaviors = {
                 client.send('combat_log', { text: `${attacker.name} earns ${goldGained} gold for outwitting the warrior!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldGained } as CombatLogMessage);
                 break;
             case PlayerAvatar.THIEF:
-                xpGained = 12;
+                xpGained = attacker.getXpAmount(12);
                 attacker.xp += xpGained;
-                client.send('combat_log', { text: `${attacker.name} gains 8 xp for outwitting the rogue!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
+                client.send('combat_log', { text: `${attacker.name} gains ${xpGained} xp for outwitting the rogue!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
                 break;
             default:
                 return;
@@ -516,7 +516,7 @@ export const TalentBehaviors = {
     [TalentType.FUTURE_NOW]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
 
-        const extraXp = attacker.round * 2;
+        const extraXp = attacker.getXpAmount(attacker.round * 2);
         attacker.xp += extraXp;
         track(talent, 1, 0, 0, 0, extraXp, { client, playerId: attacker.playerId });
 
@@ -538,9 +538,10 @@ export const TalentBehaviors = {
             track(talent, 1);
             client.send('combat_log', { text: `${attacker.name}'s merchant weapon brings in +1 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
         } else {
-            attacker.xp += 1;
-            track(talent, 1, 0, 0, 0, 1, { client, playerId: attacker.playerId });
-            client.send('combat_log', { text: `${attacker.name} gains +1 XP from the merchant's experience!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: 1 } as CombatLogMessage);
+            const xpGained = attacker.getXpAmount(1);
+            attacker.xp += xpGained;
+            track(talent, 1, 0, 0, 0, xpGained, { client, playerId: attacker.playerId });
+            client.send('combat_log', { text: `${attacker.name} gains +${xpGained} XP from the merchant's experience!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
         }
         client.send('trigger_talent', {
             playerId: attacker.playerId,
@@ -633,7 +634,7 @@ export const TalentBehaviors = {
                     fist.rarity = tier;
                     fist.baseMinDamage = isRightFist ? baseMinDamage * 2 : baseMinDamage;
                     fist.baseMaxDamage = isRightFist ? baseMaxDamage * 2 : baseMaxDamage;
-                    fist.baseAttackSpeed = isRightFist ? baseAttackSpeed : baseAttackSpeed * 2;
+                    fist.baseAttackSpeed = isRightFist ? baseAttackSpeed * 0.5 : baseAttackSpeed;
                     fist.description = 'A martial artist\'s fist. Each hit unleashes an extra strike with a random weapon from your inventory.';
                     attacker.equippedItems.set(slot, fist);
                 }
@@ -1008,9 +1009,10 @@ export const TalentBehaviors = {
     [TalentType.LEARN_BY_DOING]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
-            attacker.xp += talent.base;
-            track(talent, 1, 0, 0, 0, talent.base, { client, playerId: attacker.playerId });
-            client.send('combat_log', { text: `${attacker.name} gains + ${talent.base}XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: talent.base } as CombatLogMessage);
+            const xpGained = attacker.getXpAmount(talent.base);
+            attacker.xp += xpGained;
+            track(talent, 1, 0, 0, 0, xpGained, { client, playerId: attacker.playerId });
+            client.send('combat_log', { text: `${attacker.name} gains + ${xpGained}XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.LEARN_BY_DOING,

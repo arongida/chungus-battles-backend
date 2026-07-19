@@ -523,8 +523,9 @@ export class DraftRoom extends Room {
             return;
         }
         this.state.player.gold -= price;
-        this.state.player.xp += xp;
-        client.send('reward_gain', { playerId: this.state.player.playerId, xp } as RewardGainMessage);
+        const xpGained = this.state.player.getXpAmount(xp);
+        this.state.player.xp += xpGained;
+        client.send('reward_gain', { playerId: this.state.player.playerId, xp: xpGained } as RewardGainMessage);
         this.invalidateUndoSell();
         await this.checkLevelUp();
     }
