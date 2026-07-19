@@ -6,11 +6,11 @@ import { TriggerType } from './types';
  * Fires item behaviors for every equipped item subscribed to triggerType.
  *
  * Most behaviors are synchronous and run to completion inline, exactly as before.
- * A behavior may instead return a Promise (e.g. Ring of Immortality's SHOP_START
- * transform, which needs a DB round trip) — those are collected and only awaited
- * via the returned promise, so hot combat-loop callers that don't await this
- * function see no change in timing, while callers that do await it (currently
- * only ShopStartTriggerCommand) can rely on the async work having finished.
+ * A behavior may instead return a Promise (e.g. one that needs a DB round trip)
+ * — those are collected and only awaited via the returned promise, so hot
+ * combat-loop callers that don't await this function see no change in timing,
+ * while callers that do await it (currently only ShopStartTriggerCommand) can
+ * rely on the async work having finished.
  */
 export function triggerEquippedItems(player: Player, context: BehaviorContext, triggerType: TriggerType): Promise<void> | void {
     const pending: Promise<void>[] = [];

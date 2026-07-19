@@ -1,10 +1,10 @@
-export const GAME_VERSION = 19;
+export const GAME_VERSION = 20;
 
 /** Reaching this many wins ends the run as a victory (Season 16 fixed-length runs). */
 export const WINS_TO_WIN = 12;
 
 /** Game-time (ms) a fight can run before the escalating "end burn" AoE kicks in to force a conclusion. */
-export const END_BURN_START_MS = 65000;
+export const END_BURN_START_MS = 60000;
 
 export enum FightResultType {
 	WIN = 'win',

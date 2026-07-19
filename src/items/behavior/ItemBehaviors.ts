@@ -7,6 +7,7 @@ import {
     FLOWERING_STAFF_INVULN_COOLDOWN_MS,
     floweringStaffInvulnMs,
     rerollMagicRingStats,
+    RING_OF_IMMORTALITY_LUCKY_FIND_MULTIPLIER,
     rollMagicRingBonus,
     secondWindHealFraction,
     secondWindInvulnMs,
@@ -14,7 +15,6 @@ import {
     stackMagicRingBonuses,
     wandOfFireBurnStacks,
 } from './uniqueItemBalance';
-import { rollRandomMythicTierFiveItem } from './ringOfImmortality';
 import type { Item } from '../schema/ItemSchema';
 
 // Last invulnerability proc per staff instance (clock-elapsed ms). Keyed by
@@ -177,28 +177,13 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         });
     },
 
-    // Ring of Immortality (47) — grants no stats. SHOP_START: if it's still equipped
-    // when the next draft phase begins (i.e. it was worn through a fight), it
-    // transforms into a random tier-5 item rolled all the way up to Mythic.
-    47: async ({ attacker, item, trigger, client }) => {
-        if (trigger !== TriggerType.SHOP_START || !attacker || !item) return;
-
-        let ringSlot: EquipSlot | null = null;
-        attacker.equippedItems.forEach((equipped, slot) => {
-            if (equipped === item) ringSlot = slot as EquipSlot;
-        });
-        if (!ringSlot) return;
-
-        const newItem = await rollRandomMythicTierFiveItem(attacker);
-        if (!newItem) return;
-
-        // The rolled item can be any type (weapon/armor/helmet/shield) — never auto-equip
-        // it into the ring's hand slot, since a helmet/armor/shield doesn't belong there.
-        // Free the hand slot and drop the reward into inventory for the player to equip.
-        attacker.equippedItems.delete(ringSlot);
-        attacker.inventory.push(newItem);
-
-        client?.send('draft_log', `Your Ring of Immortality transforms into ${newItem.name} (Mythic)!`);
+    // Ring of Immortality (47) — no combat stats; occupies a hand slot (0 weapon damage) as its
+    // opportunity cost. AURA (draft + fight, ticks every 1s): while equipped, +50% lucky find
+    // chance. XP gains are boosted separately via the Player.xp setter (PlayerSchema.ts) so every
+    // XP-granting site gets the bonus without each one needing to know about this item.
+    47: ({ attacker, trigger }) => {
+        if (trigger !== TriggerType.AURA || !attacker) return;
+        attacker.luckyFindChance *= RING_OF_IMMORTALITY_LUCKY_FIND_MULTIPLIER;
     },
 
     // Band of Vigor (27) — a ring, not a weapon. FIGHT_START: resets its once-per-fight proc.

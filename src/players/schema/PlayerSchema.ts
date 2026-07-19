@@ -7,7 +7,7 @@ import { CombatLogMessage, DamageMessage, DamageType, InvulnerableMessage, Invul
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
-import {BURN_DURATION_MS} from "../../items/behavior/uniqueItemBalance";
+import {BURN_DURATION_MS, RING_OF_IMMORTALITY_ITEM_ID, RING_OF_IMMORTALITY_XP_MULTIPLIER} from "../../items/behavior/uniqueItemBalance";
 import {FightStats} from "./FightStats";
 import {weaponWhispererSnapshots} from "../../talents/behavior/weaponWhispererState";
 
@@ -44,10 +44,6 @@ export class Player extends Schema implements IStats {
     talentsOnCooldown: TalentType[] = [];
     attackSpeedMultiplier: number = 1;
     healingEffectiveness: number = 1;
-    // Hidden shop-roll stat: seeded from level each draft aura tick (DraftAuraTriggerCommand),
-    // doubled by Black Market Contact's aura behavior (TalentBehaviors). Read by
-    // ShopUpgradeUtils.applyLuckyShopUpgrades. Resets to 0 every draft phase (new Player()).
-    luckyFindChance: number = 0;
     // Black Market Contact: true once the current shop's free lucky-find claim has been spent
     // (DraftRoom.buyItem), reset per shop build (DraftRoom.updateShop). Same latch pattern as
     // comradeClaimUsed.
@@ -109,6 +105,12 @@ export class Player extends Schema implements IStats {
 
     set strength(value: number) {
         this._strength = value < 1 ? 1 : value <= this._accuracy ? this._accuracy : value;
+    }
+
+    private hasItemEquipped(itemId: number): boolean {
+        let found = false;
+        this.equippedItems.forEach((item) => { if (item.itemId === itemId) found = true; });
+        return found;
     }
 
     @type('number') private _gold: number;
@@ -173,6 +175,14 @@ export class Player extends Schema implements IStats {
     // field) — same reasoning as `losses` above: copyFrom() round-trips through toJSON(), so a
     // plain field would silently reset to 0 the moment FightRoom.onJoin loads the player.
     @type('number') pendingRegenBuff: number = 0;
+    // Hidden shop-roll stat: seeded from level every aura tick in both the draft
+    // (DraftAuraTriggerCommand) and the fight (FightAuraTriggerCommand), doubled by Black Market
+    // Contact's aura behavior and boosted 1.5x by the equipped Ring of Immortality (both in
+    // TalentBehaviors/ItemBehaviors, same tick as the seed so they compose instead of getting
+    // clobbered). Read by ShopUpgradeUtils.applyLuckyShopUpgrades. Synced (unlike most other
+    // hidden stats) so the client can display it next to gold/income.
+    // Declared here (end of the @type block) so existing field indices stay stable.
+    @type('number') luckyFindChance: number = 0;
 
     private _poisonStack: number = 0;
 
@@ -274,6 +284,18 @@ export class Player extends Schema implements IStats {
             damage: damage,
             type: damageType,
         } as DamageMessage);
+    }
+
+    /**
+     * Actual XP that would be granted for baseAmount, applying the Ring of Immortality's +50%
+     * bonus if equipped. Pure — does not mutate xp. Call this FIRST to get the real number for
+     * combat_log/reward_gain/track() messages, THEN add the returned amount to xp yourself
+     * (mirrors takeDamage/restoreHealth: the class exposes the calculation, call sites own
+     * sending their own specific messages).
+     */
+    getXpAmount(baseAmount: number): number {
+        const multiplier = this.hasItemEquipped(RING_OF_IMMORTALITY_ITEM_ID) ? RING_OF_IMMORTALITY_XP_MULTIPLIER : 1;
+        return Math.round(baseAmount * multiplier);
     }
 
     getDamageAfterDefense(initialDamage: number): number {

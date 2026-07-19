@@ -11,6 +11,16 @@ export function chungiHpDamageFraction(rarity: number): number {
 }
 
 /**
+ * Ring of Immortality (47): not a weapon, does not attack. While equipped it passively grants
+ * +50% lucky find chance (AURA behavior, ItemBehaviors.ts) and +50% XP gained (wired into the
+ * Player.xp setter, PlayerSchema.ts, so every XP-granting site gets the bonus for free). Both
+ * bonuses are while-equipped only — nothing is banked or persisted.
+ */
+export const RING_OF_IMMORTALITY_ITEM_ID = 47;
+export const RING_OF_IMMORTALITY_XP_MULTIPLIER = 1.5;
+export const RING_OF_IMMORTALITY_LUCKY_FIND_MULTIPLIER = 1.5;
+
+/**
  * Magic Ring (702): not a weapon, does not attack. Starts Common with one
  * randomly rolled stat that grows permanently once per second (AURA) while
  * in a fight. Each level-up bumps its rarity and rolls another stat into
@@ -95,8 +105,9 @@ export const TWO_HANDED_WEAPON_IDS = new Set([4]); // Zwei-hander
  * Items excluded from the shop's owned-item rarity-upgrade path
  * (findOwnedUpgradeTarget). Health Flask (6) is a consumable whose rarity
  * is meant to come from its shop roll, not from stacking upgrades; Ring of
- * Immortality (47) grants no stats and its rarity is irrelevant to its
- * SHOP_START transform, so upgrading it would only be confusing.
+ * Immortality (47) grants a fixed (non-rarity-scaled) effect, so a duplicate
+ * buy is meant to stay a genuine 2nd ring (equippable in both hands) rather
+ * than a pointless rarity-upgrade preview.
  */
 export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Flask, Ring of Immortality
 
@@ -139,10 +150,10 @@ export const SECOND_WIND_THRESHOLD = 0.3;
 
 /** Band of Vigor (27): burst heal on proc, as a fraction of the wearer's max HP. */
 export function secondWindHealFraction(rarity: number): number {
-    return 0.1 + 0.05 * rarity;
+    return 0.1 + 0.1 * rarity;
 }
 
 /** Band of Vigor (27): invulnerability window granted on proc. */
 export function secondWindInvulnMs(rarity: number): number {
-    return 500 + 300 * rarity;
+    return 500 + 500 * rarity;
 }

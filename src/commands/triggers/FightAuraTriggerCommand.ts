@@ -5,6 +5,7 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {BehaviorContext} from '../../common/BehaviorContext';
 import {Player} from '../../players/schema/PlayerSchema';
 import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
+import {baseLuckyFindChance} from '../ShopUpgradeUtils';
 
 export class FightAuraTriggerCommand extends Command<FightRoom> {
     execute() {
@@ -65,5 +66,18 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
                 );
             }
         });
+
+        // Keep the hidden shop-roll stat seeded during the fight too — previously only the draft
+        // ever wrote it, so it displayed 0% mid-fight. Registered LAST, not first: ClockTimer.tick()
+        // (see @colyseus/timer ClockTimer.ts) iterates its `delayed` list in REVERSE registration
+        // order, so the most-recently-pushed interval runs FIRST each tick. Registering this seed
+        // after the talent/item loops above means it still executes before them every tick, so any
+        // of them that modify luckyFindChance (Black Market Contact, Ring of Immortality) compose
+        // on a fresh base instead of the base clobbering their result a moment later.
+        this.state.skillsTimers.push(
+            this.clock.setInterval(() => {
+                player.luckyFindChance = baseLuckyFindChance(player.level);
+            }, 1000)
+        );
     }
 }
