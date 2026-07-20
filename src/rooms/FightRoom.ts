@@ -18,7 +18,7 @@ import { TalentType } from '../talents/types/TalentTypes';
 import { ensureMartialFists } from '../talents/behavior/TalentBehaviors';
 import { cloneItem, getItemById, getQuestItems } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyRarityUpgrade, getEquippedUpgradeableItems } from '../commands/ShopUpgradeUtils';
+import { applyRarityUpgrade, getEquippedUpgradeableItems, totalRemainingRaritySteps } from '../commands/ShopUpgradeUtils';
 import { FightAuraTriggerCommand } from '../commands/triggers/FightAuraTriggerCommand';
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
@@ -45,6 +45,12 @@ export class FightRoom extends Room {
     // Built once in handleFightEnd, before any end_battle broadcast — included in every
     // end_battle payload and the saved replay doc. null until the fight actually concludes.
     private fightStatsPayload: FightStatsMessage | null = null;
+    // clock.elapsedTime at the moment the battle actually starts (set in startBattle()).
+    // The end-burn countdown/gate must be measured from here, not from room creation —
+    // otherwise the pre-battle DB-load delay + 3-2-1 countdown (during which update()
+    // skips recalculating endBurnCountdownMs, gated on battleStarted) get silently
+    // absorbed into the timer, making it visibly jump once the fight starts.
+    private battleStartElapsedTime = 0;
 
     onCreate() {
         this.state = new FightState();
@@ -343,9 +349,10 @@ export class FightRoom extends Room {
             this.checkBurn(this.state.player, this.state.enemy);
             this.checkBurn(this.state.enemy, this.state.player);
 
-            this.state.endBurnCountdownMs = Math.max(0, END_BURN_START_MS - this.clock.elapsedTime);
+            const battleElapsedTime = this.clock.elapsedTime - this.battleStartElapsedTime;
+            this.state.endBurnCountdownMs = Math.max(0, END_BURN_START_MS - battleElapsedTime);
 
-            if (this.clock.elapsedTime > END_BURN_START_MS && !this.state.endBurnTimer) {
+            if (battleElapsedTime > END_BURN_START_MS && !this.state.endBurnTimer) {
                 this.startEndBurnTimer();
             }
 
@@ -566,6 +573,7 @@ export class FightRoom extends Room {
 
     //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
     startBattle() {
+        this.battleStartElapsedTime = this.clock.elapsedTime;
         this.replayId = randomUUID();
         this.recorder.start({
             player: snapshotPlayer(this.state.player),
@@ -710,11 +718,15 @@ export class FightRoom extends Room {
             const goldAmount = this.state.player.lives === 1 ? 30
                              : this.state.player.lives === 2 ? 20
                              : 10;
+            // Cap the advertised rolls at what the equipped pool can actually absorb —
+            // each roll bumps one item by exactly one rarity step, so a pool that's
+            // mostly maxed out (or has fewer items than rolls) can't use them all.
+            const upgradeCount = Math.min(this.lossItemUpgradeRolls(), totalRemainingRaritySteps(this.state.player));
             this.state.lossRewardOptions = {
                 goldAmount,
                 xpAmount: Math.round(goldAmount * 1.5),
-                itemUpgradeAvailable: getEquippedUpgradeableItems(this.state.player).length > 0,
-                itemUpgradeCount: this.lossItemUpgradeRolls(),
+                itemUpgradeAvailable: upgradeCount > 0,
+                itemUpgradeCount: upgradeCount,
             };
             this.state.lossRewardPending = true;
             this.broadcast('end_battle', this.buildLossEndBattlePayload());
@@ -787,8 +799,9 @@ export class FightRoom extends Room {
     private async applyLossItemUpgrade(fallbackGold: number) {
         const player = this.state.player;
         // Each roll re-samples the eligible pool, so the same item can be picked again
-        // and climb multiple rarity steps in one loss.
-        const upgradeRolls = this.lossItemUpgradeRolls();
+        // and climb multiple rarity steps in one loss. Use the already-computed,
+        // client-facing count (capped to what the pool can absorb) so applied == displayed.
+        const upgradeRolls = this.state.lossRewardOptions?.itemUpgradeCount ?? this.lossItemUpgradeRolls();
         const upgradedBySlot = new Map<string, { item: Item; slot: string }>();
 
         for (let i = 0; i < upgradeRolls; i++) {
