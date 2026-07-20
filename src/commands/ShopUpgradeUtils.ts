@@ -118,13 +118,16 @@ export function applyLuckyShopUpgrades(target: Item, source: Item, player: Playe
 }
 
 /** Equipped items eligible for a rarity upgrade. Skips non-upgradeable ids,
- *  quest items (own rarity progression) and MYTHIC items. Entries carry their
- *  slot key for the MapSchema re-set gotcha. */
+ *  quest items (own rarity progression), synthetic itemId-0 fists (Martial
+ *  Artist's martial_fist and the plain unarmed fist — never in the DB, so
+ *  getItemById would return null for them) and MYTHIC items. Entries carry
+ *  their slot key for the MapSchema re-set gotcha. */
 export function getEquippedUpgradeableItems(player: Player): Array<{ item: Item; slot: string }> {
   const candidates: Array<{ item: Item; slot: string }> = [];
 
   player.equippedItems.forEach((item, slot) => {
     if (
+      item.itemId > 0 &&
       !NON_UPGRADEABLE_ITEM_IDS.has(item.itemId) &&
       !item.tags?.includes('quest') &&
       !item.tags?.includes('dual_wield_copy') &&
@@ -135,6 +138,14 @@ export function getEquippedUpgradeableItems(player: Player): Array<{ item: Item;
   });
 
   return candidates;
+}
+
+/** Sum of remaining rarity steps (to MYTHIC) across all upgrade-eligible equipped
+ *  items — the ceiling on how many rarity-upgrade rolls can actually land, since
+ *  each roll bumps one item by exactly one step. */
+export function totalRemainingRaritySteps(player: Player): number {
+  return getEquippedUpgradeableItems(player)
+    .reduce((sum, { item }) => sum + (ItemRarity.MYTHIC - item.rarity), 0);
 }
 
 export function findOwnedUpgradeTarget(player: Player, itemId: number): Item | null {
