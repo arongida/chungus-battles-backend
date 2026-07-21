@@ -707,7 +707,8 @@ export const TalentBehaviors = {
 
             if (
                 !attacker.inventory.find((item) => item.itemId === 703) &&
-                !(attacker.equippedItems.get(EquipSlot.OFF_HAND)?.itemId === 703)
+                !(attacker.equippedItems.get(EquipSlot.OFF_HAND)?.itemId === 703) &&
+                !(attacker.equippedItems.get(EquipSlot.MAIN_HAND)?.itemId === 703)
             ) {
                 const diceItem = questItems?.find((item) => item.itemId === 703);
                 if (diceItem) {
