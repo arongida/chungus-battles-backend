@@ -76,7 +76,7 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
         // on a fresh base instead of the base clobbering their result a moment later.
         this.state.skillsTimers.push(
             this.clock.setInterval(() => {
-                player.luckyFindChance = baseLuckyFindChance(player.level);
+                player.luckyFindChance = baseLuckyFindChance(player.level) + player.luckyFindMythicBonus;
             }, 1000)
         );
     }

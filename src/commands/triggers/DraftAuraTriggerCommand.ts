@@ -13,7 +13,9 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
 
         // Re-seed the hidden shop-roll stat from level every tick, before aura talents run,
         // so a talent that scales it (e.g. Black Market Contact) composes in the same pass.
-        player.luckyFindChance = baseLuckyFindChance(player.level);
+        // The permanent Lucky Find Mythic-buy bonus (luckyFindMythicBonus) is folded in here so
+        // talent multipliers compose on top of base+bonus, same as they already do for base alone.
+        player.luckyFindChance = baseLuckyFindChance(player.level) + player.luckyFindMythicBonus;
 
         // Re-seed the reroll cost to its base every tick, before aura talents run, so talents
         // that adjust it (Comrade +income, Bargain Hunter -1) apply as deltas on a clean base

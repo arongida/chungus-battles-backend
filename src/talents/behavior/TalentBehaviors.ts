@@ -11,7 +11,7 @@ import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { WEAPON_BASE_RANGES, clampTier } from "../../items/stats/itemStatPool";
-import { applyRarityUpgrade, applyLuckyShopUpgrades, shieldDescription } from "../../commands/ShopUpgradeUtils";
+import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, shieldDescription } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, RewardGainMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
@@ -275,7 +275,7 @@ export const TalentBehaviors = {
     },
 
     [TalentType.WEAPON_WHISPERER]: async (context: TalentBehaviorContext) => {
-        const { attacker, client, talent } = context;
+        const { attacker, client, talent, defender } = context;
         const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
         // Quest weapons (e.g. Magic Ring) have their own rarity progression
         // (level-up rolls) and must not be insta-mythic'd out of it.
@@ -317,10 +317,11 @@ export const TalentBehaviors = {
         // Each step merges a freshly rolled copy — like buying shop duplicates —
         // so the mythic ends up with varied affixes, not one stat multiplied.
         weapon.rarity = originalRarity;
+        let reachedMythic = false;
         while (weapon.rarity < ItemRarity.MYTHIC) {
             const rolledSource = cloneItem(baseItem);
             rollItemStats(rolledSource);
-            applyRarityUpgrade(weapon, rolledSource, attacker, false);
+            reachedMythic = applyRarityUpgrade(weapon, rolledSource, attacker, false) || reachedMythic;
         }
         weaponWhispererFinalRolls.set(weapon, cloneItem(weapon));
 
@@ -329,6 +330,19 @@ export const TalentBehaviors = {
             playerId: attacker.playerId,
             talentId: TalentType.WEAPON_WHISPERER,
         });
+
+        // This aura talent ticks in both DraftRoom and FightRoom — `defender` is only ever
+        // set in a fight context (see the Magic Ring AURA handler's identical idiom), so it's
+        // the established way to pick the room-appropriate log channel here.
+        if (reachedMythic) {
+            grantLuckyFindMythicBonus(attacker);
+            if (defender) {
+                client.send('combat_log', { text: `Permanent +1% Lucky Find chance from ${weapon.name} going Mythic!`, kind: 'reward', attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
+            } else {
+                client.send('draft_log', `Permanent +1% Lucky Find chance from ${weapon.name} going Mythic!`);
+            }
+            client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+        }
     },
 
     // Gold Genie — AURA trigger (ticks every ~1s in both draft and fight rooms). Raises every
@@ -689,7 +703,7 @@ export const TalentBehaviors = {
 
     [TalentType.GAMBLER]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, questItems } = context;
+            const { attacker, client, questItems, talent } = context;
 
             if (
                 !attacker.inventory.find((item) => item.itemId === 703) &&
@@ -697,16 +711,28 @@ export const TalentBehaviors = {
             ) {
                 const diceItem = questItems?.find((item) => item.itemId === 703);
                 if (diceItem) {
-                    diceItem.rarity = 2;
-                    diceItem.description = 'Max damage equals your current income.';
+                    // Grant it already caught up to the player's current level (e.g.
+                    // Thief starts at level 2), same pattern as Magic Ring: rarity = level.
+                    diceItem.rarity = Math.min(attacker.level, ItemRarity.MYTHIC);
+                    diceItem.description = `Max damage equals ${Math.round((diceItem.rarity / 2) * 100)}% of income.`;
+                    diceItem.baseAttackSpeed = diceItem.rarity === 2 ? 0.9 : 0.6;
                     attacker.getItem(diceItem);
                     client.send('draft_log', `${attacker.name} found a gambler's dice!`);
                     client.send('trigger_talent', {
                         playerId: attacker.playerId,
                         talentId: TalentType.GAMBLER,
                     });
+                    // Only reachable at max level (5), where the dice is granted already Mythic.
+                    if (diceItem.rarity === ItemRarity.MYTHIC) {
+                        grantLuckyFindMythicBonus(attacker);
+                        client.send('draft_log', `Permanent +1% Lucky Find chance from the gambler's dice being Mythic!`);
+                        client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+                    }
                 }
             }
+
+            // Baseline income scales with level; re-seeded every aura tick like MERCHANT_5.
+            talent.affectedStats.income = attacker.level;
         },
 
     [TalentType.MAGIC_RING_WEAPON]:
@@ -735,6 +761,12 @@ export const TalentBehaviors = {
                         playerId: attacker.playerId,
                         talentId: TalentType.MAGIC_RING_WEAPON,
                     });
+                    // Only reachable at max level (5), where the catch-up loop reaches Mythic.
+                    if (ringWeapon.rarity === ItemRarity.MYTHIC) {
+                        grantLuckyFindMythicBonus(attacker);
+                        client.send('draft_log', `Permanent +1% Lucky Find chance from the ring weapon being Mythic!`);
+                        client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+                    }
                 }
             }
         },

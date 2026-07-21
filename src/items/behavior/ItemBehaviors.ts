@@ -1,7 +1,8 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
 import { EquipSlot, ItemRarity, ItemType } from '../types/ItemTypes';
-import { CombatLogMessage, fmt } from '../../common/MessageTypes';
+import { CombatLogMessage, RewardGainMessage, fmt } from '../../common/MessageTypes';
+import { grantLuckyFindMythicBonus } from '../../commands/ShopUpgradeUtils';
 import {
     chungiHpDamageFraction,
     FLOWERING_STAFF_INVULN_COOLDOWN_MS,
@@ -141,7 +142,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     // in affectedStats (no separate tracking needed) — see uniqueItemBalance.ts.
     // SHOP_START — while it sits unequipped in inventory, rerolls a fresh set
     // of stats for its current rarity, losing all stacking bonuses.
-    702: ({ attacker, defender, item, trigger }) => {
+    702: ({ attacker, defender, item, trigger, client }) => {
         if (!attacker || !item) return;
 
         if (trigger === TriggerType.SHOP_START) {
@@ -157,6 +158,13 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
             if (item.rarity >= ItemRarity.MYTHIC) return;
             item.rarity++;
             rollMagicRingBonus(item);
+            // LEVEL_UP only ever resolves in DraftRoom (LevelUpTriggerCommand extends
+            // Command<DraftRoom>), so draft_log is always the right channel here.
+            if (item.rarity === ItemRarity.MYTHIC) {
+                grantLuckyFindMythicBonus(attacker);
+                client?.send('draft_log', `Permanent +1% Lucky Find chance from ${item.name} being Mythic!`);
+                client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+            }
         } else {
             // AURA fires in the draft/shop too — only stack while actually fighting.
             if (!defender) return;
@@ -168,9 +176,26 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         });
     },
 
-    // Gambler's Dice (703) — rarity 2+: max damage equals income * (rarity/2).
-    703: ({ attacker, item }) => {
-        if (!attacker || !item || item.rarity <= 1) return;
+    // Gambler's Dice (703) — evolves with player level (talent grants it at
+    // rarity = level, capped Mythic, same as Magic Ring). LEVEL_UP bumps rarity
+    // further; base attack speed scales +50% per tier and max damage = income *
+    // (rarity/2), recomputed each fight/attack from current income.
+    703: ({ attacker, item, trigger, client }) => {
+        if (!attacker || !item) return;
+        if (trigger === TriggerType.LEVEL_UP) {
+            if (item.rarity < ItemRarity.MYTHIC) {
+                item.rarity++;
+                item.description = `Max damage equals ${Math.round((item.rarity / 2) * 100)}% of income.`;
+                // LEVEL_UP only ever resolves in DraftRoom (LevelUpTriggerCommand extends
+                // Command<DraftRoom>), so draft_log is always the right channel here.
+                if (item.rarity === ItemRarity.MYTHIC) {
+                    grantLuckyFindMythicBonus(attacker);
+                    client?.send('draft_log', `Permanent +1% Lucky Find chance from ${item.name} being Mythic!`);
+                    client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+                }
+            }
+        }
+        item.baseAttackSpeed = 0.6 * (1 + 0.5 * (item.rarity - 1));
         item.baseMaxDamage = attacker.income * (item.rarity / 2);
         attacker.equippedItems.forEach((equipped, slot) => {
             if (equipped === item) attacker.equippedItems.set(slot, equipped);

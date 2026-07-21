@@ -40,6 +40,10 @@ const PlayerSchema = new Schema({
     nextFightEnemyId: Number,
     nextFightEnemyRound: Number,
     pendingRegenBuff: {type: Number, default: 0},
+    // Permanent Lucky Find snowball bonus (see PlayerSchema.luckyFindMythicBonus) — persisted
+    // normally, unlike pendingRegenBuff it is NOT reset in copyPlayer since it only affects the
+    // owner's own future shop rolls, never an opponent-bot snapshot's fight stats.
+    luckyFindMythicBonus: {type: Number, default: 0},
     // "Runs ended" leaderboard stat: how many other characters' final loss this character
     // delivered. Mutated ONLY via incrementRunsEnded's targeted $inc on the killer's original
     // doc — deliberately excluded from playerToPlainObject so a concurrent live save from the
@@ -322,6 +326,7 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         defense: player.defense,
         attackSpeed: player.attackSpeed,
         pendingRegenBuff: player.pendingRegenBuff,
+        luckyFindMythicBonus: player.luckyFindMythicBonus,
         killedByPlayerId: player.killedByPlayerId,
         killedByOriginalPlayerId: player.killedByOriginalPlayerId,
         killedByName: player.killedByName,

@@ -40,7 +40,7 @@ const MAGIC_RING_STAT_POOL: RollableStat[] = [
 ];
 
 /** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
-const MAGIC_RING_STACK_FRACTION = 0.05;
+const MAGIC_RING_STACK_FRACTION = 0.06;
 
 export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats every second in combat and evolves on level up. Unequip for one fight and stats will be rerolled.';
 
@@ -61,7 +61,7 @@ function magicRingStackAmount(stat: RollableStat, rarity: number): number {
 export function rollMagicRingBonus(item: Item): void {
     const stat = rollNextMagicRingStat(item.affectedStats);
     if (!stat) return;
-    (item.affectedStats as any)[stat] += 10 * magicRingStackAmount(stat, item.rarity);
+    (item.affectedStats as any)[stat] += 12 * magicRingStackAmount(stat, item.rarity);
 }
 
 /** Magic Ring (702): adds one second's worth of growth to a random stat already rolled (non-zero) on this item. */
