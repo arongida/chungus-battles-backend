@@ -17,8 +17,8 @@ export function chungiHpDamageFraction(rarity: number): number {
  * bonuses are while-equipped only — nothing is banked or persisted.
  */
 export const RING_OF_IMMORTALITY_ITEM_ID = 47;
-export const RING_OF_IMMORTALITY_XP_MULTIPLIER = 1.5;
-export const RING_OF_IMMORTALITY_LUCKY_FIND_MULTIPLIER = 1.5;
+export const RING_OF_IMMORTALITY_XP_MULTIPLIER = 2;
+export const RING_OF_IMMORTALITY_LUCKY_FIND_MULTIPLIER = 2;
 
 /**
  * Magic Ring (702): not a weapon, does not attack. Starts Common with one

@@ -23,7 +23,8 @@ export const SEASONS: SeasonInfo[] = [
     changes: [
       'Martial Artist - reduced fist base attack speed and damage',
       'Slightly reduce tier 5 item power',
-      'Ring of Immortality reworked: now an equippable ring (no weapon damage) that grants +50% XP gained and +50% lucky find chance while equipped'
+      'Ring of Immortality reworked: now an equippable ring (no weapon damage) that grants +100% XP gained and +100% lucky find chance while equipped',
+      'Zealot - remove dodge scaling'
     ],
   },
   {
