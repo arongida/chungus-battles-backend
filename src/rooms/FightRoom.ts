@@ -18,7 +18,7 @@ import { TalentType } from '../talents/types/TalentTypes';
 import { ensureMartialFists } from '../talents/behavior/TalentBehaviors';
 import { cloneItem, getItemById, getQuestItems } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyRarityUpgrade, getEquippedUpgradeableItems, totalRemainingRaritySteps } from '../commands/ShopUpgradeUtils';
+import { applyRarityUpgrade, getEquippedUpgradeableItems, grantLuckyFindMythicBonus, totalRemainingRaritySteps } from '../commands/ShopUpgradeUtils';
 import { FightAuraTriggerCommand } from '../commands/triggers/FightAuraTriggerCommand';
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
@@ -822,9 +822,15 @@ export class FightRoom extends Room {
             // Merge a freshly rolled copy of the template, same as lucky shop finds.
             const rolled = cloneItem(base);
             rollItemStats(rolled);
-            applyRarityUpgrade(picked.item, rolled, player, false);
+            const reachedMythic = applyRarityUpgrade(picked.item, rolled, player, false);
             if (picked.slot) player.equippedItems.set(picked.slot, picked.item);
             upgradedBySlot.set(picked.slot, picked);
+
+            if (reachedMythic) {
+                grantLuckyFindMythicBonus(player);
+                this.logCombat('broadcast', { text: `${picked.item.name} became Mythic! Permanent +1% Lucky Find chance!`, kind: 'reward', itemId: picked.item.itemId });
+                this.broadcast('reward_gain', { playerId: player.playerId, luckyFind: true } as RewardGainMessage);
+            }
         }
 
         const upgradedItems = Array.from(upgradedBySlot.values()).map(({ item }) => ({

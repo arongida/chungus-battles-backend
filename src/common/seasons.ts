@@ -24,7 +24,15 @@ export const SEASONS: SeasonInfo[] = [
       'Martial Artist - reduced fist base attack speed and damage',
       'Slightly reduce tier 5 item power',
       'Ring of Immortality reworked: now an equippable ring (no weapon damage) that grants +100% XP gained and +100% lucky find chance while equipped',
-      'Zealot - remove dodge scaling'
+      'Zealot - remove dodge scaling',
+      'Scam - cooldown halved',
+      'Guardigan Angel - moved to tier 4',
+      'Bargain Hunter - moved to tier 3',
+      'Learn by doing - moved to tier 2',
+      'Magic ring - slightly increased stats',
+      'Gambler reworked: dice now grows in rarity as you level (up to Mythic), gaining base attack speed and damage; talent also grants scaling income',
+      'Haste of Dagger - reduced dodge from 30 to 20',
+      'Lucky Find - gain 1% permanent bonus when you upgrade or buy a mythic item'
     ],
   },
   {

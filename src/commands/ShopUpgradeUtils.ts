@@ -55,7 +55,11 @@ export function shieldDescription(tier: number): string {
   return `${((500 + 500 * tier) / 1000).toFixed(1)}s invulnerability at fight start.`;
 }
 
-export function applyRarityUpgrade(target: Item, source: Item, player: Player, increaseSellPrice = true): void {
+/** Returns true when this step just brought `target` to MYTHIC (i.e. it wasn't already there) —
+ *  callers that represent a genuine acquisition (as opposed to rolling/previewing an unowned
+ *  shop item) should react to a true return by calling grantLuckyFindMythicBonus. */
+export function applyRarityUpgrade(target: Item, source: Item, player: Player, increaseSellPrice = true): boolean {
+  const wasMythic = target.rarity >= ItemRarity.MYTHIC;
   target.rarity++;
   if (increaseSellPrice) target.sellPrice += source.sellPrice;
   updateRarityDescription(target, player);
@@ -71,6 +75,23 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
     target.baseMaxDamage   += source.baseMaxDamage   * maxDamageScale;
     target.baseAttackSpeed += source.baseAttackSpeed * 0.5;
   }
+  return !wasMythic && target.rarity >= ItemRarity.MYTHIC;
+}
+
+/** Permanently grants the Lucky Find Mythic-acquisition bonus (PlayerSchema.luckyFindMythicBonus)
+ *  — call exactly once per NEW Mythic item genuinely obtained (shop buy/upgrade, loss-reward item
+ *  upgrade, or a talent/item instantly maxing an owned/equipped item to Mythic). Deliberately NOT
+ *  called for shop-preview rolling (DraftRoom.updateShop, applyLuckyShopUpgrades, Gold Genie's
+ *  shop-item floor) since those items haven't been acquired yet — the bonus is earned at the
+ *  moment of purchase (DraftRoom.buyItem), not when an un-bought shop slot happens to roll high.
+ *  Does not send any message — callers own their own room-appropriate celebration (draft_log or
+ *  combat_log, plus a `reward_gain` with `luckyFind: true` for the avatar fireworks/floating
+ *  text), since the right message type differs between DraftRoom and FightRoom. */
+export function grantLuckyFindMythicBonus(player: Player): void {
+  player.luckyFindMythicBonus += 0.01;
+  // Bump the live displayed chance immediately too — the next aura tick will re-seed it from
+  // base+bonus anyway, but this avoids a brief window where the badge lags.
+  player.luckyFindChance += 0.01;
 }
 
 /** Base (un-modified) lucky-find rarity-up chance for a shop slot at this level.

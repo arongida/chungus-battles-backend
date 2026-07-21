@@ -111,7 +111,7 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
         5: { min: 48, max: 86  },
     },
     hpRegen: {
-        1: { min: 0, max: 2, isFloat: true },
+        1: { min: 0.5, max: 2, isFloat: true },
         2: { min: 1, max: 3, isFloat: true },
         3: { min: 2, max: 5, isFloat: true },
         4: { min: 4, max: 8, isFloat: true },

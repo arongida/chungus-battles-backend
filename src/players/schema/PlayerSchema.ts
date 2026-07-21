@@ -183,6 +183,13 @@ export class Player extends Schema implements IStats {
     // hidden stats) so the client can display it next to gold/income.
     // Declared here (end of the @type block) so existing field indices stay stable.
     @type('number') luckyFindChance: number = 0;
+    // Permanent snowball bonus to luckyFindChance: +0.01 every time the player buys an item
+    // (or an upgrade-preview buy) that lands on ItemRarity.MYTHIC (DraftRoom.buyItem). Folded
+    // into the luckyFindChance seed every aura tick (DraftAuraTriggerCommand/FightAuraTriggerCommand)
+    // and at draft setup (DraftRoom.setUpState) so it survives — unlike luckyFindChance itself,
+    // which is a hidden derived stat re-seeded from scratch each tick, this persists for the
+    // whole run (see Player Copy Mechanism in CLAUDE.md — mirrors pendingRegenBuff's pattern).
+    @type('number') luckyFindMythicBonus: number = 0;
 
     private _poisonStack: number = 0;
 

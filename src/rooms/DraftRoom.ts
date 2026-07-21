@@ -4,7 +4,7 @@ import { buildJoe, copyPlayer, createNewPlayer, getPlayer, getSameRoundPlayer, J
 import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentClasses } from '../players/EnemyPreview';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget } from '../commands/ShopUpgradeUtils';
+import { applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, grantLuckyFindMythicBonus } from '../commands/ShopUpgradeUtils';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
@@ -352,7 +352,7 @@ export class DraftRoom extends Room {
         this.state.remainingTalentPoints = player.level - highestTalentTier;
         // Seed the hidden shop-roll stat for the very first shop of this draft phase — the
         // draft aura tick (which keeps it current afterward) hasn't run yet at this point.
-        this.state.player.luckyFindChance = baseLuckyFindChance(this.state.player.level);
+        this.state.player.luckyFindChance = baseLuckyFindChance(this.state.player.level) + this.state.player.luckyFindMythicBonus;
         this.state.player.refreshShopCost = BASE_REFRESH_SHOP_COST;
         await this.updateTalentSelection();
 
@@ -383,6 +383,17 @@ export class DraftRoom extends Room {
             return;
         }
         this.state.player.getItem(item);
+        // Lucky Find mastery: every Mythic acquisition (plain buy or an upgrade-preview buy that
+        // lands on Mythic — both flow through here) grants a permanent +1% Lucky Find chance for
+        // the rest of the run (see ShopUpgradeUtils.baseLuckyFindChance callers / PlayerSchema.
+        // luckyFindMythicBonus). Celebrated on the avatar via reward_gain (not the shop card) —
+        // upgrade-preview buys destroy and recreate the item's DOM node, which broke the
+        // card-anchored shop_floating version of this celebration.
+        if (item.rarity === ItemRarity.MYTHIC) {
+            grantLuckyFindMythicBonus(this.state.player);
+            client.send('draft_log', `Mythic forged! Permanent +1% Lucky Find chance!`);
+            client.send('reward_gain', { playerId: this.state.player.playerId, luckyFind: true } as RewardGainMessage);
+        }
         if (luckyFree) {
             this.state.player.luckyFindClaimUsed = true;
             this.state.player.luckyFindFreeClaim = false;
@@ -568,6 +579,7 @@ export class DraftRoom extends Room {
                 break;
             case PlayerAvatar.MERCHANT:
                 base.income += 2;
+                base.maxHp += 10;
                 break;
         }
 
