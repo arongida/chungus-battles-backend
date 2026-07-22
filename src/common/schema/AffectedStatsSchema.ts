@@ -29,3 +29,17 @@ export class AffectedStats extends Schema {
 
     }
 }
+
+/**
+ * Builds an AffectedStats from a raw DB object, normalizing attackSpeed to its base-1 baseline.
+ * A stored/absent 0 means "no change" for the read-side guard (see statsUtils.recalculatePlayerStats),
+ * but leaving it at 0 makes any later additive write (behaviors doing `affectedStats.attackSpeed += x`)
+ * collapse a bonus into a ~-95% penalty instead of the intended small boost. Normalizing 0 -> 1 keeps
+ * every AffectedStats on the same base-1 scale. Legit enemy slow-debuffs are stored as fractions like
+ * 0.7 (not 0), so they are untouched by this normalization.
+ */
+export function affectedStatsFromRaw(raw: any): AffectedStats {
+    const stats = new AffectedStats().assign(raw || {});
+    if (!stats.attackSpeed) stats.attackSpeed = 1;
+    return stats;
+}

@@ -912,6 +912,7 @@ export const TalentBehaviors = {
             talent.affectedStats.dodgeRate = 0;
             talent.affectedStats.income = 0;
             talent.affectedStats.hpRegen = 0;
+            talent.affectedStats.attackSpeed = 1;
 
             attacker.equippedItems.forEach((item) => {
                 if (item.class === ItemClass.WARRIOR) {
@@ -922,6 +923,11 @@ export const TalentBehaviors = {
                     talent.affectedStats.dodgeRate += item.affectedStats.dodgeRate * talent.activationRate;
                     talent.affectedStats.income += item.affectedStats.income * talent.activationRate;
                     talent.affectedStats.hpRegen += item.affectedStats.hpRegen * talent.activationRate;
+                    // attackSpeed is a base-1 multiplier, not additive-from-0 like the other stats
+                    // above — only amplify the item's actual bonus (its value above 1).
+                    if (item.affectedStats.attackSpeed > 1) {
+                        talent.affectedStats.attackSpeed += (item.affectedStats.attackSpeed - 1) * talent.activationRate;
+                    }
                 }
             });
 

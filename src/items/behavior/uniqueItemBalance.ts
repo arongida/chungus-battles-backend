@@ -24,19 +24,20 @@ export const RING_OF_IMMORTALITY_LUCKY_FIND_MULTIPLIER = 2;
  * Magic Ring (702): not a weapon, does not attack. Starts Common with one
  * randomly rolled stat that grows permanently once per second (AURA) while
  * in a fight. Each level-up bumps its rarity and rolls another stat into
- * the mix, until all 5 are active at Mythic (level 5).
+ * the mix, until all 6 are active at Mythic (level 5).
  *
  * No separate "which stats are active" tracking is kept — a stat counts as
- * rolled once its `affectedStats` value is non-zero, since that's what
+ * rolled once its bonus (see `ringStatBonus`) is non-zero, since that's what
  * persists across the draft/fight DB round-trip and is already shown to the
  * player via the normal item stat display.
  *
- * attackSpeed is excluded from the pool — stacking it would create a
- * feedback loop that no longer even applies now that the ring doesn't
- * attack, but is kept excluded for consistency with other stacking effects.
+ * attackSpeed is included, but on a different scale than the rest: it's a
+ * multiplier based at 1 (1 = no change), not an additive-from-0 value, so
+ * `ringStatBonus`/`addRingStatBonus` below special-case it rather than
+ * touching `affectedStats.attackSpeed` directly.
  */
 const MAGIC_RING_STAT_POOL: RollableStat[] = [
-    'strength', 'accuracy', 'defense', 'maxHp', 'dodgeRate', 'hpRegen', 'income',
+    'strength', 'accuracy', 'defense', 'maxHp', 'dodgeRate', 'hpRegen', 'income', 'attackSpeed',
 ];
 
 /** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
@@ -44,32 +45,58 @@ const MAGIC_RING_STACK_FRACTION = 0.06;
 
 export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats every second in combat and evolves on level up. Unequip for one fight and stats will be rerolled.';
 
-/** Picks a pool stat not yet rolled on this item (still zero), or null once the pool is exhausted. */
+/**
+ * A ring stat's bonus above its neutral baseline. Every stat but attackSpeed
+ * is additive-from-0, so its raw value is its bonus. attackSpeed is a
+ * multiplier based at 1 ("no change"), so its bonus is the amount above 1.
+ */
+function ringStatBonus(affectedStats: Item['affectedStats'], stat: RollableStat): number {
+    const v = (affectedStats as any)[stat] || 0;
+    if (stat === 'attackSpeed') return v <= 1 ? 0 : v - 1;
+    return v;
+}
+
+/** Adds `delta` to a ring stat's bonus, keeping attackSpeed on its base-1 multiplier scale. */
+function addRingStatBonus(affectedStats: Item['affectedStats'], stat: RollableStat, delta: number): void {
+    if (stat === 'attackSpeed') {
+        (affectedStats as any).attackSpeed = 1 + ringStatBonus(affectedStats, stat) + delta;
+    } else {
+        (affectedStats as any)[stat] += delta;
+    }
+}
+
+/** Picks a pool stat not yet rolled on this item (bonus still zero), or null once the pool is exhausted. */
 function rollNextMagicRingStat(affectedStats: Item['affectedStats']): RollableStat | null {
-    const available = MAGIC_RING_STAT_POOL.filter((stat) => !(affectedStats as any)[stat]);
+    const available = MAGIC_RING_STAT_POOL.filter((stat) => ringStatBonus(affectedStats, stat) === 0);
     if (available.length === 0) return null;
     return available[Math.floor(Math.random() * available.length)];
 }
 
-/** Per-second growth for one active stat at the ring's current rarity. */
+/**
+ * Per-second growth for one active stat at the ring's current rarity.
+ * attackSpeed scales off its bonus range (max - 1, since STAT_RANGES.attackSpeed
+ * is expressed as a base-1 multiplier), not the raw multiplier value.
+ */
 function magicRingStackAmount(stat: RollableStat, rarity: number): number {
     const tier = Math.min(5, Math.max(1, rarity));
-    return Math.round(STAT_RANGES[stat][tier].max * MAGIC_RING_STACK_FRACTION * 100) / 100;
+    const max = STAT_RANGES[stat][tier].max;
+    const scale = stat === 'attackSpeed' ? max - 1 : max;
+    return Math.round(scale * MAGIC_RING_STACK_FRACTION * 100) / 100;
 }
 
-/** Magic Ring (702): rolls a new stat straight into `affectedStats` (non-zero from the start) at the ring's current rarity. */
+/** Magic Ring (702): rolls a new stat straight into `affectedStats` (non-zero bonus from the start) at the ring's current rarity. */
 export function rollMagicRingBonus(item: Item): void {
     const stat = rollNextMagicRingStat(item.affectedStats);
     if (!stat) return;
-    (item.affectedStats as any)[stat] += 12 * magicRingStackAmount(stat, item.rarity);
+    addRingStatBonus(item.affectedStats, stat, 12 * magicRingStackAmount(stat, item.rarity));
 }
 
-/** Magic Ring (702): adds one second's worth of growth to a random stat already rolled (non-zero) on this item. */
+/** Magic Ring (702): adds one second's worth of growth to a random stat already rolled (non-zero bonus) on this item. */
 export function stackMagicRingBonuses(item: Item): void {
-    const rolled = MAGIC_RING_STAT_POOL.filter((stat) => (item.affectedStats as any)[stat]);
+    const rolled = MAGIC_RING_STAT_POOL.filter((stat) => ringStatBonus(item.affectedStats, stat) > 0);
     if (rolled.length === 0) return;
     const stat = rolled[Math.floor(Math.random() * rolled.length)];
-    (item.affectedStats as any)[stat] += magicRingStackAmount(stat, item.rarity);
+    addRingStatBonus(item.affectedStats, stat, magicRingStackAmount(stat, item.rarity));
 }
 
 /**
@@ -80,17 +107,17 @@ export function stackMagicRingBonuses(item: Item): void {
  * the ring sits unequipped in inventory (see ItemBehaviors.ts).
  */
 export function rerollMagicRingStats(item: Item): void {
-    const activeCount = MAGIC_RING_STAT_POOL.filter((stat) => (item.affectedStats as any)[stat]).length;
+    const activeCount = MAGIC_RING_STAT_POOL.filter((stat) => ringStatBonus(item.affectedStats, stat) > 0).length;
     if (activeCount === 0) return;
 
     for (const stat of MAGIC_RING_STAT_POOL) {
-        (item.affectedStats as any)[stat] = 0;
+        (item.affectedStats as any)[stat] = stat === 'attackSpeed' ? 1 : 0;
     }
 
     const pool = [...MAGIC_RING_STAT_POOL];
     for (let i = 0; i < activeCount; i++) {
         const [stat] = pool.splice(Math.floor(Math.random() * pool.length), 1);
-        (item.affectedStats as any)[stat] = 10 * magicRingStackAmount(stat, item.rarity);
+        addRingStatBonus(item.affectedStats, stat, 10 * magicRingStackAmount(stat, item.rarity));
     }
 }
 
