@@ -6,7 +6,7 @@ import {TalentSchema} from "../../talents/db/Talent";
 import {Talent} from "../../talents/schema/TalentSchema";
 import {ArraySchema, MapSchema} from "@colyseus/schema";
 import {StatsSchema} from "../../common/db/Stats";
-import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
+import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollItemStats} from "../../items/stats/itemStatRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
@@ -75,8 +75,8 @@ function buildItemSchema(itemFromDb: any): Item {
     const { affectedStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
     if (!item.sellPrice) item.sellPrice = Math.floor(item.price * item.rarity * 0.7);
-    item.affectedStats = new AffectedStats().assign(affectedStats || {});
-    item.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
+    item.affectedStats = affectedStatsFromRaw(affectedStats);
+    item.affectedEnemyStats = affectedStatsFromRaw(affectedEnemyStats);
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
     item.tags = tagsArr;
@@ -102,7 +102,7 @@ function getPlayerSchemaObject(playerFromDb: any): Player {
     const { baseStats, equippedItems, talents, inventory, lockedShop, ...primitives } = playerFromDb;
 
     const newPlayerSchemaObject = new Player().assign(primitives);
-    newPlayerSchemaObject.baseStats = new AffectedStats().assign(baseStats || {});
+    newPlayerSchemaObject.baseStats = affectedStatsFromRaw(baseStats);
 
     const newPlayerEquippedItemsMapSchema = new MapSchema();
     if (equippedItems) {
@@ -117,8 +117,8 @@ function getPlayerSchemaObject(playerFromDb: any): Player {
     (talents || []).forEach((talent: any) => {
         const { affectedStats: tAs, affectedEnemyStats: tAes, ...talentPrimitives } = talent;
         const talentSchemaObject = new Talent().assign(talentPrimitives);
-        talentSchemaObject.affectedStats = new AffectedStats().assign(tAs || {});
-        talentSchemaObject.affectedEnemyStats = new AffectedStats().assign(tAes || {});
+        talentSchemaObject.affectedStats = affectedStatsFromRaw(tAs);
+        talentSchemaObject.affectedEnemyStats = affectedStatsFromRaw(tAes);
         newPlayerTalentArraySchema.push(talentSchemaObject);
     });
     newPlayerSchemaObject.talents = newPlayerTalentArraySchema;

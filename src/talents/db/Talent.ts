@@ -1,7 +1,7 @@
 import mongoose, {Schema} from 'mongoose';
 import {StatsSchema} from "../../common/db/Stats";
 import {Talent} from "../schema/TalentSchema";
-import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
+import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 
 export const TalentSchema = new Schema({
   talentId: Number,
@@ -49,8 +49,8 @@ export async function getRandomTalents(
 function getTalentSchemaObject(talentObjectFromDb: any): Talent {
   const { affectedStats, affectedEnemyStats, ...primitives } = talentObjectFromDb;
   const newTalent = new Talent().assign(primitives);
-  newTalent.affectedStats = new AffectedStats().assign(affectedStats || {});
-  newTalent.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
+  newTalent.affectedStats = affectedStatsFromRaw(affectedStats);
+  newTalent.affectedEnemyStats = affectedStatsFromRaw(affectedEnemyStats);
   return newTalent;
 }
 

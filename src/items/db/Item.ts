@@ -1,7 +1,7 @@
 import mongoose, {Schema} from 'mongoose';
 import {StatsSchema} from "../../common/db/Stats";
 import {Item} from "../schema/ItemSchema";
-import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
+import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {ArraySchema} from "@colyseus/schema";
 import {rollItemStats} from "../stats/itemStatRoller";
 
@@ -62,8 +62,8 @@ function getItemSchemaObject(itemFromDb: any): Item {
 
     const newItemSchemaObject = new Item().assign(primitives);
     if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);
-    newItemSchemaObject.affectedStats = new AffectedStats().assign(affectedStats || {});
-    newItemSchemaObject.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
+    newItemSchemaObject.affectedStats = affectedStatsFromRaw(affectedStats);
+    newItemSchemaObject.affectedEnemyStats = affectedStatsFromRaw(affectedEnemyStats);
 
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
