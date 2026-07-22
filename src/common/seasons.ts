@@ -32,7 +32,9 @@ export const SEASONS: SeasonInfo[] = [
       'Magic ring - slightly increased stats',
       'Gambler reworked: dice now grows in rarity as you level (up to Mythic), gaining base attack speed and damage; talent also grants scaling income',
       'Haste of Dagger - reduced dodge from 30 to 20',
-      'Lucky Find - gain 1% permanent bonus when you upgrade or buy a mythic item'
+      'Lucky Find - gain 1% permanent bonus when you upgrade or buy a mythic item',
+      'Robbery & Grand Robbery - stolen items now sell for 100% of their price',
+      'Mercenary reworked: at fight end grants 1 gold + your highest weapon hit ÷ 10 (rounded down), win or lose; tracks your all-time record hit in the talent description'
     ],
   },
   {

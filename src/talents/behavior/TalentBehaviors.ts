@@ -600,6 +600,7 @@ export const TalentBehaviors = {
         if (randomItem) {
             attacker.gold += randomItem.price;
             attacker.getItem(randomItem);
+            randomItem.sellPrice = randomItem.price; // stolen items sell for full price
             track(talent, 0, 0, 0);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -961,13 +962,33 @@ export const TalentBehaviors = {
         },
 
     [TalentType.MERCENARY]:
+        // Reuses the standard statDamageDealt/totalDamageDealt tracking fields to store the
+        // highest weapon hit instead of a damage sum: statDamageDealt (reset every fight) holds
+        // this fight's highest hit, totalDamageDealt (never reset) holds the all-time record.
         (context: TalentBehaviorContext) => {
-            const { defender, attacker, client, damage, talent } = context;
-            const chance = damage / talent.base;
-            if (Math.random() < chance) {
-                attacker.gold += 1;
-                track(talent, 1, 0, 0, 1, 0, { client, playerId: attacker.playerId });
-                client.send('combat_log', { text: `${defender.name} bled a gold coin!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
+            const { attacker, client, damage, talent, trigger } = context;
+            if (trigger === TriggerType.ON_ATTACK) {
+                // Migrate pre-rework per-player talent copies that only listen on on-attack.
+                if (!talent.triggerTypes.includes(TriggerType.FIGHT_END)) {
+                    talent.triggerTypes.push(TriggerType.FIGHT_END);
+                }
+                if (damage > talent.statDamageDealt) {
+                    talent.statDamageDealt = damage;
+                    if (damage > talent.totalDamageDealt) {
+                        talent.totalDamageDealt = damage;
+                        client.send('combat_log', { text: `${attacker.name} sets a new all-time record hit: ${fmt(damage)}!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
+                        client.send('trigger_talent', {
+                            playerId: attacker.playerId,
+                            talentId: TalentType.MERCENARY,
+                        });
+                    }
+                }
+            } else if (trigger === TriggerType.FIGHT_END) {
+                if (talent.statDamageDealt <= 0) return;
+                const gold = 1 + Math.floor(talent.statDamageDealt / talent.base);
+                attacker.gold += gold;
+                track(talent, 1, 0, 0, gold, 0, { client, playerId: attacker.playerId });
+                client.send('combat_log', { text: `${attacker.name} gets paid ${gold} gold for a highest hit of ${fmt(talent.statDamageDealt)}!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: gold } as CombatLogMessage);
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     talentId: TalentType.MERCENARY,
@@ -1125,6 +1146,7 @@ export const TalentBehaviors = {
                 if (item.sold) return;
                 attacker.gold += item.price; // refund so getItem nets to free
                 attacker.getItem(item);
+                item.sellPrice = item.price; // stolen items sell for full price
                 stolen++;
             });
 
