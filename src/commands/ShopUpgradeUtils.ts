@@ -88,10 +88,10 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
  *  combat_log, plus a `reward_gain` with `luckyFind: true` for the avatar fireworks/floating
  *  text), since the right message type differs between DraftRoom and FightRoom. */
 export function grantLuckyFindMythicBonus(player: Player): void {
-  player.luckyFindMythicBonus += 0.01;
+  player.luckyFindMythicBonus += 0.03;
   // Bump the live displayed chance immediately too — the next aura tick will re-seed it from
   // base+bonus anyway, but this avoids a brief window where the badge lags.
-  player.luckyFindChance += 0.01;
+  player.luckyFindChance += 0.03;
 }
 
 /** Base (un-modified) lucky-find rarity-up chance for a shop slot at this level.
@@ -120,22 +120,41 @@ export const BASE_REFRESH_SHOP_COST = 2;
  * Returns the number of rarity steps applied.
  */
 export function applyLuckyShopUpgrades(target: Item, source: Item, player: Player): number {
-  const pristine = cloneItem(source);
   const chance = player.luckyFindChance;
+
+  let wantedSteps = 0;
+  while (target.rarity + wantedSteps < ItemRarity.MYTHIC && Math.random() < chance) {
+    wantedSteps++;
+  }
+  return applyExtraRaritySteps(target, source, player, wantedSteps);
+}
+
+/**
+ * Applies exactly `steps` rarity steps to `target` by merging freshly rolled copies of
+ * `source` (stopping early at MYTHIC), then re-prices the slot for the steps actually
+ * applied. Shared by applyLuckyShopUpgrades (chance-rolled steps) and
+ * DraftRoom.rebuildShopSlot (restoring a preview's already-rolled lucky steps).
+ *
+ * Returns the number of steps actually applied (may be less than `steps` if MYTHIC
+ * was hit first).
+ */
+export function applyExtraRaritySteps(target: Item, source: Item, player: Player, steps: number): number {
+  if (steps <= 0) return 0;
+  const pristine = cloneItem(source);
   const basePrice = target.price;
 
-  let steps = 0;
-  while (target.rarity < ItemRarity.MYTHIC && Math.random() < chance) {
+  let applied = 0;
+  while (applied < steps && target.rarity < ItemRarity.MYTHIC) {
     const rolled = cloneItem(pristine);
     rollItemStats(rolled);
     applyRarityUpgrade(target, rolled, player, false);
-    steps++;
+    applied++;
   }
-  if (steps > 0) {
-    target.price = Math.round(basePrice * (1 + 0.5 * steps));
+  if (applied > 0) {
+    target.price = Math.round(basePrice * (1 + 0.5 * applied));
     target.sellPrice = Math.floor(target.price * 0.7);
   }
-  return steps;
+  return applied;
 }
 
 /** Equipped items eligible for a rarity upgrade. Skips non-upgradeable ids,

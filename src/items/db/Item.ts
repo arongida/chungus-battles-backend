@@ -27,6 +27,9 @@ export const ItemSchema = new Schema({
     triggerTypes: [String],
     affectedEnemyStats: StatsSchema,
     upgradePreview: Boolean,
+    luckyFind: Boolean,
+    previewBaseRarity: Number,
+    luckyFindSteps: Number,
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);

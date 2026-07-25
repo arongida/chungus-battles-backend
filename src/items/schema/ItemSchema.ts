@@ -33,6 +33,13 @@ export class Item extends Schema {
   @type('boolean') upgradePreview: boolean = false;
   // True for shop slots that rolled a lucky-find rarity-up (see applyLuckyShopUpgrades).
   @type('boolean') luckyFind: boolean = false;
+  // Rarity of the owned item this preview was built from — lets DraftRoom detect that the
+  // owned copy has since changed (e.g. a loss-reward upgrade while the shop was locked) and
+  // rebuild the slot. 0 when this slot isn't an upgrade preview.
+  @type('number') previewBaseRarity: number = 0;
+  // Free rarity steps this slot rolled via applyLuckyShopUpgrades — preserved across a
+  // DraftRoom.rebuildShopSlot rebuild so a locked lucky find isn't downgraded.
+  @type('number') luckyFindSteps: number = 0;
   // Server-only, not synced: Gold Genie (TalentBehaviors.ts) rolls its post-Legendary lucky-find
   // chance exactly once per shop slot — this latches that so repeat aura ticks don't re-roll it.
   goldGenieLuckyRolled: boolean = false;
