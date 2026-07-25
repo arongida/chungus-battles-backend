@@ -4,7 +4,7 @@ import { buildJoe, copyPlayer, createNewPlayer, getPlayer, getSameRoundPlayer, J
 import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentClasses } from '../players/EnemyPreview';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, grantLuckyFindMythicBonus } from '../commands/ShopUpgradeUtils';
+import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, grantLuckyFindMythicBonus } from '../commands/ShopUpgradeUtils';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
@@ -34,6 +34,9 @@ export class DraftRoom extends Room {
     // Stack of recently-sold items, kept around so accidental sales can be undone in
     // reverse order. Cleared by any gold-spending action (see invalidateUndoSell).
     private soldItemStack: Item[] = [];
+    // Re-entrancy guard for revalidateUpgradePreviews — the draft aura interval calls it
+    // without awaiting, so a slow rebuild (DB round-trip) must not overlap with itself.
+    private revalidatingUpgradePreviews = false;
 
     async onCreate(options: any) {
         this.setState(new DraftState());
@@ -146,6 +149,10 @@ export class DraftRoom extends Room {
         //start auras
         this.clock.setInterval(() => {
             this.dispatcher.dispatch(new DraftAuraTriggerCommand());
+            // Catch-all for anything that changed an owned item's rarity without going through
+            // buy/sell/drink (Weapon Whisperer, talent/item-granted duplicates, etc.) — see
+            // revalidateUpgradePreviews.
+            void this.revalidateUpgradePreviews();
         }, 1000)
 
         //shop start trigger - deferred (not awaited) so onJoin returns and the
@@ -228,6 +235,10 @@ export class DraftRoom extends Room {
             this.state.shop.clear();
             lockedShop.forEach(item => this.state.shop.push(item));
             this.state.player.unlockShop();
+            // Locked previews were snapshotted against ownership at the time they were built —
+            // anything that changed an owned item's rarity since (loss-reward upgrade, Weapon
+            // Whisperer, etc.) needs to be reflected before the restored shop is shown.
+            await this.revalidateUpgradePreviews();
         } else if (this.state.shop.length < 6) {
             this.state.shop.clear();
             for (const rolledItem of shopFromDb) {
@@ -246,6 +257,7 @@ export class DraftRoom extends Room {
                     preview.sold = false;
                     preview.equipped = false;
                     preview.upgradePreview = true;
+                    preview.previewBaseRarity = ownedTarget.rarity;
                     steps = luckyEligible ? applyLuckyShopUpgrades(preview, rolledItem, this.state.player) : 0;
                     shopItem = preview;
                 } else {
@@ -253,6 +265,7 @@ export class DraftRoom extends Room {
                     shopItem = rolledItem;
                 }
                 shopItem.luckyFind = steps > 0;
+                shopItem.luckyFindSteps = steps;
                 this.announceLuckyUpgrade(shopItem, steps, slot);
                 this.state.shop.push(shopItem);
             }
@@ -407,6 +420,9 @@ export class DraftRoom extends Room {
             this.state.player.comradeFreeClaim = false;
         }
         this.invalidateUndoSell();
+        // Other shop slots for the same item (or previews built off the item just
+        // replaced/consumed) need to reflect the new owned rarity immediately.
+        await this.revalidateUpgradePreviews();
     }
 
     private async sellItem(itemId: number) {
@@ -422,7 +438,7 @@ export class DraftRoom extends Room {
         }
         this.soldItemStack.push(item);
         this.state.canUndoSell = true;
-        await this.resetStaleUpgradePreviews(itemId);
+        await this.revalidateUpgradePreviews();
     }
 
     private undoSell(client: Client) {
@@ -449,18 +465,67 @@ export class DraftRoom extends Room {
         this.state.canUndoSell = false;
     }
 
-    private async resetStaleUpgradePreviews(soldItemId: number) {
-        for (let i = 0; i < this.state.shop.length; i++) {
-            const shopItem = this.state.shop[i];
-            if (shopItem.itemId !== soldItemId || shopItem.sold) continue;
-            if (!findOwnedUpgradeTarget(this.state.player, soldItemId)) {
-                // Replace the stale upgrade-preview with a freshly rolled normal item.
-                const baseItem = await getItemById(soldItemId);
-                if (baseItem) {
-                    rollItemStats(baseItem);
-                    this.state.shop.splice(i, 1, baseItem);
+    /** Does this shop slot no longer match what the player currently owns?
+     *  Cheap and synchronous — safe to call on every slot every aura tick. */
+    private isPreviewStale(shopItem: Item): boolean {
+        if (shopItem.sold) return false;
+        const ownedTarget = findOwnedUpgradeTarget(this.state.player, shopItem.itemId);
+        if (ownedTarget) {
+            // A preview is stale once the owned copy it was built from has moved on
+            // (upgraded further, or caught up/passed it some other way) — including the
+            // case where this slot isn't a preview yet but now could be.
+            return !shopItem.upgradePreview || ownedTarget.rarity !== shopItem.previewBaseRarity;
+        }
+        // No owned copy (anymore) to upgrade, but the slot still thinks it's a preview
+        // (e.g. the owned copy just hit MYTHIC and dropped out of eligibility).
+        return shopItem.upgradePreview;
+    }
+
+    /** Rebuilds shop slot `index` from scratch against current ownership — same
+     *  construction as the roll branch of updateShop, but for exactly one slot, and
+     *  preserving whatever lucky-find steps it already had. */
+    private async rebuildShopSlot(index: number): Promise<void> {
+        const stale = this.state.shop[index];
+        if (!stale) return;
+        const template = await getItemById(stale.itemId);
+        if (!template) return;
+        rollItemStats(template);
+
+        const ownedTarget = findOwnedUpgradeTarget(this.state.player, stale.itemId);
+        let rebuilt: Item;
+        if (ownedTarget) {
+            rebuilt = cloneItem(ownedTarget);
+            applyRarityUpgrade(rebuilt, template, this.state.player);
+            rebuilt.price = template.price;
+            rebuilt.sold = false;
+            rebuilt.equipped = false;
+            rebuilt.upgradePreview = true;
+            rebuilt.previewBaseRarity = ownedTarget.rarity;
+        } else {
+            rebuilt = template;
+        }
+        applyExtraRaritySteps(rebuilt, template, this.state.player, stale.luckyFindSteps);
+        rebuilt.luckyFind = stale.luckyFind;
+        rebuilt.luckyFindSteps = stale.luckyFindSteps;
+        this.state.shop.splice(index, 1, rebuilt);
+    }
+
+    /** Scans every unsold shop slot and rebuilds any whose upgrade-preview state no
+     *  longer matches what the player owns (buy/sell/drink call this directly for an
+     *  immediate fix-up; the draft aura interval also calls it each tick as a catch-all
+     *  for changes that don't route through those — Weapon Whisperer, granted
+     *  duplicates, etc.). Re-entrancy guarded since the interval doesn't await it. */
+    private async revalidateUpgradePreviews(): Promise<void> {
+        if (this.revalidatingUpgradePreviews) return;
+        this.revalidatingUpgradePreviews = true;
+        try {
+            for (let i = 0; i < this.state.shop.length; i++) {
+                if (this.isPreviewStale(this.state.shop[i])) {
+                    await this.rebuildShopSlot(i);
                 }
             }
+        } finally {
+            this.revalidatingUpgradePreviews = false;
         }
     }
 
@@ -515,7 +580,7 @@ export class DraftRoom extends Room {
         const idx = this.state.player.inventory.indexOf(item);
         this.state.player.inventory.splice(idx, 1);
         this.state.player.pendingRegenBuff += HEALTH_FLASK_REGEN_PER_SECOND;
-        await this.resetStaleUpgradePreviews(itemId);
+        await this.revalidateUpgradePreviews();
         client.send('draft_log', `You drank the ${item.name} — +${HEALTH_FLASK_REGEN_PER_SECOND} HP regen for your next fight!`);
     }
 
