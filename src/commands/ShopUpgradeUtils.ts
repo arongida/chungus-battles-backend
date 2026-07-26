@@ -4,6 +4,7 @@ import { ItemRarity, ItemType } from '../items/types/ItemTypes';
 import { cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { TalentType } from '../talents/types/TalentTypes';
+import { grantItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
 import {
   BURN_DAMAGE_PER_STACK,
   BURN_DURATION_MS,
@@ -76,6 +77,21 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
     target.baseMaxDamage   += source.baseMaxDamage   * maxDamageScale;
     target.baseAttackSpeed += source.baseAttackSpeed * 0.5;
   }
+
+  // Class-item skill: rolled once the moment a class item first reaches Legendary; the Mythic
+  // step re-describes the same skill at its stronger tier instead of rolling again. Scoped to
+  // `target.class` so unique/quest items are untouched. Runs for shop-preview clones too (see
+  // DraftRoom.updateShop/rebuildShopSlot), which is why rollItemSkill is seeded deterministically
+  // rather than using Math.random() — otherwise the preview would re-roll every 1s aura tick.
+  if (target.class && target.rarity >= ItemRarity.LEGENDARY) {
+    if (!target.skillId) {
+      const def = rollItemSkill(target, player);
+      if (def) grantItemSkill(target, def);
+    } else {
+      refreshItemSkillDescription(target);
+    }
+  }
+
   return !wasMythic && target.rarity >= ItemRarity.MYTHIC;
 }
 

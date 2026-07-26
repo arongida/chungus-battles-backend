@@ -72,11 +72,17 @@ export async function getPlayer(playerId: number): Promise<Player> {
 }
 
 function buildItemSchema(itemFromDb: any): Item {
-    const { affectedStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    // skillAffectedStats/skillAffectedEnemyStats excluded for the same reason as Item.ts's
+    // getItemSchemaObject: they're pure runtime aura output (ItemSchema.ts), and leaving them in
+    // `primitives` would let a stale plain-object snapshot clobber the Item constructor's real
+    // AffectedStats instance via .assign().
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
     if (!item.sellPrice) item.sellPrice = Math.floor(item.price * item.rarity * 0.7);
     item.affectedStats = affectedStatsFromRaw(affectedStats);
     item.affectedEnemyStats = affectedStatsFromRaw(affectedEnemyStats);
+    item.skillAffectedStats = affectedStatsFromRaw(undefined);
+    item.skillAffectedEnemyStats = affectedStatsFromRaw(undefined);
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
     item.tags = tagsArr;

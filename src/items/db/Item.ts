@@ -30,6 +30,12 @@ export const ItemSchema = new Schema({
     luckyFind: Boolean,
     previewBaseRarity: Number,
     luckyFindSteps: Number,
+    // Class-item skill display fields (see items/skills/itemSkillRoller.ts). Note
+    // skillAffectedStats/skillAffectedEnemyStats are deliberately NOT here — they're pure
+    // runtime aura output (ItemSchema.ts), never persisted.
+    skillId: Number,
+    skillName: String,
+    skillDescription: String,
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);
@@ -61,12 +67,22 @@ export async function getNumberOfItems(
 }
 
 function getItemSchemaObject(itemFromDb: any): Item {
-    const { affectedStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    // skillAffectedStats/skillAffectedEnemyStats must be excluded here too, not just persisted
+    // affectedStats/affectedEnemyStats: cloneItem() round-trips a LIVE item through toJSON(),
+    // which serializes them as plain objects — left in `primitives`, .assign() would clobber the
+    // Item constructor's real AffectedStats instance with that plain object (breaking Colyseus
+    // schema sync — "AffectedStats was expected, but Object was provided").
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
     if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);
     newItemSchemaObject.affectedStats = affectedStatsFromRaw(affectedStats);
     newItemSchemaObject.affectedEnemyStats = affectedStatsFromRaw(affectedEnemyStats);
+    // Always a fresh AffectedStats — this is pure runtime aura output (see ItemSchema.ts), never
+    // meaningfully persisted, so there's nothing worth carrying over from `skillAffectedStats`
+    // even when a toJSON() round-trip did include a (soon stale) snapshot of it.
+    newItemSchemaObject.skillAffectedStats = affectedStatsFromRaw(undefined);
+    newItemSchemaObject.skillAffectedEnemyStats = affectedStatsFromRaw(undefined);
 
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));

@@ -63,6 +63,9 @@ export class Player extends Schema implements IStats {
     // claimed this way also gets the rarity-upgrade steal treatment (see ShopUpgradeUtils.
     // stealShopItem / DraftRoom.buyItem).
     misconductClaimUsed: boolean = false;
+    // Store Credit (item skill): same latch pattern as comradeClaimUsed — reset per shop build
+    // (DraftRoom.updateShop), not per shop phase.
+    storeCreditClaimUsed: boolean = false;
     // Locked-in next-fight opponent (Next-Enemy Preview feature). Server-only: never add to
     // playerToPlainObject/snapshotPlayer (would smear a stale pointer into matchmaking
     // snapshots). Persisted via the targeted setNextFightEnemy() $set instead. Not @type —
@@ -199,6 +202,11 @@ export class Player extends Schema implements IStats {
     // which is a hidden derived stat re-seeded from scratch each tick, this persists for the
     // whole run (see Player Copy Mechanism in CLAUDE.md — mirrors pendingRegenBuff's pattern).
     @type('number') luckyFindMythicBonus: number = 0;
+    // Store Credit (item skill): same latch as comradeFreeClaim, but the client only honors it on
+    // shop items priced at or below storeCreditFreeClaimCap (see ItemSkillBehaviors.ts
+    // STORE_CREDIT). Declared here (end of the @type block) so existing field indices stay stable.
+    @type('boolean') storeCreditFreeClaim: boolean = false;
+    @type('number') storeCreditFreeClaimCap: number = 0;
 
     private _poisonStack: number = 0;
 
@@ -446,6 +454,12 @@ export class Player extends Schema implements IStats {
             item.baseMaxDamage = snap.baseMaxDamage;
             item.baseAttackSpeed = snap.baseAttackSpeed;
             item.description = snap.description;
+            // Revert a skill this weapon only gained via the forced Mythic upgrade — snap was
+            // cloned before applyRarityUpgrade's skill-grant hook ran, so it correctly holds
+            // whatever skillId (possibly none) the weapon had beforehand.
+            item.skillId = snap.skillId;
+            item.skillName = snap.skillName;
+            item.skillDescription = snap.skillDescription;
             weaponWhispererSnapshots.delete(item);
         }
         item.equipped = false;

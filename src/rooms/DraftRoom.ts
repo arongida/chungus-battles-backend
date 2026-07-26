@@ -234,6 +234,7 @@ export class DraftRoom extends Room {
         this.state.player.comradeClaimUsed = false;
         this.state.player.goldGenieClaimUsed = false;
         this.state.player.luckyFindClaimUsed = false;
+        this.state.player.storeCreditClaimUsed = false;
         // Misconduct's claim is deliberately NOT reset here — it's one free steal per shop
         // phase (round), not per shop build, so it survives manual refreshes (see onJoin).
         const excludeTypes: string[] = [];
@@ -394,9 +395,11 @@ export class DraftRoom extends Room {
         // matching the client's freeClaimSource() — so one purchase never burns more than one claim.
         const luckyFree = this.state.player.luckyFindFreeClaim && item.luckyFind && !item.sold;
         const goldGenieFree = !luckyFree && this.state.player.goldGenieFreeClaim && item.class === ItemClass.MERCHANT && !item.sold;
-        const comradeFree = !luckyFree && !goldGenieFree && this.state.player.comradeFreeClaim && !item.sold;
-        const misconductFree = !luckyFree && !goldGenieFree && !comradeFree && this.state.player.misconductFreeClaim && !item.sold;
-        if (luckyFree || goldGenieFree || comradeFree) {
+        const storeCreditFree = !luckyFree && !goldGenieFree && this.state.player.storeCreditFreeClaim && !item.sold
+            && item.price <= this.state.player.storeCreditFreeClaimCap;
+        const comradeFree = !luckyFree && !goldGenieFree && !storeCreditFree && this.state.player.comradeFreeClaim && !item.sold;
+        const misconductFree = !luckyFree && !goldGenieFree && !storeCreditFree && !comradeFree && this.state.player.misconductFreeClaim && !item.sold;
+        if (luckyFree || goldGenieFree || storeCreditFree || comradeFree) {
             item.price = 0;
             item.sellPrice = 0;
         }
@@ -431,6 +434,10 @@ export class DraftRoom extends Room {
         if (goldGenieFree) {
             this.state.player.goldGenieClaimUsed = true;
             this.state.player.goldGenieFreeClaim = false;
+        }
+        if (storeCreditFree) {
+            this.state.player.storeCreditClaimUsed = true;
+            this.state.player.storeCreditFreeClaim = false;
         }
         if (comradeFree) {
             this.state.player.comradeClaimUsed = true;
