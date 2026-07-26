@@ -65,19 +65,19 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.FLUID_MOTION], r).ratio)} of your dodge rate.`,
   },
 
-  [ItemSkillType.CUTPURSE]: {
-    id: ItemSkillType.CUTPURSE,
+  [ItemSkillType.PLAGUE_BEARER]: {
+    id: ItemSkillType.PLAGUE_BEARER,
     class: ItemClass.ROGUE,
-    name: 'Cutpurse',
+    name: 'Plague Bearer',
     slots: ANY_SLOT,
-    triggerTypes: [TriggerType.ON_DODGE, TriggerType.FIGHT_END],
+    triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { gold: 1, strength: 0.5 },
-      [ItemRarity.MYTHIC]: { gold: 2, strength: 1 },
+      [ItemRarity.LEGENDARY]: { ratioPerStack: 0.02 },
+      [ItemRarity.MYTHIC]: { ratioPerStack: 0.04 },
     },
     describe: (r) => {
-      const v = skillValues(ITEM_SKILLS[ItemSkillType.CUTPURSE], r);
-      return `On dodge: steal ${v.gold} gold and ${v.strength} strength from the enemy.`;
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.PLAGUE_BEARER], r);
+      return `While the enemy is poisoned, gain ${pct(v.ratioPerStack)} attack speed per poison stack.`;
     },
   },
 
@@ -105,10 +105,10 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     triggerTypes: [TriggerType.ON_DODGE],
     values: {
       [ItemRarity.LEGENDARY]: { healRatio: 0 },
-      [ItemRarity.MYTHIC]: { healRatio: 0.08 },
+      [ItemRarity.MYTHIC]: { healRatio: 0.01 },
     },
     describe: (r) => r >= ItemRarity.MYTHIC
-      ? "After you dodge, your next attack can't be dodged, deals double damage, and heals 8% of your max HP."
+      ? "After you dodge, your next attack can't be dodged, deals double damage, and heals 1% of your max HP."
       : "After you dodge, your next attack can't be dodged and deals double damage.",
   },
 
@@ -221,8 +221,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // HP instead. FIGHT_START is kept only for the Mythic invulnerability rider.
     triggerTypes: [TriggerType.AURA, TriggerType.FIGHT_START],
     values: {
-      [ItemRarity.LEGENDARY]: { hpRatio: 0.08, invulnMs: 0 },
-      [ItemRarity.MYTHIC]: { hpRatio: 0.15, invulnMs: 1000 },
+      [ItemRarity.LEGENDARY]: { hpRatio: 0.15, invulnMs: 0 },
+      [ItemRarity.MYTHIC]: { hpRatio: 0.30, invulnMs: 2000 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.BULWARK], r);

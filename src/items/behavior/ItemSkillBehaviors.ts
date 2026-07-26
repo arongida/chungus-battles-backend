@@ -45,8 +45,9 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     const { ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
     const bonus = defender.defense * ratio;
     if (bonus <= 0) return;
-    commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender, damage: bonus, attacker });
-    defender.takeDamage(bonus, client);
+    const damageAfterDefense = defender.getDamageAfterDefense(bonus);
+    commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender, damage: damageAfterDefense, attacker });
+    defender.takeDamage(damageAfterDefense, client);
     client?.send('combat_log', {
       text: `${attacker.name}'s ${item.name} exploits ${defender.name}'s defense for ${fmt(bonus)} bonus damage!`,
       kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, itemId: item.itemId, damage: bonus,
@@ -61,24 +62,15 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     item.skillAffectedStats.accuracy = Math.ceil(Math.max(0, base.dodgeRate) * ratio);
   },
 
-  [ItemSkillType.CUTPURSE]: (context) => {
-    const { attacker, defender, item, client, trigger } = context;
-    if (!item) return;
-    if (trigger === TriggerType.FIGHT_END) {
-      item.skillAffectedStats.strength = 0;
-      item.skillAffectedEnemyStats.strength = 0;
+  [ItemSkillType.PLAGUE_BEARER]: (context) => {
+    const { attacker, defender, item, trigger } = context;
+    if (trigger !== TriggerType.AURA || !attacker || !item) return;
+    if (!defender || defender.poisonStack <= 0) {
+      item.skillAffectedStats.attackSpeed = 1;
       return;
     }
-    // ON_DODGE: defender is the dodger (item owner), attacker is the enemy who missed.
-    if (trigger !== TriggerType.ON_DODGE || !defender) return;
-    const { gold, strength } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    defender.gold += gold;
-    item.skillAffectedStats.strength += strength;
-    if (attacker) item.skillAffectedEnemyStats.strength -= strength;
-    client?.send('combat_log', {
-      text: `${defender.name}'s ${item.name} lifts ${gold} gold and ${strength} strength from ${attacker?.name ?? 'the enemy'}!`,
-      kind: 'item', defenderId: defender.playerId, itemId: item.itemId, goldDelta: gold,
-    } as CombatLogMessage);
+    const { ratioPerStack } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    item.skillAffectedStats.attackSpeed = 1 + defender.poisonStack * ratioPerStack;
   },
 
   [ItemSkillType.COATED_EDGE]: (context) => {
