@@ -404,7 +404,7 @@ export class DraftRoom extends Room {
         // card-anchored shop_floating version of this celebration.
         if (item.rarity === ItemRarity.MYTHIC) {
             grantLuckyFindMythicBonus(this.state.player);
-            client.send('draft_log', `Mythic forged! Permanent +1% Lucky Find chance!`);
+            client.send('draft_log', `Mythic forged! Permanent +3% Lucky Find chance!`);
             client.send('reward_gain', { playerId: this.state.player.playerId, luckyFind: true } as RewardGainMessage);
         }
         if (luckyFree) {

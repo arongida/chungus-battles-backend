@@ -337,9 +337,9 @@ export const TalentBehaviors = {
         if (reachedMythic) {
             grantLuckyFindMythicBonus(attacker);
             if (defender) {
-                client.send('combat_log', { text: `Permanent +1% Lucky Find chance from ${weapon.name} going Mythic!`, kind: 'reward', attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
+                client.send('combat_log', { text: `Permanent +3% Lucky Find chance from ${weapon.name} going Mythic!`, kind: 'reward', attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
             } else {
-                client.send('draft_log', `Permanent +1% Lucky Find chance from ${weapon.name} going Mythic!`);
+                client.send('draft_log', `Permanent +3% Lucky Find chance from ${weapon.name} going Mythic!`);
             }
             client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
         }
@@ -727,7 +727,7 @@ export const TalentBehaviors = {
                     // Only reachable at max level (5), where the dice is granted already Mythic.
                     if (diceItem.rarity === ItemRarity.MYTHIC) {
                         grantLuckyFindMythicBonus(attacker);
-                        client.send('draft_log', `Permanent +1% Lucky Find chance from the gambler's dice being Mythic!`);
+                        client.send('draft_log', `Permanent +3% Lucky Find chance from the gambler's dice being Mythic!`);
                         client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
                     }
                 }
@@ -766,7 +766,7 @@ export const TalentBehaviors = {
                     // Only reachable at max level (5), where the catch-up loop reaches Mythic.
                     if (ringWeapon.rarity === ItemRarity.MYTHIC) {
                         grantLuckyFindMythicBonus(attacker);
-                        client.send('draft_log', `Permanent +1% Lucky Find chance from the ring weapon being Mythic!`);
+                        client.send('draft_log', `Permanent +3% Lucky Find chance from the ring weapon being Mythic!`);
                         client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
                     }
                 }

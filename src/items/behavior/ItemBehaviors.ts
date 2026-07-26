@@ -190,7 +190,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
                 // Command<DraftRoom>), so draft_log is always the right channel here.
                 if (item.rarity === ItemRarity.MYTHIC) {
                     grantLuckyFindMythicBonus(attacker);
-                    client?.send('draft_log', `Permanent +1% Lucky Find chance from ${item.name} being Mythic!`);
+                    client?.send('draft_log', `Permanent +3% Lucky Find chance from ${item.name} being Mythic!`);
                     client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
                 }
             }

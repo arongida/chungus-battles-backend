@@ -828,7 +828,7 @@ export class FightRoom extends Room {
 
             if (reachedMythic) {
                 grantLuckyFindMythicBonus(player);
-                this.logCombat('broadcast', { text: `${picked.item.name} became Mythic! Permanent +1% Lucky Find chance!`, kind: 'reward', itemId: picked.item.itemId });
+                this.logCombat('broadcast', { text: `${picked.item.name} became Mythic! Permanent +3% Lucky Find chance!`, kind: 'reward', itemId: picked.item.itemId });
                 this.broadcast('reward_gain', { playerId: player.playerId, luckyFind: true } as RewardGainMessage);
             }
         }
