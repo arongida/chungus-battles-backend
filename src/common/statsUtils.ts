@@ -68,6 +68,11 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
 
     player.equippedItems.forEach((value) => {
         accumulate(value.affectedStats);
+        // Class-item skill output (items/skills/itemSkillRoller.ts) — kept separate from the
+        // item's own rolled affectedStats, see ItemSchema.ts's skillAffectedStats comment.
+        if (value.skillAffectedStats) {
+            accumulate(value.skillAffectedStats);
+        }
     });
     player.talents.forEach((talent) => {
         accumulate(talent.affectedStats);
@@ -79,6 +84,9 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
         enemy.equippedItems.forEach((item) => {
             if (item.affectedEnemyStats) {
                 accumulate(item.affectedEnemyStats);
+            }
+            if (item.skillAffectedEnemyStats) {
+                accumulate(item.skillAffectedEnemyStats);
             }
         });
     }

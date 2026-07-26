@@ -11,7 +11,7 @@ import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { WEAPON_BASE_RANGES, clampTier } from "../../items/stats/itemStatPool";
-import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, shieldDescription } from "../../commands/ShopUpgradeUtils";
+import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, shieldDescription, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, RewardGainMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
@@ -121,7 +121,7 @@ export const TalentBehaviors = {
                 client.send('combat_log', { text: `${attacker.name} earns ${goldGained} gold for outwitting the warrior!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldGained } as CombatLogMessage);
                 break;
             case PlayerAvatar.THIEF:
-                xpGained = attacker.getXpAmount(12);
+                xpGained = 12;
                 attacker.xp += xpGained;
                 client.send('combat_log', { text: `${attacker.name} gains ${xpGained} xp for outwitting the rogue!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
                 break;
@@ -337,9 +337,9 @@ export const TalentBehaviors = {
         if (reachedMythic) {
             grantLuckyFindMythicBonus(attacker);
             if (defender) {
-                client.send('combat_log', { text: `Permanent +1% Lucky Find chance from ${weapon.name} going Mythic!`, kind: 'reward', attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
+                client.send('combat_log', { text: `Permanent +3% Lucky Find chance from ${weapon.name} going Mythic!`, kind: 'reward', attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
             } else {
-                client.send('draft_log', `Permanent +1% Lucky Find chance from ${weapon.name} going Mythic!`);
+                client.send('draft_log', `Permanent +3% Lucky Find chance from ${weapon.name} going Mythic!`);
             }
             client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
         }
@@ -530,7 +530,7 @@ export const TalentBehaviors = {
     [TalentType.FUTURE_NOW]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
 
-        const extraXp = attacker.getXpAmount(attacker.round * 2);
+        const extraXp = attacker.round * 2;
         attacker.xp += extraXp;
         track(talent, 1, 0, 0, 0, extraXp, { client, playerId: attacker.playerId });
 
@@ -552,7 +552,7 @@ export const TalentBehaviors = {
             track(talent, 1);
             client.send('combat_log', { text: `${attacker.name}'s merchant weapon brings in +1 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
         } else {
-            const xpGained = attacker.getXpAmount(1);
+            const xpGained = 1;
             attacker.xp += xpGained;
             track(talent, 1, 0, 0, 0, xpGained, { client, playerId: attacker.playerId });
             client.send('combat_log', { text: `${attacker.name} gains +${xpGained} XP from the merchant's experience!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
@@ -596,17 +596,22 @@ export const TalentBehaviors = {
 
     [TalentType.ROBBERY]: (context: TalentBehaviorContext) => {
         const { attacker, client, shop, talent } = context;
-        const randomItem = shop[Math.floor(Math.random() * shop.length)];
+        if (!shop) return;
+        const available = shop.filter((item) => !item.sold);
+        const randomItem = available[Math.floor(Math.random() * available.length)];
         if (randomItem) {
-            attacker.gold += randomItem.price;
-            attacker.getItem(randomItem);
-            randomItem.sellPrice = randomItem.price; // stolen items sell for full price
-            track(talent, 0, 0, 0);
+            const { steps, becameMythic } = stealShopItem(randomItem, attacker, hasMisconductUpgrade(attacker));
+            track(talent, 1);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ROBBERY,
             });
-            client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}!`);
+            client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}${steps > 0 ? ' (rarity up!)' : ''}!`);
+            if (becameMythic) {
+                grantLuckyFindMythicBonus(attacker);
+                client.send('draft_log', `Mythic forged! Permanent +3% Lucky Find chance!`);
+                client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+            }
         }
     },
 
@@ -727,7 +732,7 @@ export const TalentBehaviors = {
                     // Only reachable at max level (5), where the dice is granted already Mythic.
                     if (diceItem.rarity === ItemRarity.MYTHIC) {
                         grantLuckyFindMythicBonus(attacker);
-                        client.send('draft_log', `Permanent +1% Lucky Find chance from the gambler's dice being Mythic!`);
+                        client.send('draft_log', `Permanent +3% Lucky Find chance from the gambler's dice being Mythic!`);
                         client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
                     }
                 }
@@ -766,7 +771,7 @@ export const TalentBehaviors = {
                     // Only reachable at max level (5), where the catch-up loop reaches Mythic.
                     if (ringWeapon.rarity === ItemRarity.MYTHIC) {
                         grantLuckyFindMythicBonus(attacker);
-                        client.send('draft_log', `Permanent +1% Lucky Find chance from the ring weapon being Mythic!`);
+                        client.send('draft_log', `Permanent +3% Lucky Find chance from the ring weapon being Mythic!`);
                         client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
                     }
                 }
@@ -1026,21 +1031,13 @@ export const TalentBehaviors = {
             });
         },
 
-    // Bargain Hunter — AURA trigger; reduces the (freshly re-seeded, see DraftAuraTriggerCommand)
-    // base reroll cost by 1 rather than pinning it to a fixed value, so it composes additively
-    // with other reroll-cost talents (e.g. Comrade's +income) instead of overwriting them.
+    // Bargain Hunter — AURA trigger; contributes a reroll-cost multiplier rather than mutating
+    // refreshShopCost directly, so the halving lands after Comrade's +income no matter the order
+    // aura talents run in (see DraftAuraTriggerCommand's post-pass).
     [TalentType.BARGAIN_HUNTER]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent } = context;
-            attacker.refreshShopCost -= 1;
-            if (talent.totalActivations === 0) {
-                attacker.gold += talent.activationRate;
-                track(talent, 1, 0, 0, talent.activationRate, 0, { client, playerId: attacker.playerId });
-                client.send('trigger_talent', {
-                    playerId: attacker.playerId,
-                    talentId: TalentType.BARGAIN_HUNTER,
-                });
-            }
+            const { attacker } = context;
+            attacker.refreshShopCostMultiplier *= BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER;
         },
 
     [TalentType.POISON_2]:
@@ -1069,7 +1066,7 @@ export const TalentBehaviors = {
     [TalentType.LEARN_BY_DOING]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
-            const xpGained = attacker.getXpAmount(talent.base);
+            const xpGained = talent.base;
             attacker.xp += xpGained;
             track(talent, 1, 0, 0, 0, xpGained, { client, playerId: attacker.playerId });
             client.send('combat_log', { text: `${attacker.name} gains + ${xpGained}XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
@@ -1098,17 +1095,23 @@ export const TalentBehaviors = {
             }
         },
 
-    [TalentType.ROGUE_4]:
-        (context: TalentBehaviorContext) => {
-            const { attacker, client } = context;
-            attacker.gold += 1;
-            track(context.talent, 1, 0, 0, 1, 0, { client, playerId: attacker.playerId });
-            client.send('combat_log', { text: `${attacker.name} gets 1 gold!`, kind: 'reward', talentId: context.talent.talentId, attackerId: attacker.playerId, goldDelta: 1 } as CombatLogMessage);
-            client.send('trigger_talent', {
-                playerId: attacker.playerId,
-                talentId: TalentType.ROGUE_4,
-            });
-        },
+    [TalentType.MISCONDUCT]: (context: TalentBehaviorContext) => {
+        const { attacker, shop, talent, trigger } = context;
+
+        // Back-compat: in-progress runs may carry an embedded copy from an earlier rework
+        // (on-attack gold, or the brief shop-start auto-steal version). Repoint to aura and
+        // bail — same migration idiom as Mercenary (see TalentType.MERCENARY above).
+        if (trigger === TriggerType.ON_ATTACK || trigger === TriggerType.SHOP_START) {
+            talent.triggerTypes.clear();
+            talent.triggerTypes.push(TriggerType.AURA);
+            return;
+        }
+        if (!shop) return;
+
+        // Grants a free-item claim like Comrade — the player picks which shop item to take
+        // (DraftRoom.buyItem applies the rarity upgrade + full-price sell value on purchase).
+        attacker.misconductFreeClaim = !attacker.misconductClaimUsed;
+    },
 
     [TalentType.MERCHANT_5]:
         (context: TalentBehaviorContext) => {
@@ -1141,23 +1144,31 @@ export const TalentBehaviors = {
             if (!shop) return; // undefined outside draft
             if (talent.tags?.includes('grand-robbery-used')) return; // one-shot latch
 
+            const upgrade = hasMisconductUpgrade(attacker);
             let stolen = 0;
+            let upgraded = 0;
+            let mythics = 0;
             [...shop].forEach((item) => { // copy: getItem mutates sold/shop state as it goes
                 if (item.sold) return;
-                attacker.gold += item.price; // refund so getItem nets to free
-                attacker.getItem(item);
-                item.sellPrice = item.price; // stolen items sell for full price
+                const { steps, becameMythic } = stealShopItem(item, attacker, upgrade);
                 stolen++;
+                if (steps > 0) upgraded++;
+                if (becameMythic) mythics++;
             });
 
             talent.tags?.push('grand-robbery-used');
-            talent.description = `Grand Robbery! Stole ${stolen} item(s) from the shop!`
+            talent.description = `Grand Robbery! Stole ${stolen} item(s) from the shop${upgraded > 0 ? ' (all upgraded!)' : ''}!`
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.GRAND_ROBBERY,
             });
             if (stolen > 0) {
-                client.send('draft_log', `Grand Robbery! Stole ${stolen} item(s) from the shop!`);
+                client.send('draft_log', `Grand Robbery! Stole ${stolen} item(s) from the shop${upgraded > 0 ? ' (all upgraded!)' : ''}!`);
+            }
+            if (mythics > 0) {
+                for (let i = 0; i < mythics; i++) grantLuckyFindMythicBonus(attacker);
+                client.send('draft_log', `Mythic forged! Permanent +${mythics * 3}% Lucky Find chance!`);
+                client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
             }
         },
 
@@ -1243,11 +1254,16 @@ export function ensureMartialFists(player: Player, client?: Client, talent?: Tal
 
 function clonedAsGhost(source: Item): Item {
     const raw = source.toJSON() as any;
-    const { affectedStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
 
     const ghost = new Item().assign(primitives);
     ghost.affectedStats = new AffectedStats().assign(affectedStats || {});
     ghost.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
+    // Skill output is dynamic/self-clearing (see ItemSchema.ts's skillAffectedStats comment) —
+    // start the ghost fresh rather than copying a stale snapshot; its own skillId (carried via
+    // primitives) re-derives this every aura tick same as the source weapon.
+    ghost.skillAffectedStats = new AffectedStats();
+    ghost.skillAffectedEnemyStats = new AffectedStats();
 
     const equipOptionsArr = new ArraySchema<string>();
     if (equipOptions?.length) (equipOptions as string[]).forEach((e: string) => equipOptionsArr.push(e));

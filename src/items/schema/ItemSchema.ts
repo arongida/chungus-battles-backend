@@ -1,6 +1,7 @@
 import { Schema, type, ArraySchema, SetSchema } from '@colyseus/schema';
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {ItemBehaviors} from '../behavior/ItemBehaviors';
+import {ItemSkillBehaviors} from '../behavior/ItemSkillBehaviors';
 import {BehaviorContext} from '../../common/BehaviorContext';
 import {ItemBehaviorContext} from '../behavior/ItemBehaviorContext';
 
@@ -40,15 +41,34 @@ export class Item extends Schema {
   // Free rarity steps this slot rolled via applyLuckyShopUpgrades — preserved across a
   // DraftRoom.rebuildShopSlot rebuild so a locked lucky find isn't downgraded.
   @type('number') luckyFindSteps: number = 0;
+  // Class-item skill (see items/skills/itemSkillRoller.ts): rolled the moment a class item
+  // reaches Legendary, re-described (same skillId, stronger numbers) on the Mythic step. 0/empty
+  // when no skill has been granted (non-class items, or a class item below Legendary).
+  @type('number') skillId: number = 0;
+  @type('string') skillName: string = '';
+  @type('string') skillDescription: string = '';
+  // Dynamic skill output ONLY — never the item's own rolled/upgraded stats (those stay in
+  // affectedStats/affectedEnemyStats above, merged by ShopUpgradeUtils.applyRarityUpgrade).
+  // Deliberately NOT persisted to Mongo (items/db/Item.ts's ItemSchema has no field for these) —
+  // aura-driven skills self-clear every tick, so a fresh AffectedStats() on load is always
+  // immediately correct. Accumulated by statsUtils.recalculatePlayerStats alongside affectedStats.
+  @type(AffectedStats) skillAffectedStats: AffectedStats = new AffectedStats();
+  @type(AffectedStats) skillAffectedEnemyStats: AffectedStats = new AffectedStats();
   // Server-only, not synced: Gold Genie (TalentBehaviors.ts) rolls its post-Legendary lucky-find
   // chance exactly once per shop slot — this latches that so repeat aura ticks don't re-roll it.
   goldGenieLuckyRolled: boolean = false;
 
   executeBehavior(context: BehaviorContext): void | Promise<void> {
+    const itemContext: ItemBehaviorContext = { ...context, item: this };
+    const results: (void | Promise<void>)[] = [];
+
     const behavior = ItemBehaviors[this.itemId] ?? ItemBehaviors[this.type];
-    if (behavior) {
-      const itemContext: ItemBehaviorContext = { ...context, item: this };
-      return behavior(itemContext);
-    }
+    if (behavior) results.push(behavior(itemContext));
+
+    const skillBehavior = this.skillId ? ItemSkillBehaviors[this.skillId] : undefined;
+    if (skillBehavior) results.push(skillBehavior(itemContext));
+
+    const pending = results.filter((r) => r instanceof Promise) as Promise<void>[];
+    if (pending.length > 0) return Promise.all(pending).then(() => {});
   }
 }

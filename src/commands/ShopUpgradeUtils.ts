@@ -3,6 +3,8 @@ import { Player } from '../players/schema/PlayerSchema';
 import { ItemRarity, ItemType } from '../items/types/ItemTypes';
 import { cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
+import { TalentType } from '../talents/types/TalentTypes';
+import { grantItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
 import {
   BURN_DAMAGE_PER_STACK,
   BURN_DURATION_MS,
@@ -75,6 +77,21 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
     target.baseMaxDamage   += source.baseMaxDamage   * maxDamageScale;
     target.baseAttackSpeed += source.baseAttackSpeed * 0.5;
   }
+
+  // Class-item skill: rolled once the moment a class item first reaches Legendary; the Mythic
+  // step re-describes the same skill at its stronger tier instead of rolling again. Scoped to
+  // `target.class` so unique/quest items are untouched. Runs for shop-preview clones too (see
+  // DraftRoom.updateShop/rebuildShopSlot), which is why rollItemSkill is seeded deterministically
+  // rather than using Math.random() — otherwise the preview would re-roll every 1s aura tick.
+  if (target.class && target.rarity >= ItemRarity.LEGENDARY) {
+    if (!target.skillId) {
+      const def = rollItemSkill(target, player);
+      if (def) grantItemSkill(target, def);
+    } else {
+      refreshItemSkillDescription(target);
+    }
+  }
+
   return !wasMythic && target.rarity >= ItemRarity.MYTHIC;
 }
 
@@ -103,8 +120,16 @@ export function baseLuckyFindChance(level: number): number {
 }
 
 /** Base (un-modified) shop reroll cost, seeded onto Player.refreshShopCost each draft
- *  aura tick and at draft setup; talents (Comrade +income, Bargain Hunter -1) then adjust it. */
+ *  aura tick and at draft setup; talents (Comrade +income, Bargain Hunter x0.5) then adjust it. */
 export const BASE_REFRESH_SHOP_COST = 2;
+
+/** Bargain Hunter's reroll-cost multiplier (halved). */
+export const BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER = 0.5;
+
+/** Reroll cost after multipliers: floored, never below 1 (no free/negative-cost rerolls). */
+export function applyRefreshCostMultiplier(cost: number, multiplier: number): number {
+    return Math.max(1, Math.floor(cost * multiplier));
+}
 
 /**
  * Lucky shop rolls: each shop slot has a chance — Player.luckyFindChance, seeded from
@@ -186,6 +211,31 @@ export function getEquippedUpgradeableItems(player: Player): Array<{ item: Item;
 export function totalRemainingRaritySteps(player: Player): number {
   return getEquippedUpgradeableItems(player)
     .reduce((sum, { item }) => sum + (ItemRarity.MYTHIC - item.rarity), 0);
+}
+
+/** True when the player owns Misconduct (402), which upgrades every stolen item by one rarity. */
+export function hasMisconductUpgrade(player: Player): boolean {
+  return player.talents?.some((t) => t.talentId === TalentType.MISCONDUCT) ?? false;
+}
+
+/** Shared by Misconduct, Robbery and Grand Robbery: takes a shop item for free.
+ *  With `upgrade` set, the item first gains one rarity step (which also raises its
+ *  price by 50%), then always sells for 100% of its final price.
+ *  Returns the rarity steps applied and whether this steal newly forged a Mythic,
+ *  so the caller can send its own draft_log / reward_gain celebration. */
+export function stealShopItem(
+  item: Item, player: Player, upgrade: boolean,
+): { steps: number; becameMythic: boolean } {
+  let steps = 0;
+  const upgradeable = !NON_UPGRADEABLE_ITEM_IDS.has(item.itemId) && item.rarity < ItemRarity.MYTHIC;
+  if (upgrade && upgradeable) {
+    steps = applyExtraRaritySteps(item, item, player, 1);
+  }
+  const becameMythic = steps > 0 && item.rarity >= ItemRarity.MYTHIC;
+  player.gold += item.price;    // refund AFTER re-pricing so getItem nets to free
+  player.getItem(item);         // debits item.price, marks sold, handles preview replacement
+  item.sellPrice = item.price;  // stolen items sell for full price
+  return { steps, becameMythic };
 }
 
 export function findOwnedUpgradeTarget(player: Player, itemId: number): Item | null {

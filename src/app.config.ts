@@ -12,11 +12,12 @@ import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, getWallOfFame
 import {GAME_VERSION} from './common/types';
 import { getAllItems } from "./items/db/Item";
 import { getItemRollPreview } from "./items/stats/itemRollPreview";
-import { ItemType } from "./items/types/ItemTypes";
+import { ItemRarity, ItemType } from "./items/types/ItemTypes";
 import { shieldDescription } from "./commands/ShopUpgradeUtils";
 import { getAllTalents } from "./talents/db/Talent";
 import { getReplaysByOriginalPlayer, getReplayById, getGameStats } from './replay/db/Replay';
 import { SEASONS } from './common/seasons';
+import { ITEM_SKILLS } from './items/behavior/itemSkillBalance';
 
 export const server = defineServer({
 
@@ -95,6 +96,22 @@ export const server = defineServer({
 
         app.get('/seasons', (_req, res) => {
             res.json({ currentSeason: GAME_VERSION, seasons: SEASONS });
+        });
+
+        // Class-item skill catalog (see items/behavior/itemSkillBalance.ts). describe() is a
+        // closure over the definition, not JSON-serializable, so each entry is mapped to a plain
+        // object rather than sending ITEM_SKILLS directly — same reasoning as /items' rollPreview
+        // and shield-description overlays above.
+        app.get('/itemSkills', (_req, res) => {
+            res.json(Object.values(ITEM_SKILLS).map(d => ({
+                id: d.id,
+                name: d.name,
+                class: d.class,
+                slots: d.slots,
+                triggerTypes: d.triggerTypes,
+                legendaryDescription: d.describe(ItemRarity.LEGENDARY),
+                mythicDescription: d.describe(ItemRarity.MYTHIC),
+            })));
         });
 
         app.get('/replays', async (req, res) => {

@@ -17,6 +17,18 @@ export interface SeasonInfo {
 
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
+    {
+    number: 21,
+    name: 'Slow Down',
+    changes: [
+      'Weapon base attack speed reduced by ~10%',
+      'Rogue vol IV. replaced with Misconduct - grants one free-item claim per round (pick any item, like Comrade); all items stolen this way (Misconduct, Robbery, Grand Robbery) arrive one rarity higher and sell for 100%',
+      'Accuracy now counters dodge: each point of attacker accuracy cancels 1 point of the defender\'s dodge rating (accuracy still adds to min damage roll)',
+      'Legendary class items (rogue/warrior/merchant) now roll a class skill from a pool the moment they reach Legendary; upgrading to Mythic strengthens the same skill',
+      'Bargain Hunter reworked: now halves the shop reroll cost (rounded down, minimum 1) instead of reducing it by 1, and no longer grants gold',
+      'Ring of Immortality reverted to its transform effect: grants no bonuses while worn, but if it is still equipped when the next shop opens it is consumed and becomes a random Legendary item of your level',
+    ],
+  },
   {
     number: 20,
     name: 'Quick Reset',

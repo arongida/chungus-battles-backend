@@ -7,7 +7,7 @@ import { CombatLogMessage, DamageMessage, DamageType, InvulnerableMessage, Invul
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
-import {BURN_DURATION_MS, RING_OF_IMMORTALITY_ITEM_ID, RING_OF_IMMORTALITY_XP_MULTIPLIER} from "../../items/behavior/uniqueItemBalance";
+import {BURN_DURATION_MS} from "../../items/behavior/uniqueItemBalance";
 import {FightStats} from "./FightStats";
 import {weaponWhispererSnapshots} from "../../talents/behavior/weaponWhispererState";
 
@@ -43,6 +43,10 @@ export class Player extends Schema implements IStats {
     invincibleTimer: Delayed;
     talentsOnCooldown: TalentType[] = [];
     attackSpeedMultiplier: number = 1;
+    // Bargain Hunter: reroll-cost multiplier collected during the draft aura pass and applied to
+    // refreshShopCost after ALL aura talents have run (see DraftAuraTriggerCommand), so halving
+    // composes with Comrade's +income regardless of talent pick order. Re-seeded to 1 each tick.
+    refreshShopCostMultiplier: number = 1;
     healingEffectiveness: number = 1;
     // Black Market Contact: true once the current shop's free lucky-find claim has been spent
     // (DraftRoom.buyItem), reset per shop build (DraftRoom.updateShop). Same latch pattern as
@@ -58,6 +62,19 @@ export class Player extends Schema implements IStats {
     // Gold Genie: same latch pattern as comradeClaimUsed, but scoped to the first merchant-class
     // item bought each shop.
     goldGenieClaimUsed: boolean = false;
+    // Misconduct: unlike comradeClaimUsed, reset once per shop phase (DraftRoom.onJoin) rather
+    // than per shop build, so the claim doesn't refresh on manual shop refresh. The free item
+    // claimed this way also gets the rarity-upgrade steal treatment (see ShopUpgradeUtils.
+    // stealShopItem / DraftRoom.buyItem).
+    misconductClaimUsed: boolean = false;
+    // Store Credit (item skill): same latch pattern as comradeClaimUsed — reset per shop build
+    // (DraftRoom.updateShop), not per shop phase.
+    storeCreditClaimUsed: boolean = false;
+    // Haggler (item skill): how many of this shop-phase's free rerolls have already been spent
+    // (DraftRoom.refreshShop). Reset once per shop PHASE (DraftRoom.onJoin), not per shop build —
+    // a paid/free reroll rebuilds the shop itself, so resetting it there would refund the reroll
+    // that just consumed it. Same reasoning as misconductClaimUsed.
+    hagglerRerollsUsed: number = 0;
     // Locked-in next-fight opponent (Next-Enemy Preview feature). Server-only: never add to
     // playerToPlainObject/snapshotPlayer (would smear a stale pointer into matchmaking
     // snapshots). Persisted via the targeted setNextFightEnemy() $set instead. Not @type —
@@ -105,12 +122,6 @@ export class Player extends Schema implements IStats {
 
     set strength(value: number) {
         this._strength = value < 1 ? 1 : value <= this._accuracy ? this._accuracy : value;
-    }
-
-    private hasItemEquipped(itemId: number): boolean {
-        let found = false;
-        this.equippedItems.forEach((item) => { if (item.itemId === itemId) found = true; });
-        return found;
     }
 
     @type('number') private _gold: number;
@@ -169,6 +180,10 @@ export class Player extends Schema implements IStats {
     // Black Market Contact: same latch as comradeFreeClaim, but the client only honors it on
     // lucky-find shop items (see TalentBehaviors.ts BLACK MARKET CONTRACT).
     @type('boolean') luckyFindFreeClaim: boolean = false;
+    // Misconduct: same latch as comradeFreeClaim (any unsold shop item), but only one claim per
+    // shop phase — see misconductClaimUsed. The claimed item also gets a rarity upgrade +
+    // full-price sell value (see TalentBehaviors.ts MISCONDUCT).
+    @type('boolean') misconductFreeClaim: boolean = false;
     // Health Flask (itemId 6): hpRegen bonus banked in the draft, consumed by the wearer's very
     // next fight. Folded into hpRegen every tick by statsUtils.recalculatePlayerStats and zeroed
     // out in FightRoom.handleFightEnd once that fight concludes. Must stay @type (not a plain
@@ -177,10 +192,9 @@ export class Player extends Schema implements IStats {
     @type('number') pendingRegenBuff: number = 0;
     // Hidden shop-roll stat: seeded from level every aura tick in both the draft
     // (DraftAuraTriggerCommand) and the fight (FightAuraTriggerCommand), doubled by Black Market
-    // Contact's aura behavior and boosted 1.5x by the equipped Ring of Immortality (both in
-    // TalentBehaviors/ItemBehaviors, same tick as the seed so they compose instead of getting
-    // clobbered). Read by ShopUpgradeUtils.applyLuckyShopUpgrades. Synced (unlike most other
-    // hidden stats) so the client can display it next to gold/income.
+    // Contact's aura behavior (TalentBehaviors, same tick as the seed so it composes instead of
+    // getting clobbered). Read by ShopUpgradeUtils.applyLuckyShopUpgrades. Synced (unlike most
+    // other hidden stats) so the client can display it next to gold/income.
     // Declared here (end of the @type block) so existing field indices stay stable.
     @type('number') luckyFindChance: number = 0;
     // Permanent snowball bonus to luckyFindChance: +0.01 every time the player buys an item
@@ -190,6 +204,15 @@ export class Player extends Schema implements IStats {
     // which is a hidden derived stat re-seeded from scratch each tick, this persists for the
     // whole run (see Player Copy Mechanism in CLAUDE.md — mirrors pendingRegenBuff's pattern).
     @type('number') luckyFindMythicBonus: number = 0;
+    // Store Credit (item skill): same latch as comradeFreeClaim, but the client only honors it on
+    // shop items priced at or below storeCreditFreeClaimCap (see ItemSkillBehaviors.ts
+    // STORE_CREDIT). Declared here (end of the @type block) so existing field indices stay stable.
+    @type('boolean') storeCreditFreeClaim: boolean = false;
+    @type('number') storeCreditFreeClaimCap: number = 0;
+    // Haggler (item skill): remaining free shop rerolls for the current shop phase — re-seeded
+    // from the skill's count minus hagglerRerollsUsed each aura tick (see ItemSkillBehaviors.ts
+    // HAGGLER). Consumed in DraftRoom.refreshShop.
+    @type('number') hagglerFreeRerolls: number = 0;
 
     private _poisonStack: number = 0;
 
@@ -293,24 +316,19 @@ export class Player extends Schema implements IStats {
         } as DamageMessage);
     }
 
-    /**
-     * Actual XP that would be granted for baseAmount, applying the Ring of Immortality's +50%
-     * bonus if equipped. Pure — does not mutate xp. Call this FIRST to get the real number for
-     * combat_log/reward_gain/track() messages, THEN add the returned amount to xp yourself
-     * (mirrors takeDamage/restoreHealth: the class exposes the calculation, call sites own
-     * sending their own specific messages).
-     */
-    getXpAmount(baseAmount: number): number {
-        const multiplier = this.hasItemEquipped(RING_OF_IMMORTALITY_ITEM_ID) ? RING_OF_IMMORTALITY_XP_MULTIPLIER : 1;
-        return Math.round(baseAmount * multiplier);
-    }
-
     getDamageAfterDefense(initialDamage: number): number {
         const afterPct = initialDamage * (100 / (100 + this.defense));
         if (initialDamage > 0 && !this.invincible) {
             this.fightStats.damageReducedByDefense += initialDamage - afterPct;
         }
         return afterPct > 0 ? afterPct : 0;
+    }
+
+    /** Chance this player dodges an incoming weapon attack. Attacker accuracy cancels
+     *  dodge rating point-for-point, so enough accuracy removes dodge entirely. */
+    getDodgeChance(attackerAccuracy: number): number {
+        const effectiveDodgeRate = Math.max(0, this.dodgeRate - attackerAccuracy);
+        return 1 - 100 / (100 + effectiveDodgeRate);
     }
 
     addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {
@@ -394,12 +412,14 @@ export class Player extends Schema implements IStats {
         return candidates[0];
     }
 
-    async sellItem(item: Item) {
-        if (item.equipped) return;
-        if (item.tags?.includes('quest')) return;
+    /** Returns true if the item was actually sold (false for equipped/quest items, which no-op). */
+    async sellItem(item: Item): Promise<boolean> {
+        if (item.equipped) return false;
+        if (item.tags?.includes('quest')) return false;
         this.gold += item.sellPrice;
         const indexOfDeletedItem = this.inventory.indexOf(item);
         this.inventory.splice(indexOfDeletedItem, 1);
+        return true;
     }
 
     setItemEquipped(item: Item, slot: EquipSlot) {
@@ -430,6 +450,12 @@ export class Player extends Schema implements IStats {
             item.baseMaxDamage = snap.baseMaxDamage;
             item.baseAttackSpeed = snap.baseAttackSpeed;
             item.description = snap.description;
+            // Revert a skill this weapon only gained via the forced Mythic upgrade — snap was
+            // cloned before applyRarityUpgrade's skill-grant hook ran, so it correctly holds
+            // whatever skillId (possibly none) the weapon had beforehand.
+            item.skillId = snap.skillId;
+            item.skillName = snap.skillName;
+            item.skillDescription = snap.skillDescription;
             weaponWhispererSnapshots.delete(item);
         }
         item.equipped = false;

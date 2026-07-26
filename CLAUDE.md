@@ -155,12 +155,12 @@ Stats are **recalculated from scratch on every tick**:
 | Field              | Notes                                        |
 |--------------------|----------------------------------------------|
 | `strength`         | Max damage roll                              |
-| `accuracy`         | Min damage roll (`accuracy ≤ strength`)       |
+| `accuracy`         | Min damage roll + cancels enemy `dodgeRate` 1:1 (`accuracy ≤ strength`) |
 | `defense`          | Damage reduction: `damage * (100 / (100 + defense))` |
 | `flatDmgReduction` | Subtracted after percent reduction           |
 | `attackSpeed`      | Attacks per second (min 0.1)                 |
 | `maxHp` / `hp`     | HP capped at maxHp                           |
-| `dodgeRate`        | Dodge chance: `1 - 100/(100 + dodgeRate)`    |
+| `dodgeRate`        | Dodge chance: `1 - 100/(100 + max(0, dodgeRate - attacker accuracy))` |
 | `income`           | Bonus gold per round                         |
 | `hpRegen`          | HP restored per second during fight          |
 
