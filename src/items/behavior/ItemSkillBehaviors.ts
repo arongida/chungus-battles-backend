@@ -283,7 +283,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     if (trigger !== TriggerType.ON_SELL || !attacker || !item) return;
     const { gold, xp } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
     if (gold > 0) attacker.gold += gold;
-    const xpGained = xp > 0 ? attacker.getXpAmount(xp) : 0;
+    const xpGained = xp > 0 ? xp : 0;
     if (xpGained > 0) attacker.xp += xpGained;
     if (gold <= 0 && xpGained <= 0) return;
     client?.send('reward_gain', {

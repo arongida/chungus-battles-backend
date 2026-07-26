@@ -648,7 +648,7 @@ export class FightRoom extends Room {
         this.state.player.baseStats.income += 1;
 
         this.state.player.gold += goldToGet;
-        const xpToGet = this.state.player.getXpAmount(this.state.player.round * 2);
+        const xpToGet = this.state.player.round * 2;
         this.state.player.xp += xpToGet;
 
         this.logCombat('broadcast', { text: `You gained ${goldToGet} gold! (Income grows to ${goldToGet + 1} next fight)`, kind: 'reward', goldDelta: goldToGet });
@@ -778,7 +778,7 @@ export class FightRoom extends Room {
             this.state.lossRewardOutcome = { choice, gold: amount };
         } else {
             // Raw xp add only — level-up resolves in DraftRoom.checkLevelUp on rejoin.
-            const xpGained = player.getXpAmount(amount);
+            const xpGained = amount;
             player.xp += xpGained;
             this.logCombat('broadcast', { text: `You received ${xpGained} bonus XP for losing!`, kind: 'reward', xpDelta: xpGained });
             this.broadcast('reward_gain', { playerId: player.playerId, xp: xpGained } as RewardGainMessage);

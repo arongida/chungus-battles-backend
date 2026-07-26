@@ -72,8 +72,8 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
         // (see @colyseus/timer ClockTimer.ts) iterates its `delayed` list in REVERSE registration
         // order, so the most-recently-pushed interval runs FIRST each tick. Registering this seed
         // after the talent/item loops above means it still executes before them every tick, so any
-        // of them that modify luckyFindChance (Black Market Contact, Ring of Immortality) compose
-        // on a fresh base instead of the base clobbering their result a moment later.
+        // of them that modify luckyFindChance (Black Market Contact) compose on a fresh base
+        // instead of the base clobbering their result a moment later.
         this.state.skillsTimers.push(
             this.clock.setInterval(() => {
                 player.luckyFindChance = baseLuckyFindChance(player.level) + player.luckyFindMythicBonus;

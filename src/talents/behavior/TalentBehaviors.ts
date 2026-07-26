@@ -121,7 +121,7 @@ export const TalentBehaviors = {
                 client.send('combat_log', { text: `${attacker.name} earns ${goldGained} gold for outwitting the warrior!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldGained } as CombatLogMessage);
                 break;
             case PlayerAvatar.THIEF:
-                xpGained = attacker.getXpAmount(12);
+                xpGained = 12;
                 attacker.xp += xpGained;
                 client.send('combat_log', { text: `${attacker.name} gains ${xpGained} xp for outwitting the rogue!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
                 break;
@@ -530,7 +530,7 @@ export const TalentBehaviors = {
     [TalentType.FUTURE_NOW]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
 
-        const extraXp = attacker.getXpAmount(attacker.round * 2);
+        const extraXp = attacker.round * 2;
         attacker.xp += extraXp;
         track(talent, 1, 0, 0, 0, extraXp, { client, playerId: attacker.playerId });
 
@@ -552,7 +552,7 @@ export const TalentBehaviors = {
             track(talent, 1);
             client.send('combat_log', { text: `${attacker.name}'s merchant weapon brings in +1 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
         } else {
-            const xpGained = attacker.getXpAmount(1);
+            const xpGained = 1;
             attacker.xp += xpGained;
             track(talent, 1, 0, 0, 0, xpGained, { client, playerId: attacker.playerId });
             client.send('combat_log', { text: `${attacker.name} gains +${xpGained} XP from the merchant's experience!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
@@ -1066,7 +1066,7 @@ export const TalentBehaviors = {
     [TalentType.LEARN_BY_DOING]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent } = context;
-            const xpGained = attacker.getXpAmount(talent.base);
+            const xpGained = talent.base;
             attacker.xp += xpGained;
             track(talent, 1, 0, 0, 0, xpGained, { client, playerId: attacker.playerId });
             client.send('combat_log', { text: `${attacker.name} gains + ${xpGained}XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);

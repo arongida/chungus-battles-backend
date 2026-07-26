@@ -11,14 +11,11 @@ export function chungiHpDamageFraction(rarity: number): number {
 }
 
 /**
- * Ring of Immortality (47): not a weapon, does not attack. While equipped it passively grants
- * +50% lucky find chance (AURA behavior, ItemBehaviors.ts) and +50% XP gained (wired into the
- * Player.xp setter, PlayerSchema.ts, so every XP-granting site gets the bonus for free). Both
- * bonuses are while-equipped only — nothing is banked or persisted.
+ * Ring of Immortality (47): not a weapon, does not attack, grants no stats. SHOP_START: if
+ * still equipped when the next draft begins (i.e. worn through a fight), it transforms into a
+ * random item of the player's own tier rolled up to Legendary (see ringOfImmortality.ts).
  */
 export const RING_OF_IMMORTALITY_ITEM_ID = 47;
-export const RING_OF_IMMORTALITY_XP_MULTIPLIER = 2;
-export const RING_OF_IMMORTALITY_LUCKY_FIND_MULTIPLIER = 2;
 
 /**
  * Magic Ring (702): not a weapon, does not attack. Starts Common with one
@@ -132,9 +129,8 @@ export const TWO_HANDED_WEAPON_IDS = new Set([4]); // Zwei-hander
  * Items excluded from the shop's owned-item rarity-upgrade path
  * (findOwnedUpgradeTarget). Health Flask (6) is a consumable whose rarity
  * is meant to come from its shop roll, not from stacking upgrades; Ring of
- * Immortality (47) grants a fixed (non-rarity-scaled) effect, so a duplicate
- * buy is meant to stay a genuine 2nd ring (equippable in both hands) rather
- * than a pointless rarity-upgrade preview.
+ * Immortality (47) grants no stats and its rarity is irrelevant to its
+ * SHOP_START transform, so upgrading it would only be confusing.
  */
 export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Flask, Ring of Immortality
 
