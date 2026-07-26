@@ -66,6 +66,11 @@ export class Player extends Schema implements IStats {
     // Store Credit (item skill): same latch pattern as comradeClaimUsed — reset per shop build
     // (DraftRoom.updateShop), not per shop phase.
     storeCreditClaimUsed: boolean = false;
+    // Haggler (item skill): how many of this shop-phase's free rerolls have already been spent
+    // (DraftRoom.refreshShop). Reset once per shop PHASE (DraftRoom.onJoin), not per shop build —
+    // a paid/free reroll rebuilds the shop itself, so resetting it there would refund the reroll
+    // that just consumed it. Same reasoning as misconductClaimUsed.
+    hagglerRerollsUsed: number = 0;
     // Locked-in next-fight opponent (Next-Enemy Preview feature). Server-only: never add to
     // playerToPlainObject/snapshotPlayer (would smear a stale pointer into matchmaking
     // snapshots). Persisted via the targeted setNextFightEnemy() $set instead. Not @type —
@@ -207,6 +212,10 @@ export class Player extends Schema implements IStats {
     // STORE_CREDIT). Declared here (end of the @type block) so existing field indices stay stable.
     @type('boolean') storeCreditFreeClaim: boolean = false;
     @type('number') storeCreditFreeClaimCap: number = 0;
+    // Haggler (item skill): remaining free shop rerolls for the current shop phase — re-seeded
+    // from the skill's count minus hagglerRerollsUsed each aura tick (see ItemSkillBehaviors.ts
+    // HAGGLER). Consumed in DraftRoom.refreshShop.
+    @type('number') hagglerFreeRerolls: number = 0;
 
     private _poisonStack: number = 0;
 
@@ -418,12 +427,14 @@ export class Player extends Schema implements IStats {
         return candidates[0];
     }
 
-    async sellItem(item: Item) {
-        if (item.equipped) return;
-        if (item.tags?.includes('quest')) return;
+    /** Returns true if the item was actually sold (false for equipped/quest items, which no-op). */
+    async sellItem(item: Item): Promise<boolean> {
+        if (item.equipped) return false;
+        if (item.tags?.includes('quest')) return false;
         this.gold += item.sellPrice;
         const indexOfDeletedItem = this.inventory.indexOf(item);
         this.inventory.splice(indexOfDeletedItem, 1);
+        return true;
     }
 
     setItemEquipped(item: Item, slot: EquipSlot) {

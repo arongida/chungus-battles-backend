@@ -38,5 +38,6 @@ export enum TriggerType {
 	BEFORE_REFRESH = 'before-refresh',
 	AFTER_REFRESH = 'after-refresh',
 	AURA = 'aura',
-	ON_DODGE = 'on-dodge'
+	ON_DODGE = 'on-dodge',
+	ON_SELL = 'on-sell'
 }

@@ -216,16 +216,19 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.WARRIOR,
     name: 'Bulwark',
     slots: GEAR_SLOTS,
-    triggerTypes: [TriggerType.FIGHT_START],
+    // AURA drives the persistent max HP bonus (self-clearing, see ItemSkillBehaviors.ts); a
+    // fight-start heal would be a no-op since fights always start at full HP, so this grants max
+    // HP instead. FIGHT_START is kept only for the Mythic invulnerability rider.
+    triggerTypes: [TriggerType.AURA, TriggerType.FIGHT_START],
     values: {
-      [ItemRarity.LEGENDARY]: { healRatio: 0.08, invulnMs: 0 },
-      [ItemRarity.MYTHIC]: { healRatio: 0.15, invulnMs: 1000 },
+      [ItemRarity.LEGENDARY]: { hpRatio: 0.08, invulnMs: 0 },
+      [ItemRarity.MYTHIC]: { hpRatio: 0.15, invulnMs: 1000 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.BULWARK], r);
       return v.invulnMs > 0
-        ? `Fight start: heal ${pct(v.healRatio)} of max HP and gain ${v.invulnMs / 1000}s invulnerability.`
-        : `Fight start: heal ${pct(v.healRatio)} of max HP.`;
+        ? `+${pct(v.hpRatio)} max HP, and gain ${v.invulnMs / 1000}s invulnerability at fight start.`
+        : `+${pct(v.hpRatio)} max HP.`;
     },
   },
 
@@ -241,7 +244,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.LAST_STAND], r);
-      return `Below 35% HP: +${pct(v.defenseRatio)} defense and +${v.hpRegen} HP regen.`;
+      return `Below 50% HP: +${pct(v.defenseRatio)} defense and +${v.hpRegen} HP regen.`;
     },
   },
 
@@ -283,10 +286,13 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { discount: 1 },
-      [ItemRarity.MYTHIC]: { discount: 2 },
+      [ItemRarity.LEGENDARY]: { count: 1 },
+      [ItemRarity.MYTHIC]: { count: 2 },
     },
-    describe: (r) => `Shop reroll costs ${skillValues(ITEM_SKILLS[ItemSkillType.HAGGLER], r).discount} gold less.`,
+    describe: (r) => {
+      const count = skillValues(ITEM_SKILLS[ItemSkillType.HAGGLER], r).count;
+      return `${count} free shop reroll${count > 1 ? 's' : ''} per round.`;
+    },
   },
 
   [ItemSkillType.STORE_CREDIT]: {
@@ -307,17 +313,20 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     },
   },
 
-  [ItemSkillType.APPRAISER]: {
-    id: ItemSkillType.APPRAISER,
+  [ItemSkillType.CASH_BACK]: {
+    id: ItemSkillType.CASH_BACK,
     class: ItemClass.MERCHANT,
-    name: 'Appraiser',
+    name: 'Cash Back',
     slots: ANY_SLOT,
-    triggerTypes: [TriggerType.AURA],
+    triggerTypes: [TriggerType.ON_SELL],
     values: {
-      [ItemRarity.LEGENDARY]: { multiplier: 1.0 },
-      [ItemRarity.MYTHIC]: { multiplier: 1.1 },
+      [ItemRarity.LEGENDARY]: { gold: 1, xp: 1 },
+      [ItemRarity.MYTHIC]: { gold: 2, xp: 2 },
     },
-    describe: (r) => `Items sell for ${pct(skillValues(ITEM_SKILLS[ItemSkillType.APPRAISER], r).multiplier)} of their price (normally 70%).`,
+    describe: (r) => {
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.CASH_BACK], r);
+      return `Selling an item grants ${v.gold} gold and ${v.xp} xp.`;
+    },
   },
 
   [ItemSkillType.COMPOUND_INTEREST]: {
@@ -325,12 +334,12 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.MERCHANT,
     name: 'Compound Interest',
     slots: ANY_SLOT,
-    triggerTypes: [TriggerType.SHOP_START, TriggerType.AFTER_REFRESH],
+    triggerTypes: [TriggerType.AURA],
     values: {
       [ItemRarity.LEGENDARY]: { ratio: 0.1 },
       [ItemRarity.MYTHIC]: { ratio: 0.2 },
     },
-    describe: (r) => `Shop start: gain gold equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.COMPOUND_INTEREST], r).ratio)} of your unspent gold.`,
+    describe: (r) => `Increase income by ${pct(skillValues(ITEM_SKILLS[ItemSkillType.COMPOUND_INTEREST], r).ratio)}.`,
   },
 
   [ItemSkillType.MARKET_MANIPULATION]: {

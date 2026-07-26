@@ -28,6 +28,13 @@ const coatedEdgeCounters = new WeakMap<Item, number>();
 const openingActCounters = new WeakMap<Item, number>();
 const crushingBlowCounters = new WeakMap<Item, number>();
 const protectionMoneyLastProcMs = new WeakMap<Item, number>();
+// Bulk Discount: undiscounted price/sellPrice per SHOP item, captured the first tick a slot is
+// seen. Every later tick recomputes from this stable base rather than the shop item's current
+// (possibly already-discounted) price — aura fires every 1s, so subtracting from the live price
+// each tick would compound the discount down to 0 within a few seconds. A slot rebuilt into a
+// new Item object (rebuildShopSlot/revalidateUpgradePreviews) is a fresh WeakMap key, so it
+// re-captures a correct undiscounted base automatically.
+const bulkDiscountBasePrices = new WeakMap<Item, { price: number; sellPrice: number }>();
 
 export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) => void> = {
   // ---------------------------------------------------------------- ROGUE ----
@@ -191,15 +198,22 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   },
 
   [ItemSkillType.BULWARK]: (context) => {
-    const { attacker, item, client, clock, trigger } = context;
-    if (trigger !== TriggerType.FIGHT_START || !attacker || !item) return;
-    const { healRatio, invulnMs } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const healed = attacker.heal(Math.round(attacker.maxHp * healRatio));
-    if (healed > 0) client?.send('healing', { playerId: attacker.playerId, healing: healed });
-    if (invulnMs > 0 && clock) attacker.setInvincible(clock, invulnMs, client);
+    const { attacker, item, client, clock, trigger, attackerSnapshot } = context;
+    if (!item) return;
+    if (trigger === TriggerType.AURA) {
+      if (!attacker) return;
+      const { hpRatio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+      const base = attackerSnapshot ?? attacker;
+      item.skillAffectedStats.maxHp = Math.round(Math.max(0, base.maxHp) * hpRatio);
+      return;
+    }
+    if (trigger !== TriggerType.FIGHT_START || !attacker) return;
+    const { invulnMs } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    if (invulnMs <= 0 || !clock) return;
+    attacker.setInvincible(clock, invulnMs, client);
     client?.send('combat_log', {
-      text: `${attacker.name}'s ${item.name} braces for impact: ${fmt(healed)} HP healed!`,
-      kind: 'item', attackerId: attacker.playerId, itemId: item.itemId, healing: healed,
+      text: `${attacker.name}'s ${item.name} braces for impact: ${invulnMs / 1000}s invulnerability!`,
+      kind: 'item', attackerId: attacker.playerId, itemId: item.itemId,
     } as CombatLogMessage);
   },
 
@@ -208,7 +222,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     if (trigger !== TriggerType.AURA || !attacker || !item) return;
     const { defenseRatio, hpRegen } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
     const base = attackerSnapshot ?? attacker;
-    const below = attacker.maxHp > 0 && attacker.hp < attacker.maxHp * 0.35;
+    const below = attacker.maxHp > 0 && attacker.hp < attacker.maxHp * 0.5;
     item.skillAffectedStats.defense = below ? Math.round(base.defense * defenseRatio) : 0;
     item.skillAffectedStats.hpRegen = below ? hpRegen : 0;
   },
@@ -257,8 +271,11 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   [ItemSkillType.HAGGLER]: (context) => {
     const { attacker, item, trigger, shop } = context;
     if (trigger !== TriggerType.AURA || !attacker || !item || !shop) return;
-    const { discount } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    attacker.refreshShopCost = Math.max(0, attacker.refreshShopCost - discount);
+    const { count } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    // hagglerRerollsUsed is a per-shop-PHASE counter (reset in DraftRoom.onJoin, not per shop
+    // build) — re-seeding the synced remaining-count from it each tick means a paid refresh
+    // can't accidentally refund an already-spent free reroll.
+    attacker.hagglerFreeRerolls = Math.max(0, count - attacker.hagglerRerollsUsed);
   },
 
   [ItemSkillType.STORE_CREDIT]: (context) => {
@@ -269,23 +286,27 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     attacker.storeCreditFreeClaimCap = cap;
   },
 
-  [ItemSkillType.APPRAISER]: (context) => {
-    const { attacker, item, trigger, shop } = context;
-    if (trigger !== TriggerType.AURA || !attacker || !item || !shop) return;
-    const { multiplier } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    attacker.inventory.forEach((invItem) => {
-      if (!invItem.sold) invItem.sellPrice = Math.round(invItem.price * multiplier);
-    });
+  [ItemSkillType.CASH_BACK]: (context) => {
+    const { attacker, item, client, trigger } = context;
+    if (trigger !== TriggerType.ON_SELL || !attacker || !item) return;
+    const { gold, xp } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    if (gold > 0) attacker.gold += gold;
+    const xpGained = xp > 0 ? attacker.getXpAmount(xp) : 0;
+    if (xpGained > 0) attacker.xp += xpGained;
+    if (gold <= 0 && xpGained <= 0) return;
+    client?.send('reward_gain', {
+      playerId: attacker.playerId,
+      gold: gold > 0 ? gold : undefined,
+      xp: xpGained > 0 ? xpGained : undefined,
+    } as RewardGainMessage);
   },
 
   [ItemSkillType.COMPOUND_INTEREST]: (context) => {
-    const { attacker, item, client, trigger } = context;
-    if ((trigger !== TriggerType.SHOP_START && trigger !== TriggerType.AFTER_REFRESH) || !attacker || !item) return;
+    const { attacker, item, trigger, attackerSnapshot } = context;
+    if (trigger !== TriggerType.AURA || !attacker || !item) return;
     const { ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const gained = Math.floor(attacker.gold * ratio);
-    if (gained <= 0) return;
-    attacker.gold += gained;
-    client?.send('reward_gain', { playerId: attacker.playerId, gold: gained } as RewardGainMessage);
+    const base = attackerSnapshot ?? attacker;
+    item.skillAffectedStats.income = Math.round(Math.max(0, base.income) * ratio);
   },
 
   [ItemSkillType.MARKET_MANIPULATION]: (context) => {
@@ -308,12 +329,15 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     attacker.equippedItems.forEach((i) => { if (i.class === ItemClass.MERCHANT) merchantCount++; });
     attacker.inventory.forEach((i) => { if (i.class === ItemClass.MERCHANT) merchantCount++; });
     const discount = merchantCount * perItem;
-    if (discount <= 0) return;
     shop.forEach((shopItem) => {
-      if (!shopItem.sold) {
-        shopItem.price = Math.max(0, shopItem.price - discount);
-        shopItem.sellPrice = Math.max(0, shopItem.sellPrice - discount);
+      if (shopItem.sold) return;
+      let base = bulkDiscountBasePrices.get(shopItem);
+      if (!base) {
+        base = { price: shopItem.price, sellPrice: shopItem.sellPrice };
+        bulkDiscountBasePrices.set(shopItem, base);
       }
+      shopItem.price = Math.max(0, base.price - discount);
+      shopItem.sellPrice = Math.max(0, base.sellPrice - discount);
     });
   },
 

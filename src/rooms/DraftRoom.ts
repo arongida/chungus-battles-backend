@@ -14,6 +14,7 @@ import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCo
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
 import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
 import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCommand';
+import { OnSellTriggerCommand } from '../commands/triggers/OnSellTriggerCommand';
 import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
@@ -141,6 +142,8 @@ export class DraftRoom extends Room {
         // session via allowReconnection instead of re-running onJoin), unlike Comrade/Gold Genie/
         // Lucky Find whose claims are meant to refresh on every manual shop refresh too.
         this.state.player.misconductClaimUsed = false;
+        // Haggler: same per-shop-phase reset reasoning as misconductClaimUsed above.
+        this.state.player.hagglerRerollsUsed = 0;
 
         //set room state
         if (this.state.player.round === 1) await this.updateTalentSelection();
@@ -459,15 +462,17 @@ export class DraftRoom extends Room {
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
         const goldBefore = this.state.player.gold;
-        await this.state.player.sellItem(item);
-        // sellItem() no-ops for equipped/quest items, so derive the actual delta rather
-        // than assuming item.sellPrice was granted.
+        const sold = await this.state.player.sellItem(item);
+        if (!sold) return;
+        // sellItem() no-ops for equipped/quest items (checked above), so derive the actual
+        // delta rather than assuming item.sellPrice was granted.
         const goldGained = this.state.player.gold - goldBefore;
         if (goldGained > 0) {
             this.clients[0]?.send('reward_gain', { playerId: this.state.player.playerId, gold: goldGained } as RewardGainMessage);
         }
         this.soldItemStack.push(item);
         this.state.canUndoSell = true;
+        this.dispatcher.dispatch(new OnSellTriggerCommand());
         await this.revalidateUpgradePreviews();
     }
 
@@ -576,11 +581,17 @@ export class DraftRoom extends Room {
     }
 
     private async refreshShop(client: Client) {
-        if (this.state.player.gold < this.state.player.refreshShopCost) {
+        // Haggler (item skill): spend a free reroll before falling back to the gold cost.
+        const freeReroll = this.state.player.hagglerFreeRerolls > 0;
+        if (!freeReroll && this.state.player.gold < this.state.player.refreshShopCost) {
             client.send('error', 'Not enough gold!');
             return;
         }
-        this.state.player.gold -= this.state.player.refreshShopCost;
+        if (freeReroll) {
+            this.state.player.hagglerRerollsUsed++;
+        } else {
+            this.state.player.gold -= this.state.player.refreshShopCost;
+        }
         this.state.player.unlockShop();
         this.state.shop.clear();
         this.invalidateUndoSell();
