@@ -43,6 +43,10 @@ export class Player extends Schema implements IStats {
     invincibleTimer: Delayed;
     talentsOnCooldown: TalentType[] = [];
     attackSpeedMultiplier: number = 1;
+    // Bargain Hunter: reroll-cost multiplier collected during the draft aura pass and applied to
+    // refreshShopCost after ALL aura talents have run (see DraftAuraTriggerCommand), so halving
+    // composes with Comrade's +income regardless of talent pick order. Re-seeded to 1 each tick.
+    refreshShopCostMultiplier: number = 1;
     healingEffectiveness: number = 1;
     // Black Market Contact: true once the current shop's free lucky-find claim has been spent
     // (DraftRoom.buyItem), reset per shop build (DraftRoom.updateShop). Same latch pattern as

@@ -120,8 +120,16 @@ export function baseLuckyFindChance(level: number): number {
 }
 
 /** Base (un-modified) shop reroll cost, seeded onto Player.refreshShopCost each draft
- *  aura tick and at draft setup; talents (Comrade +income, Bargain Hunter -1) then adjust it. */
+ *  aura tick and at draft setup; talents (Comrade +income, Bargain Hunter x0.5) then adjust it. */
 export const BASE_REFRESH_SHOP_COST = 2;
+
+/** Bargain Hunter's reroll-cost multiplier (halved). */
+export const BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER = 0.5;
+
+/** Reroll cost after multipliers: floored, never below 1 (no free/negative-cost rerolls). */
+export function applyRefreshCostMultiplier(cost: number, multiplier: number): number {
+    return Math.max(1, Math.floor(cost * multiplier));
+}
 
 /**
  * Lucky shop rolls: each shop slot has a chance — Player.luckyFindChance, seeded from

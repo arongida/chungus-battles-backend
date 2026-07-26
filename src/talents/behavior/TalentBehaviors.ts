@@ -11,7 +11,7 @@ import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { WEAPON_BASE_RANGES, clampTier } from "../../items/stats/itemStatPool";
-import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, shieldDescription, stealShopItem, hasMisconductUpgrade } from "../../commands/ShopUpgradeUtils";
+import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, shieldDescription, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, RewardGainMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
@@ -1031,21 +1031,13 @@ export const TalentBehaviors = {
             });
         },
 
-    // Bargain Hunter — AURA trigger; reduces the (freshly re-seeded, see DraftAuraTriggerCommand)
-    // base reroll cost by 1 rather than pinning it to a fixed value, so it composes additively
-    // with other reroll-cost talents (e.g. Comrade's +income) instead of overwriting them.
+    // Bargain Hunter — AURA trigger; contributes a reroll-cost multiplier rather than mutating
+    // refreshShopCost directly, so the halving lands after Comrade's +income no matter the order
+    // aura talents run in (see DraftAuraTriggerCommand's post-pass).
     [TalentType.BARGAIN_HUNTER]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent } = context;
-            attacker.refreshShopCost -= 1;
-            if (talent.totalActivations === 0) {
-                attacker.gold += talent.activationRate;
-                track(talent, 1, 0, 0, talent.activationRate, 0, { client, playerId: attacker.playerId });
-                client.send('trigger_talent', {
-                    playerId: attacker.playerId,
-                    talentId: TalentType.BARGAIN_HUNTER,
-                });
-            }
+            const { attacker } = context;
+            attacker.refreshShopCostMultiplier *= BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER;
         },
 
     [TalentType.POISON_2]:
@@ -1262,11 +1254,16 @@ export function ensureMartialFists(player: Player, client?: Client, talent?: Tal
 
 function clonedAsGhost(source: Item): Item {
     const raw = source.toJSON() as any;
-    const { affectedStats, affectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
 
     const ghost = new Item().assign(primitives);
     ghost.affectedStats = new AffectedStats().assign(affectedStats || {});
     ghost.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
+    // Skill output is dynamic/self-clearing (see ItemSchema.ts's skillAffectedStats comment) —
+    // start the ghost fresh rather than copying a stale snapshot; its own skillId (carried via
+    // primitives) re-derives this every aura tick same as the source weapon.
+    ghost.skillAffectedStats = new AffectedStats();
+    ghost.skillAffectedEnemyStats = new AffectedStats();
 
     const equipOptionsArr = new ArraySchema<string>();
     if (equipOptions?.length) (equipOptions as string[]).forEach((e: string) => equipOptionsArr.push(e));

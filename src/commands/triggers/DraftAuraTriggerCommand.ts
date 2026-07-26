@@ -5,7 +5,7 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContext";
 import {triggerEquippedItems} from '../../common/triggerUtils';
 import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
-import {baseLuckyFindChance, BASE_REFRESH_SHOP_COST} from '../ShopUpgradeUtils';
+import {baseLuckyFindChance, BASE_REFRESH_SHOP_COST, applyRefreshCostMultiplier} from '../ShopUpgradeUtils';
 
 export class DraftAuraTriggerCommand extends Command<DraftRoom> {
     execute() {
@@ -18,9 +18,10 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         player.luckyFindChance = baseLuckyFindChance(player.level) + player.luckyFindMythicBonus;
 
         // Re-seed the reroll cost to its base every tick, before aura talents run, so talents
-        // that adjust it (Comrade +income, Bargain Hunter -1) apply as deltas on a clean base
-        // instead of accumulating or fighting over a raw overwrite.
+        // that adjust it (Comrade +income, Bargain Hunter x0.5) apply as deltas/multipliers on a
+        // clean base instead of accumulating or fighting over a raw overwrite.
         player.refreshShopCost = BASE_REFRESH_SHOP_COST;
+        player.refreshShopCostMultiplier = 1;
 
         const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes?.includes(TriggerType.AURA));
 
@@ -44,5 +45,9 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         });
 
         triggerEquippedItems(this.state.player, behaviorContext, TriggerType.AURA);
+
+        // Applied last (after aura talents and item skills) so Bargain Hunter's halving is
+        // order-independent — it always lands on the fully-adjusted cost, not a partial one.
+        player.refreshShopCost = applyRefreshCostMultiplier(player.refreshShopCost, player.refreshShopCostMultiplier);
     }
 }
