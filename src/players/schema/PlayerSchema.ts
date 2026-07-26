@@ -58,6 +58,11 @@ export class Player extends Schema implements IStats {
     // Gold Genie: same latch pattern as comradeClaimUsed, but scoped to the first merchant-class
     // item bought each shop.
     goldGenieClaimUsed: boolean = false;
+    // Misconduct: unlike comradeClaimUsed, reset once per shop phase (DraftRoom.onJoin) rather
+    // than per shop build, so the claim doesn't refresh on manual shop refresh. The free item
+    // claimed this way also gets the rarity-upgrade steal treatment (see ShopUpgradeUtils.
+    // stealShopItem / DraftRoom.buyItem).
+    misconductClaimUsed: boolean = false;
     // Locked-in next-fight opponent (Next-Enemy Preview feature). Server-only: never add to
     // playerToPlainObject/snapshotPlayer (would smear a stale pointer into matchmaking
     // snapshots). Persisted via the targeted setNextFightEnemy() $set instead. Not @type —
@@ -169,6 +174,10 @@ export class Player extends Schema implements IStats {
     // Black Market Contact: same latch as comradeFreeClaim, but the client only honors it on
     // lucky-find shop items (see TalentBehaviors.ts BLACK MARKET CONTRACT).
     @type('boolean') luckyFindFreeClaim: boolean = false;
+    // Misconduct: same latch as comradeFreeClaim (any unsold shop item), but only one claim per
+    // shop phase — see misconductClaimUsed. The claimed item also gets a rarity upgrade +
+    // full-price sell value (see TalentBehaviors.ts MISCONDUCT).
+    @type('boolean') misconductFreeClaim: boolean = false;
     // Health Flask (itemId 6): hpRegen bonus banked in the draft, consumed by the wearer's very
     // next fight. Folded into hpRegen every tick by statsUtils.recalculatePlayerStats and zeroed
     // out in FightRoom.handleFightEnd once that fight concludes. Must stay @type (not a plain

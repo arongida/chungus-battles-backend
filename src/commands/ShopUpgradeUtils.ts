@@ -3,6 +3,7 @@ import { Player } from '../players/schema/PlayerSchema';
 import { ItemRarity, ItemType } from '../items/types/ItemTypes';
 import { cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
+import { TalentType } from '../talents/types/TalentTypes';
 import {
   BURN_DAMAGE_PER_STACK,
   BURN_DURATION_MS,
@@ -186,6 +187,31 @@ export function getEquippedUpgradeableItems(player: Player): Array<{ item: Item;
 export function totalRemainingRaritySteps(player: Player): number {
   return getEquippedUpgradeableItems(player)
     .reduce((sum, { item }) => sum + (ItemRarity.MYTHIC - item.rarity), 0);
+}
+
+/** True when the player owns Misconduct (402), which upgrades every stolen item by one rarity. */
+export function hasMisconductUpgrade(player: Player): boolean {
+  return player.talents?.some((t) => t.talentId === TalentType.MISCONDUCT) ?? false;
+}
+
+/** Shared by Misconduct, Robbery and Grand Robbery: takes a shop item for free.
+ *  With `upgrade` set, the item first gains one rarity step (which also raises its
+ *  price by 50%), then always sells for 100% of its final price.
+ *  Returns the rarity steps applied and whether this steal newly forged a Mythic,
+ *  so the caller can send its own draft_log / reward_gain celebration. */
+export function stealShopItem(
+  item: Item, player: Player, upgrade: boolean,
+): { steps: number; becameMythic: boolean } {
+  let steps = 0;
+  const upgradeable = !NON_UPGRADEABLE_ITEM_IDS.has(item.itemId) && item.rarity < ItemRarity.MYTHIC;
+  if (upgrade && upgradeable) {
+    steps = applyExtraRaritySteps(item, item, player, 1);
+  }
+  const becameMythic = steps > 0 && item.rarity >= ItemRarity.MYTHIC;
+  player.gold += item.price;    // refund AFTER re-pricing so getItem nets to free
+  player.getItem(item);         // debits item.price, marks sold, handles preview replacement
+  item.sellPrice = item.price;  // stolen items sell for full price
+  return { steps, becameMythic };
 }
 
 export function findOwnedUpgradeTarget(player: Player, itemId: number): Item | null {

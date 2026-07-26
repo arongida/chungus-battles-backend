@@ -4,7 +4,7 @@ import { buildJoe, copyPlayer, createNewPlayer, getPlayer, getSameRoundPlayer, J
 import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentClasses } from '../players/EnemyPreview';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, grantLuckyFindMythicBonus } from '../commands/ShopUpgradeUtils';
+import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, stealShopItem } from '../commands/ShopUpgradeUtils';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
@@ -136,6 +136,12 @@ export class DraftRoom extends Room {
         //pre-select and lock in the next fight opponent, sync its redacted preview
         await this.prepareNextEnemyPreview(this.state.player.round, options.playerId, loadedPlayer);
 
+        // Misconduct: exactly one free-item claim per shop phase (round) — reset once here
+        // (onJoin fires once per DraftRoom join; reconnects within the window resume the same
+        // session via allowReconnection instead of re-running onJoin), unlike Comrade/Gold Genie/
+        // Lucky Find whose claims are meant to refresh on every manual shop refresh too.
+        this.state.player.misconductClaimUsed = false;
+
         //set room state
         if (this.state.player.round === 1) await this.updateTalentSelection();
         if (this.state.shop.length === 0) await this.updateShop(this.state.shopSize);
@@ -228,6 +234,8 @@ export class DraftRoom extends Room {
         this.state.player.comradeClaimUsed = false;
         this.state.player.goldGenieClaimUsed = false;
         this.state.player.luckyFindClaimUsed = false;
+        // Misconduct's claim is deliberately NOT reset here — it's one free steal per shop
+        // phase (round), not per shop build, so it survives manual refreshes (see onJoin).
         const excludeTypes: string[] = [];
         const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level, excludeTypes);
         const lockedShop = this.state.player.lockedShop;
@@ -280,13 +288,13 @@ export class DraftRoom extends Room {
         this.dispatcher.dispatch(new DraftAuraTriggerCommand());
     }
 
-    private announceLuckyUpgrade(item: { name: string; rarity: number }, steps: number, slot: number) {
+    private announceLuckyUpgrade(item: { name: string; rarity: number }, steps: number, slot: number, text = 'Lucky find! Rarity up!') {
         if (steps <= 0) return;
         const rarityName = ItemRarity[item.rarity];
         const displayName = rarityName.charAt(0) + rarityName.slice(1).toLowerCase();
         // Floating text over the shop card (see TriggerAnimations.triggerShopFloatingText)
         // instead of a snackbar toast — the toast queued/overlapped awkwardly with other UI.
-        this.clients[0]?.send('shop_floating', { slot, text: `Lucky find! Rarity up!`, rarity: item.rarity });
+        this.clients[0]?.send('shop_floating', { slot, text, rarity: item.rarity });
     }
 
     /** Tier to draw talents from: one past the highest tier the player already owns. */
@@ -381,27 +389,36 @@ export class DraftRoom extends Room {
             return;
         }
         // Free-item claims: make this purchase free regardless of price, then latch the spent
-        // claim (DraftRoom.updateShop resets the latches each shop build). The three sources are
-        // mutually exclusive in priority order lucky-find > gold genie > comrade — matching the
-        // client's freeClaimSource() — so one purchase never burns more than one claim.
+        // claim (DraftRoom.updateShop resets the latches each shop build). The four sources are
+        // mutually exclusive in priority order lucky-find > gold genie > comrade > misconduct —
+        // matching the client's freeClaimSource() — so one purchase never burns more than one claim.
         const luckyFree = this.state.player.luckyFindFreeClaim && item.luckyFind && !item.sold;
         const goldGenieFree = !luckyFree && this.state.player.goldGenieFreeClaim && item.class === ItemClass.MERCHANT && !item.sold;
         const comradeFree = !luckyFree && !goldGenieFree && this.state.player.comradeFreeClaim && !item.sold;
+        const misconductFree = !luckyFree && !goldGenieFree && !comradeFree && this.state.player.misconductFreeClaim && !item.sold;
         if (luckyFree || goldGenieFree || comradeFree) {
             item.price = 0;
             item.sellPrice = 0;
         }
-        if (this.state.player.gold < item.price || item.sold) {
+        // Misconduct keeps item.price intact (it feeds the rarity-upgrade re-pricing and the
+        // full-price sell value below), so it bypasses the affordability check separately.
+        if (item.sold || (!misconductFree && this.state.player.gold < item.price)) {
             client.send('error', 'Not possible to buy item!');
             return;
         }
-        this.state.player.getItem(item);
-        // Lucky Find mastery: every Mythic acquisition (plain buy or an upgrade-preview buy that
-        // lands on Mythic — both flow through here) grants a permanent +1% Lucky Find chance for
-        // the rest of the run (see ShopUpgradeUtils.baseLuckyFindChance callers / PlayerSchema.
-        // luckyFindMythicBonus). Celebrated on the avatar via reward_gain (not the shop card) —
-        // upgrade-preview buys destroy and recreate the item's DOM node, which broke the
-        // card-anchored shop_floating version of this celebration.
+        const slot = this.state.shop.indexOf(item);
+        let misconductSteps = 0;
+        if (misconductFree) {
+            ({ steps: misconductSteps } = stealShopItem(item, this.state.player, true));
+        } else {
+            this.state.player.getItem(item);
+        }
+        // Lucky Find mastery: every Mythic acquisition (plain buy, an upgrade-preview buy, or a
+        // Misconduct steal-upgrade that lands on Mythic — all flow through here) grants a
+        // permanent +1% Lucky Find chance for the rest of the run (see ShopUpgradeUtils.
+        // baseLuckyFindChance callers / PlayerSchema.luckyFindMythicBonus). Celebrated on the
+        // avatar via reward_gain (not the shop card) — upgrade-preview buys destroy and recreate
+        // the item's DOM node, which broke the card-anchored shop_floating version of this celebration.
         if (item.rarity === ItemRarity.MYTHIC) {
             grantLuckyFindMythicBonus(this.state.player);
             client.send('draft_log', `Mythic forged! Permanent +3% Lucky Find chance!`);
@@ -418,6 +435,12 @@ export class DraftRoom extends Room {
         if (comradeFree) {
             this.state.player.comradeClaimUsed = true;
             this.state.player.comradeFreeClaim = false;
+        }
+        if (misconductFree) {
+            this.state.player.misconductClaimUsed = true;
+            this.state.player.misconductFreeClaim = false;
+            this.announceLuckyUpgrade(item, misconductSteps, slot, 'Misconduct! Rarity up!');
+            client.send('draft_log', `Misconduct! Took ${item.name}${misconductSteps > 0 ? ' and upgraded it' : ''}!`);
         }
         this.invalidateUndoSell();
         // Other shop slots for the same item (or previews built off the item just

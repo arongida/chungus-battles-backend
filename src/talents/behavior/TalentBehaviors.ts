@@ -11,7 +11,7 @@ import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { WEAPON_BASE_RANGES, clampTier } from "../../items/stats/itemStatPool";
-import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, shieldDescription } from "../../commands/ShopUpgradeUtils";
+import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, shieldDescription, stealShopItem, hasMisconductUpgrade } from "../../commands/ShopUpgradeUtils";
 import { CombatLogMessage, RewardGainMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
@@ -596,17 +596,22 @@ export const TalentBehaviors = {
 
     [TalentType.ROBBERY]: (context: TalentBehaviorContext) => {
         const { attacker, client, shop, talent } = context;
-        const randomItem = shop[Math.floor(Math.random() * shop.length)];
+        if (!shop) return;
+        const available = shop.filter((item) => !item.sold);
+        const randomItem = available[Math.floor(Math.random() * available.length)];
         if (randomItem) {
-            attacker.gold += randomItem.price;
-            attacker.getItem(randomItem);
-            randomItem.sellPrice = randomItem.price; // stolen items sell for full price
-            track(talent, 0, 0, 0);
+            const { steps, becameMythic } = stealShopItem(randomItem, attacker, hasMisconductUpgrade(attacker));
+            track(talent, 1);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ROBBERY,
             });
-            client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}!`);
+            client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}${steps > 0 ? ' (rarity up!)' : ''}!`);
+            if (becameMythic) {
+                grantLuckyFindMythicBonus(attacker);
+                client.send('draft_log', `Mythic forged! Permanent +3% Lucky Find chance!`);
+                client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+            }
         }
     },
 
@@ -1098,17 +1103,23 @@ export const TalentBehaviors = {
             }
         },
 
-    [TalentType.ROGUE_4]:
-        (context: TalentBehaviorContext) => {
-            const { attacker, client } = context;
-            attacker.gold += 1;
-            track(context.talent, 1, 0, 0, 1, 0, { client, playerId: attacker.playerId });
-            client.send('combat_log', { text: `${attacker.name} gets 1 gold!`, kind: 'reward', talentId: context.talent.talentId, attackerId: attacker.playerId, goldDelta: 1 } as CombatLogMessage);
-            client.send('trigger_talent', {
-                playerId: attacker.playerId,
-                talentId: TalentType.ROGUE_4,
-            });
-        },
+    [TalentType.MISCONDUCT]: (context: TalentBehaviorContext) => {
+        const { attacker, shop, talent, trigger } = context;
+
+        // Back-compat: in-progress runs may carry an embedded copy from an earlier rework
+        // (on-attack gold, or the brief shop-start auto-steal version). Repoint to aura and
+        // bail — same migration idiom as Mercenary (see TalentType.MERCENARY above).
+        if (trigger === TriggerType.ON_ATTACK || trigger === TriggerType.SHOP_START) {
+            talent.triggerTypes.clear();
+            talent.triggerTypes.push(TriggerType.AURA);
+            return;
+        }
+        if (!shop) return;
+
+        // Grants a free-item claim like Comrade — the player picks which shop item to take
+        // (DraftRoom.buyItem applies the rarity upgrade + full-price sell value on purchase).
+        attacker.misconductFreeClaim = !attacker.misconductClaimUsed;
+    },
 
     [TalentType.MERCHANT_5]:
         (context: TalentBehaviorContext) => {
@@ -1141,23 +1152,31 @@ export const TalentBehaviors = {
             if (!shop) return; // undefined outside draft
             if (talent.tags?.includes('grand-robbery-used')) return; // one-shot latch
 
+            const upgrade = hasMisconductUpgrade(attacker);
             let stolen = 0;
+            let upgraded = 0;
+            let mythics = 0;
             [...shop].forEach((item) => { // copy: getItem mutates sold/shop state as it goes
                 if (item.sold) return;
-                attacker.gold += item.price; // refund so getItem nets to free
-                attacker.getItem(item);
-                item.sellPrice = item.price; // stolen items sell for full price
+                const { steps, becameMythic } = stealShopItem(item, attacker, upgrade);
                 stolen++;
+                if (steps > 0) upgraded++;
+                if (becameMythic) mythics++;
             });
 
             talent.tags?.push('grand-robbery-used');
-            talent.description = `Grand Robbery! Stole ${stolen} item(s) from the shop!`
+            talent.description = `Grand Robbery! Stole ${stolen} item(s) from the shop${upgraded > 0 ? ' (all upgraded!)' : ''}!`
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.GRAND_ROBBERY,
             });
             if (stolen > 0) {
-                client.send('draft_log', `Grand Robbery! Stole ${stolen} item(s) from the shop!`);
+                client.send('draft_log', `Grand Robbery! Stole ${stolen} item(s) from the shop${upgraded > 0 ? ' (all upgraded!)' : ''}!`);
+            }
+            if (mythics > 0) {
+                for (let i = 0; i < mythics; i++) grantLuckyFindMythicBonus(attacker);
+                client.send('draft_log', `Mythic forged! Permanent +${mythics * 3}% Lucky Find chance!`);
+                client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
             }
         },
 
