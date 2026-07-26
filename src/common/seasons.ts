@@ -19,7 +19,7 @@ export interface SeasonInfo {
 export const SEASONS: SeasonInfo[] = [
     {
     number: 21,
-    name: 'Slow Down',
+    name: 'Lucky Legend',
     changes: [
       'Weapon base attack speed reduced by ~10%',
       'Rogue vol IV. replaced with Misconduct - grants one free-item claim per round (pick any item, like Comrade); all items stolen this way (Misconduct, Robbery, Grand Robbery) arrive one rarity higher and sell for 100%',
