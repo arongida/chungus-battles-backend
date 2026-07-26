@@ -23,6 +23,7 @@ export const SEASONS: SeasonInfo[] = [
     changes: [
       'Weapon base attack speed reduced by ~10%',
       'Rogue vol IV. replaced with Misconduct - grants one free-item claim per round (pick any item, like Comrade); all items stolen this way (Misconduct, Robbery, Grand Robbery) arrive one rarity higher and sell for 100%',
+      'Accuracy now counters dodge: each point of attacker accuracy cancels 1 point of the defender\'s dodge rating (accuracy still adds to min damage roll)',
     ],
   },
   {

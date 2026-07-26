@@ -529,7 +529,7 @@ export class FightRoom extends Room {
         if (empowered) attacker.empoweredNextAttack = false;
 
         if (!empowered && defender.dodgeRate > 0) {
-            const dodgeChance = 1 - 100 / (100 + defender.dodgeRate);
+            const dodgeChance = defender.getDodgeChance(attacker.accuracy);
 
             if (Math.random() < dodgeChance) {
                 defender.fightStats.attacksDodged++;
