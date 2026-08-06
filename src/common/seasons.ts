@@ -29,6 +29,9 @@ export const SEASONS: SeasonInfo[] = [
       'Lucky Find - Mythic bonus reduced from 3% to 2% permanent chance',
       'Item prices increased slightly (~20%) across all tiers',
       'Item skills can now roll a skill you already own - no duplicate restriction',
+      'Item skills rebalance',
+      'Shadowstep reworked: each dodge now heals 3% of your max HP (5% at Mythic) but permanently burns 1 dodge rate for the rest of the fight, instead of granting an undodgeable double-damage attack',
+      'Liquid Assets replaced by War Chest: at fight start spend up to 10 gold (15 at Mythic) for +3 strength and +2 defense per gold spent for that fight (+4/+3 at Mythic)',
     ],
   },
   {

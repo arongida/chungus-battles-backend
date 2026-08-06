@@ -76,3 +76,22 @@ export function refreshItemSkillDescription(item: Item): void {
   if (!def) return;
   item.skillDescription = def.describe(item.rarity);
 }
+
+/** Re-syncs a persisted item's skill display fields and triggerTypes against the CURRENT
+ *  ITEM_SKILLS table — called on every DB->schema load (Player.ts's buildItemSchema,
+ *  Item.ts's getItemSchemaObject) so a rebalanced/renamed skill (e.g. Shadowstep, War Chest)
+ *  doesn't keep showing a stale name/description from whatever table was live when the item
+ *  was granted, or silently stop firing because it's missing a newly-added trigger type. A
+ *  no-op for items with no skillId, or a skillId ITEM_SKILLS no longer defines (in which case
+ *  the stale display fields are left alone rather than guessed at). Triggers are only ever
+ *  added, never pruned — items can carry their own unrelated triggerTypes. */
+export function reconcileItemSkill(item: Item): void {
+  if (!item.skillId) return;
+  const def = ITEM_SKILLS[item.skillId];
+  if (!def) return;
+  item.skillName = def.name;
+  item.skillDescription = def.describe(item.rarity);
+  def.triggerTypes.forEach((t) => {
+    if (!item.triggerTypes.includes(t)) item.triggerTypes.push(t);
+  });
+}

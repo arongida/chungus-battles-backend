@@ -90,15 +90,22 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
 
   [ItemSkillType.SHADOWSTEP]: (context) => {
     const { defender, item, client, trigger } = context;
-    if (trigger !== TriggerType.ON_DODGE || !defender || !item) return;
-    defender.empoweredNextAttack = true;
-    if (item.rarity >= ItemRarity.MYTHIC) {
-      const { healRatio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-      const healed = defender.heal(Math.round(defender.maxHp * healRatio));
-      if (healed > 0) client?.send('healing', { playerId: defender.playerId, healing: healed });
+    if (!item) return;
+    if (trigger === TriggerType.FIGHT_END) {
+      item.skillAffectedStats.dodgeRate = 0;
+      return;
     }
+    if (trigger !== TriggerType.ON_DODGE || !defender) return;
+    const { healRatio, dodgeCost } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    const healed = defender.heal(Math.round(defender.maxHp * healRatio));
+    if (healed > 0) client?.send('healing', { playerId: defender.playerId, healing: healed });
+    // Accumulating -= write (unlike every AURA skill's self-clearing =) — the cost is meant to
+    // persist for the rest of the fight; FIGHT_END above is the only reset. Clamp against the
+    // live dodgeRate so this can't drive the stat negative once other sources also touch it.
+    const consumed = Math.min(dodgeCost, Math.max(0, defender.dodgeRate));
+    if (consumed > 0) item.skillAffectedStats.dodgeRate -= consumed;
     client?.send('combat_log', {
-      text: `${defender.name}'s ${item.name} turns the dodge into an opening — next attack can't be dodged!`,
+      text: `${defender.name}'s ${item.name} melts into the shadows: +${fmt(healed)} HP, ${consumed} dodge rate spent.`,
       kind: 'item', defenderId: defender.playerId, itemId: item.itemId,
     } as CombatLogMessage);
   },
@@ -346,12 +353,27 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     client?.send('reward_gain', { playerId: defender.playerId, gold } as RewardGainMessage);
   },
 
-  [ItemSkillType.LIQUID_ASSETS]: (context) => {
-    const { attacker, item, trigger, attackerSnapshot } = context;
-    if (trigger !== TriggerType.AURA || !attacker || !item) return;
-    const { ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const base = attackerSnapshot ?? attacker;
-    item.skillAffectedStats.attackSpeed = 1 + Math.max(0, base.income) * ratio;
+  [ItemSkillType.WAR_CHEST]: (context) => {
+    const { attacker, item, client, trigger } = context;
+    if (!item) return;
+    if (trigger === TriggerType.FIGHT_END) {
+      item.skillAffectedStats.strength = 0;
+      item.skillAffectedStats.defense = 0;
+      return;
+    }
+    if (trigger !== TriggerType.FIGHT_START || !attacker) return;
+    const { maxGold, strengthPerGold, defensePerGold } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    const spend = Math.min(maxGold, Math.max(0, Math.floor(attacker.gold)));
+    if (spend <= 0) return;
+    attacker.gold -= spend;
+    const strength = spend * strengthPerGold;
+    const defense = spend * defensePerGold;
+    item.skillAffectedStats.strength = strength;
+    item.skillAffectedStats.defense = defense;
+    client?.send('combat_log', {
+      text: `${attacker.name}'s ${item.name} opens the war chest: ${spend} gold spent for +${strength} strength and +${defense} defense!`,
+      kind: 'item', attackerId: attacker.playerId, itemId: item.itemId, goldDelta: -spend,
+    } as CombatLogMessage);
   },
 };
 

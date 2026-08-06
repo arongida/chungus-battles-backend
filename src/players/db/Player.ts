@@ -9,6 +9,7 @@ import {StatsSchema} from "../../common/db/Stats";
 import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollItemStats} from "../../items/stats/itemStatRoller";
+import {reconcileItemSkill} from "../../items/skills/itemSkillRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 import {recalculatePlayerStats} from "../../common/statsUtils";
@@ -106,6 +107,12 @@ function buildItemSchema(itemFromDb: any): Item {
     const triggerTypesArr = new ArraySchema<string>();
     if (triggerTypes?.length) (triggerTypes as string[]).forEach(t => triggerTypesArr.push(t));
     item.triggerTypes = triggerTypesArr;
+
+    // Re-sync skillName/skillDescription/triggerTypes against the current ITEM_SKILLS table —
+    // this is what makes an already-granted skill (equipped, inventory, locked shop) pick up a
+    // rebalance/rename instead of keeping whatever text/triggers were live when it was granted.
+    reconcileItemSkill(item);
+
     return item;
 }
 

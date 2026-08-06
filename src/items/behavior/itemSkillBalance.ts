@@ -102,14 +102,17 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.ROGUE,
     name: 'Shadowstep',
     slots: ANY_SLOT,
-    triggerTypes: [TriggerType.ON_DODGE],
+    // ON_DODGE pays out the heal; FIGHT_END resets the accumulated dodgeRate penalty (see
+    // ItemSkillBehaviors.ts — this is one of the rare skills that writes -= instead of =).
+    triggerTypes: [TriggerType.ON_DODGE, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.LEGENDARY]: { healRatio: 0 },
-      [ItemRarity.MYTHIC]: { healRatio: 0.01 },
+      [ItemRarity.LEGENDARY]: { healRatio: 0.03, dodgeCost: 1 },
+      [ItemRarity.MYTHIC]: { healRatio: 0.05, dodgeCost: 1 },
     },
-    describe: (r) => r >= ItemRarity.MYTHIC
-      ? "After you dodge, your next attack can't be dodged, deals double damage, and heals 1% of your max HP."
-      : "After you dodge, your next attack can't be dodged and deals double damage.",
+    describe: (r) => {
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.SHADOWSTEP], r);
+      return `Each dodge heals ${pct(v.healRatio)} of your max HP, but costs you ${v.dodgeCost} dodge rate for the rest of the fight.`;
+    },
   },
 
   [ItemSkillType.OPENING_ACT]: {
@@ -389,17 +392,21 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     },
   },
 
-  [ItemSkillType.LIQUID_ASSETS]: {
-    id: ItemSkillType.LIQUID_ASSETS,
+  [ItemSkillType.WAR_CHEST]: {
+    id: ItemSkillType.WAR_CHEST,
     class: ItemClass.MERCHANT,
-    name: 'Liquid Assets',
+    name: 'War Chest',
     slots: ANY_SLOT,
-    triggerTypes: [TriggerType.AURA],
+    // FIGHT_START spends the gold; FIGHT_END resets the granted stats (see ItemSkillBehaviors.ts).
+    triggerTypes: [TriggerType.FIGHT_START, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.008 },
-      [ItemRarity.MYTHIC]: { ratio: 0.016 },
+      [ItemRarity.LEGENDARY]: { maxGold: 10, strengthPerGold: 3, defensePerGold: 2 },
+      [ItemRarity.MYTHIC]: { maxGold: 15, strengthPerGold: 4, defensePerGold: 3 },
     },
-    describe: (r) => `Gain ${pct(skillValues(ITEM_SKILLS[ItemSkillType.LIQUID_ASSETS], r).ratio)} attack speed per income.`,
+    describe: (r) => {
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.WAR_CHEST], r);
+      return `Fight start: spend up to ${v.maxGold} gold — gain ${v.strengthPerGold} strength and ${v.defensePerGold} defense per gold spent for this fight.`;
+    },
   },
 };
 
