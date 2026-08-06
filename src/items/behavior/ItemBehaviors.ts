@@ -196,7 +196,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
                 }
             }
         }
-        item.baseAttackSpeed = 0.6 * (1 + 0.5 * (item.rarity - 1));
+        item.baseAttackSpeed = 0.54 * (1 + 0.5 * (item.rarity - 1));
         item.baseMaxDamage = attacker.income * (item.rarity / 2);
         attacker.equippedItems.forEach((equipped, slot) => {
             if (equipped === item) attacker.equippedItems.set(slot, equipped);

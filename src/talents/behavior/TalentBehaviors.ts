@@ -712,7 +712,7 @@ export const TalentBehaviors = {
                     // Thief starts at level 2), same pattern as Magic Ring: rarity = level.
                     diceItem.rarity = Math.min(attacker.level, ItemRarity.MYTHIC);
                     diceItem.description = `Max damage equals ${Math.round((diceItem.rarity / 2) * 100)}% of income.`;
-                    diceItem.baseAttackSpeed = diceItem.rarity === 2 ? 0.9 : 0.6;
+                    diceItem.baseAttackSpeed = diceItem.rarity === 2 ? 0.81 : 0.54;
                     attacker.getItem(diceItem);
                     client.send('draft_log', `${attacker.name} found a gambler's dice!`);
                     client.send('trigger_talent', {

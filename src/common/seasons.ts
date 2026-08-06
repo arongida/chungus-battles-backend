@@ -21,6 +21,8 @@ export const SEASONS: SeasonInfo[] = [
     number: 22,
     name: 'Slower Better',
     changes: [
+      'Weapon base attack speed reduced by ~10%',
+      'Bonus attack speed granted by items reduced by ~10%',
       'All invulnerability windows reduced by ~1/3: shields, Flowering Staff, Band of Vigor, Bulwark and Guardian Angel',
       'Zealot reworked and moved to tier 2: your dodge rate is now set to 0, in exchange for +0.8% attack speed per defense (up from 0.6%)',
       'Quickness replaced by Second Thoughts (tier 3): rerolling carries the most expensive unsold item into the new shop at half price, occupying a shop slot and surviving only one reroll',
@@ -29,7 +31,7 @@ export const SEASONS: SeasonInfo[] = [
       'Lucky Find - Mythic bonus reduced from 3% to 2% permanent chance',
       'Item prices increased slightly (~20%) across all tiers',
       'Item skills can now roll a skill you already own - no duplicate restriction',
-      'Item skills rebalance',
+      'Item skills rebalanced numbers',
       'Shadowstep reworked: each dodge now heals 3% of your max HP (5% at Mythic) but permanently burns 1 dodge rate for the rest of the fight, instead of granting an undodgeable double-damage attack',
       'Liquid Assets replaced by War Chest: at fight start spend up to 10 gold (15 at Mythic) for +3 strength and +2 defense per gold spent for that fight (+4/+3 at Mythic)',
     ],

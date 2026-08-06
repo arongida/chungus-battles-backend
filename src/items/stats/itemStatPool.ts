@@ -76,11 +76,11 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
     // Multiplier: 1.0 = no change. Stored as a float so the roller must use
     // isFloat precision.
     attackSpeed: {
-        1: { min: 1.06, max: 1.12, isFloat: true },
-        2: { min: 1.09, max: 1.18, isFloat: true },
-        3: { min: 1.14, max: 1.28, isFloat: true },
-        4: { min: 1.28, max: 1.52, isFloat: true },
-        5: { min: 1.48, max: 1.88, isFloat: true },
+        1: { min: 1.05, max: 1.10, isFloat: true },
+        2: { min: 1.08, max: 1.16, isFloat: true },
+        3: { min: 1.12, max: 1.26, isFloat: true },
+        4: { min: 1.25, max: 1.50, isFloat: true },
+        5: { min: 1.44, max: 1.80, isFloat: true },
     },
     defense: {
         1: { min: 10,  max: 20   },
@@ -127,22 +127,22 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
  * roller must roll minDamage first, then add the spread.
  */
 const WARRIOR_WEAPON_RANGES: Record<number, { minDamage: StatRange; maxDamageSpread: StatRange; attackSpeed: StatRange }> = {
-    1: { minDamage: { min: 1, max: 2 }, maxDamageSpread: { min: 2, max: 3 },  attackSpeed: { min: 0.40, max: 0.50, isFloat: true } },
-    2: { minDamage: { min: 2, max: 4 }, maxDamageSpread: { min: 3, max: 5 },  attackSpeed: { min: 0.45, max: 0.55, isFloat: true } },
-    3: { minDamage: { min: 4, max: 6 }, maxDamageSpread: { min: 4, max: 7 },  attackSpeed: { min: 0.50, max: 0.60, isFloat: true } },
-    4: { minDamage: { min: 6, max: 9 }, maxDamageSpread: { min: 6, max: 9 },  attackSpeed: { min: 0.55, max: 0.65, isFloat: true } },
-    5: { minDamage: { min: 8, max: 12 }, maxDamageSpread: { min: 8, max: 12 }, attackSpeed: { min: 0.60, max: 0.70, isFloat: true } },
+    1: { minDamage: { min: 1, max: 2 }, maxDamageSpread: { min: 2, max: 3 },  attackSpeed: { min: 0.36, max: 0.45, isFloat: true } },
+    2: { minDamage: { min: 2, max: 4 }, maxDamageSpread: { min: 3, max: 5 },  attackSpeed: { min: 0.41, max: 0.50, isFloat: true } },
+    3: { minDamage: { min: 4, max: 6 }, maxDamageSpread: { min: 4, max: 7 },  attackSpeed: { min: 0.45, max: 0.54, isFloat: true } },
+    4: { minDamage: { min: 6, max: 9 }, maxDamageSpread: { min: 6, max: 9 },  attackSpeed: { min: 0.50, max: 0.59, isFloat: true } },
+    5: { minDamage: { min: 8, max: 12 }, maxDamageSpread: { min: 8, max: 12 }, attackSpeed: { min: 0.54, max: 0.63, isFloat: true } },
 };
 
 /**
  * ROGUE — fast, light hits.
  */
 const ROGUE_WEAPON_RANGES: Record<number, { minDamage: StatRange; maxDamageSpread: StatRange; attackSpeed: StatRange }> = {
-    1: { minDamage: { min: 0, max: 1 }, maxDamageSpread: { min: 1, max: 1 },  attackSpeed: { min: 0.65, max: 0.75, isFloat: true } },
-    2: { minDamage: { min: 1, max: 2 }, maxDamageSpread: { min: 1, max: 2 },  attackSpeed: { min: 0.75, max: 0.85, isFloat: true } },
-    3: { minDamage: { min: 1, max: 3 }, maxDamageSpread: { min: 2, max: 3 },  attackSpeed: { min: 0.85, max: 0.90, isFloat: true } },
-    4: { minDamage: { min: 2, max: 4 }, maxDamageSpread: { min: 2, max: 4 },  attackSpeed: { min: 0.90, max: 1.00, isFloat: true } },
-    5: { minDamage: { min: 3, max: 5 }, maxDamageSpread: { min: 3, max: 5 },  attackSpeed: { min: 1.00, max: 1.20, isFloat: true } },
+    1: { minDamage: { min: 0, max: 1 }, maxDamageSpread: { min: 1, max: 1 },  attackSpeed: { min: 0.59, max: 0.68, isFloat: true } },
+    2: { minDamage: { min: 1, max: 2 }, maxDamageSpread: { min: 1, max: 2 },  attackSpeed: { min: 0.68, max: 0.77, isFloat: true } },
+    3: { minDamage: { min: 1, max: 3 }, maxDamageSpread: { min: 2, max: 3 },  attackSpeed: { min: 0.77, max: 0.81, isFloat: true } },
+    4: { minDamage: { min: 2, max: 4 }, maxDamageSpread: { min: 2, max: 4 },  attackSpeed: { min: 0.81, max: 0.90, isFloat: true } },
+    5: { minDamage: { min: 3, max: 5 }, maxDamageSpread: { min: 3, max: 5 },  attackSpeed: { min: 0.90, max: 1.08, isFloat: true } },
 };
 
 /**
@@ -151,11 +151,11 @@ const ROGUE_WEAPON_RANGES: Record<number, { minDamage: StatRange; maxDamageSprea
  * the pool resolver), compensating for weaker base damage.
  */
 const DEFAULT_WEAPON_RANGES: Record<number, { minDamage: StatRange; maxDamageSpread: StatRange; attackSpeed: StatRange }> = {
-    1: { minDamage: { min: 0, max: 1 }, maxDamageSpread: { min: 1, max: 2 },  attackSpeed: { min: 0.50, max: 0.60, isFloat: true } },
-    2: { minDamage: { min: 1, max: 2 }, maxDamageSpread: { min: 2, max: 3 },  attackSpeed: { min: 0.55, max: 0.65, isFloat: true } },
-    3: { minDamage: { min: 2, max: 4 }, maxDamageSpread: { min: 3, max: 5 },  attackSpeed: { min: 0.60, max: 0.70, isFloat: true } },
-    4: { minDamage: { min: 3, max: 6 }, maxDamageSpread: { min: 4, max: 7 },  attackSpeed: { min: 0.65, max: 0.75, isFloat: true } },
-    5: { minDamage: { min: 5, max: 8 }, maxDamageSpread: { min: 6, max: 10 }, attackSpeed: { min: 0.70, max: 0.80, isFloat: true } },
+    1: { minDamage: { min: 0, max: 1 }, maxDamageSpread: { min: 1, max: 2 },  attackSpeed: { min: 0.45, max: 0.54, isFloat: true } },
+    2: { minDamage: { min: 1, max: 2 }, maxDamageSpread: { min: 2, max: 3 },  attackSpeed: { min: 0.50, max: 0.59, isFloat: true } },
+    3: { minDamage: { min: 2, max: 4 }, maxDamageSpread: { min: 3, max: 5 },  attackSpeed: { min: 0.54, max: 0.63, isFloat: true } },
+    4: { minDamage: { min: 3, max: 6 }, maxDamageSpread: { min: 4, max: 7 },  attackSpeed: { min: 0.59, max: 0.68, isFloat: true } },
+    5: { minDamage: { min: 5, max: 8 }, maxDamageSpread: { min: 6, max: 10 }, attackSpeed: { min: 0.63, max: 0.72, isFloat: true } },
 };
 
 export const WEAPON_BASE_RANGES: Record<WeaponArchetype, Record<number, {
