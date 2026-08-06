@@ -15,6 +15,7 @@ import {
   secondWindHealFraction,
   secondWindInvulnMs,
   SECOND_WIND_THRESHOLD,
+  shieldInvulnMs,
   TWO_HANDED_WEAPON_IDS,
   wandOfFireBurnStacks,
 } from '../items/behavior/uniqueItemBalance';
@@ -24,7 +25,7 @@ import {
 // `rarity <= 1` guard means it would never fire; the DB-authored description is always accurate.
 const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Player) => string>> = {
   7: (item) => `Max damage equals ${Math.round(chungiHpDamageFraction(item.rarity) * 100)}% of your max HP.`,
-  8: (item) => `2-handed. Attacks shield you for ${(floweringStaffInvulnMs(item.rarity) / 1000).toFixed(1)}s (once every ${FLOWERING_STAFF_INVULN_COOLDOWN_MS / 1000}s).`,
+  8: (item) => `2-handed. Attacks shield you for ${(floweringStaffInvulnMs(item.rarity) / 1000).toFixed(2)}s (once every ${FLOWERING_STAFF_INVULN_COOLDOWN_MS / 1000}s).`,
   14: (item) => {
     const stacks = wandOfFireBurnStacks(item.rarity);
     return `Each hit applies ${stacks} burn stack${stacks > 1 ? 's' : ''} (${BURN_DAMAGE_PER_STACK} damage per stack per second, for ${BURN_DURATION_MS / 1000}s).`;
@@ -42,7 +43,7 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
   },
   27: (item) => {
     const healPct = Math.round(secondWindHealFraction(item.rarity) * 100);
-    const invulnSec = (secondWindInvulnMs(item.rarity) / 1000).toFixed(1);
+    const invulnSec = (secondWindInvulnMs(item.rarity) / 1000).toFixed(2);
     return `The first time you fall below ${Math.round(SECOND_WIND_THRESHOLD * 100)}% HP in a fight, heal ${healPct}% of your max HP and become invulnerable for ${invulnSec}s. Once per fight.`;
   },
 };
@@ -54,7 +55,7 @@ function updateRarityDescription(target: Item, player: Player): void {
 }
 
 export function shieldDescription(tier: number): string {
-  return `${((500 + 500 * tier) / 1000).toFixed(1)}s invulnerability at fight start.`;
+  return `${(shieldInvulnMs(tier) / 1000).toFixed(2)}s invulnerability at fight start.`;
 }
 
 /** Returns true when this step just brought `target` to MYTHIC (i.e. it wasn't already there) —
@@ -95,6 +96,11 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
   return !wasMythic && target.rarity >= ItemRarity.MYTHIC;
 }
 
+/** Permanent Lucky Find chance granted per Mythic forged. Percent form exists so the ~9
+ *  user-facing log strings can't drift from the number actually applied. */
+export const LUCKY_FIND_MYTHIC_BONUS = 0.02;
+export const LUCKY_FIND_MYTHIC_BONUS_PERCENT = LUCKY_FIND_MYTHIC_BONUS * 100;
+
 /** Permanently grants the Lucky Find Mythic-acquisition bonus (PlayerSchema.luckyFindMythicBonus)
  *  — call exactly once per NEW Mythic item genuinely obtained (shop buy/upgrade, loss-reward item
  *  upgrade, or a talent/item instantly maxing an owned/equipped item to Mythic). Deliberately NOT
@@ -105,10 +111,10 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
  *  combat_log, plus a `reward_gain` with `luckyFind: true` for the avatar fireworks/floating
  *  text), since the right message type differs between DraftRoom and FightRoom. */
 export function grantLuckyFindMythicBonus(player: Player): void {
-  player.luckyFindMythicBonus += 0.03;
+  player.luckyFindMythicBonus += LUCKY_FIND_MYTHIC_BONUS;
   // Bump the live displayed chance immediately too — the next aura tick will re-seed it from
   // base+bonus anyway, but this avoids a brief window where the badge lags.
-  player.luckyFindChance += 0.03;
+  player.luckyFindChance += LUCKY_FIND_MYTHIC_BONUS;
 }
 
 /** Base (un-modified) lucky-find rarity-up chance for a shop slot at this level.
@@ -224,7 +230,7 @@ export function hasMisconductUpgrade(player: Player): boolean {
  *  Returns the rarity steps applied and whether this steal newly forged a Mythic,
  *  so the caller can send its own draft_log / reward_gain celebration. */
 export function stealShopItem(
-  item: Item, player: Player, upgrade: boolean,
+  item: Item, player: Player, upgrade: boolean, reduceIncome: boolean = true
 ): { steps: number; becameMythic: boolean } {
   let steps = 0;
   const upgradeable = !NON_UPGRADEABLE_ITEM_IDS.has(item.itemId) && item.rarity < ItemRarity.MYTHIC;
@@ -235,6 +241,7 @@ export function stealShopItem(
   player.gold += item.price;    // refund AFTER re-pricing so getItem nets to free
   player.getItem(item);         // debits item.price, marks sold, handles preview replacement
   item.sellPrice = item.price;  // stolen items sell for full price
+  if (player.baseStats.income > 0 && reduceIncome) player.baseStats.income -= 1;
   return { steps, becameMythic };
 }
 

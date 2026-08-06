@@ -17,7 +17,21 @@ export interface SeasonInfo {
 
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
-    {
+  {
+    number: 22,
+    name: 'Slower Better',
+    changes: [
+      'All invulnerability windows reduced by ~1/3: shields, Flowering Staff, Band of Vigor, Bulwark and Guardian Angel',
+      'Zealot reworked and moved to tier 2: your dodge rate is now set to 0, in exchange for +0.8% attack speed per defense (up from 0.6%)',
+      'Quickness replaced by Second Thoughts (tier 3): rerolling carries the most expensive unsold item into the new shop at half price, occupying a shop slot and surviving only one reroll',
+      'Learn by doing replaced by Fortune\'s Fool and moved to tier 4: rerolls are free, but each reroll in a round makes you start the next fight with 5% less HP (max 25%)',
+      'Draft-phase talents now flash their icon when they activate',
+      'Lucky Find - Mythic bonus reduced from 3% to 2% permanent chance',
+      'Item prices increased slightly (~20%) across all tiers',
+      'Item skills can now roll a skill you already own - no duplicate restriction',
+    ],
+  },
+  {
     number: 21,
     name: 'Lucky Legend',
     changes: [
@@ -27,6 +41,11 @@ export const SEASONS: SeasonInfo[] = [
       'Legendary class items (rogue/warrior/merchant) now roll a class skill from a pool the moment they reach Legendary; upgrading to Mythic strengthens the same skill',
       'Bargain Hunter reworked: now halves the shop reroll cost (rounded down, minimum 1) instead of reducing it by 1, and no longer grants gold',
       'Ring of Immortality reverted to its transform effect: grants no bonuses while worn, but if it is still equipped when the next shop opens it is consumed and becomes a random Legendary item of your level',
+      'All invulnerability windows reduced by ~1/3: shields, Flowering Staff, Band of Vigor, Bulwark and Guardian Angel',
+      'Zealot reworked and moved to tier 2: your dodge rate is now set to 0, in exchange for +1.2% attack speed per defense (up from 0.6%)',
+      'Quickness replaced by Second Thoughts (tier 3): rerolling carries the most expensive unsold item into the new shop at half price, occupying a shop slot and surviving only one reroll',
+      'Learn by doing replaced by Fortune\'s Fool and moved to tier 4: rerolls are free, but each reroll in a round makes you start the next fight with 5% less HP (max 25%)',
+      'Draft-phase talents now flash their icon when they activate',
     ],
   },
   {

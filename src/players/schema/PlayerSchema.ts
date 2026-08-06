@@ -55,6 +55,16 @@ export class Player extends Schema implements IStats {
     // Unstoppable Force (WARRIOR_3): true for one weapon attack after the talent's ACTIVE tick
     // fires. Consumed in FightRoom.tryWeaponAttack (skips dodge, doubles damage).
     empoweredNextAttack: boolean = false;
+    // Zealot (talent 28, reworked): set true by Zealot's aura behavior every ~1s it's owned
+    // (talents are never un-picked, so this never needs to reset back to false). Clamped in
+    // recalculatePlayerStats (statsUtils.ts), which zeroes dodgeRate after computing it whenever
+    // this is set — after every equipped item/talent has already contributed to the snapshot.
+    dodgeDisabled: boolean = false;
+    // Second Thoughts (talent 202): item carried over from the shop that was just discarded by
+    // a reroll (set in BeforeShopRefreshTriggerCommand), injected into the freshly rolled shop
+    // by DraftRoom.updateShop and cleared there. Server-only — never synced, only ever lives on
+    // the player between BEFORE_REFRESH and the following updateShop call.
+    carriedShopItem: Item = null;
     // Comrade: true once the current shop's free-item claim has been spent (DraftRoom.buyItem),
     // reset per shop build (DraftRoom.updateShop). Stops the aura from re-granting a fresh claim
     // every tick after one has been used.
@@ -197,7 +207,8 @@ export class Player extends Schema implements IStats {
     // other hidden stats) so the client can display it next to gold/income.
     // Declared here (end of the @type block) so existing field indices stay stable.
     @type('number') luckyFindChance: number = 0;
-    // Permanent snowball bonus to luckyFindChance: +0.01 every time the player buys an item
+    // Permanent snowball bonus to luckyFindChance: +ShopUpgradeUtils.LUCKY_FIND_MYTHIC_BONUS
+    // every time the player buys an item
     // (or an upgrade-preview buy) that lands on ItemRarity.MYTHIC (DraftRoom.buyItem). Folded
     // into the luckyFindChance seed every aura tick (DraftAuraTriggerCommand/FightAuraTriggerCommand)
     // and at draft setup (DraftRoom.setUpState) so it survives — unlike luckyFindChance itself,
@@ -213,6 +224,15 @@ export class Player extends Schema implements IStats {
     // from the skill's count minus hagglerRerollsUsed each aura tick (see ItemSkillBehaviors.ts
     // HAGGLER). Consumed in DraftRoom.refreshShop.
     @type('number') hagglerFreeRerolls: number = 0;
+    // Fortune's Fool (talent 403): how many times the shop has been rerolled this shop phase.
+    // Synced so the client can preview the HP penalty; reset per shop phase (DraftRoom.onJoin),
+    // incremented in DraftRoom.refreshShop, read at FIGHT_START to size the HP loss.
+    @type('number') rerollsThisRound: number = 0;
+    // Fortune's Fool (talent 403, aura): true while owned — makes DraftRoom.refreshShop free
+    // (no gold cost, doesn't consume a Haggler charge). Re-seeded to false each aura tick
+    // alongside refreshShopCostMultiplier (see DraftAuraTriggerCommand) so it can't survive
+    // dropping/replacing the talent.
+    @type('boolean') freeRerolls: boolean = false;
 
     private _poisonStack: number = 0;
 

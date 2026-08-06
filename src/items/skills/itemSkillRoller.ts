@@ -26,11 +26,10 @@ function seededRandom(...parts: number[]): number {
 }
 
 /** Rolls a skill for `item` from its class's pool, filtered to slots the item can actually be
- *  equipped in (an ON_ATTACK skill on a helmet would never fire — see itemSkillBalance.ts) and,
- *  per design, drawn without replacement against every skill the player currently owns on any
- *  other item (equipped or in inventory). Falls back to allowing a duplicate only if every
- *  slot-eligible skill is already owned. Returns null for non-class items or an item whose
- *  equipOptions don't overlap any skill's slot list. */
+ *  equipped in (an ON_ATTACK skill on a helmet would never fire — see itemSkillBalance.ts).
+ *  Duplicates are allowed by design — the same skill can be rolled regardless of what the player
+ *  already owns, with no cap on how many copies they end up with. Returns null for non-class items
+ *  or an item whose equipOptions don't overlap any skill's slot list. */
 export function rollItemSkill(item: Item, player: Player): ItemSkillDefinition | null {
   const pool = SKILLS_BY_CLASS[item.class as ItemClass];
   if (!pool || pool.length === 0) return null;
@@ -39,16 +38,22 @@ export function rollItemSkill(item: Item, player: Player): ItemSkillDefinition |
   const slotEligible = pool.filter((def) => def.slots.some((s) => equipOptions.has(s)));
   if (slotEligible.length === 0) return null;
 
-  const owned = new Set<number>();
-  player.equippedItems.forEach((i) => { if (i.skillId) owned.add(i.skillId); });
-  player.inventory.forEach((i) => { if (i.skillId) owned.add(i.skillId); });
+  // Count owned copies of this same itemId that have already rolled a skill, so two copies of
+  // one item don't always land on the identical skill (the seed below is otherwise a pure
+  // function of playerId+itemId). Stable across the 1s aura-tick preview rebuilds — a granted
+  // skillId is latched (see applyRarityUpgrade's `if (!target.skillId)` guard) and persisted, so
+  // this never flickers the shop the way an inventory-index discriminator would. Excludes
+  // dual-wield ghost copies, which clone skillId from the real weapon rather than rolling.
+  let copyIndex = 0;
+  const countCopy = (i: Item) => {
+    if (i !== item && i.itemId === item.itemId && i.skillId && !i.tags?.includes('dual_wield_copy')) copyIndex++;
+  };
+  player.equippedItems.forEach(countCopy);
+  player.inventory.forEach(countCopy);
 
-  const candidates = slotEligible.filter((def) => !owned.has(def.id));
-  const pickFrom = candidates.length > 0 ? candidates : slotEligible;
-
-  const seed = seededRandom(player.playerId, item.itemId, ItemRarity.LEGENDARY);
-  const index = Math.min(Math.floor(seed * pickFrom.length), pickFrom.length - 1);
-  return pickFrom[index];
+  const seed = seededRandom(player.playerId, item.itemId, ItemRarity.LEGENDARY, copyIndex);
+  const index = Math.min(Math.floor(seed * slotEligible.length), slotEligible.length - 1);
+  return slotEligible[index];
 }
 
 /** Locks in a rolled skill on `item`: sets the display fields and unions the skill's trigger

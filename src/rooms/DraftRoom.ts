@@ -4,7 +4,7 @@ import { buildJoe, copyPlayer, createNewPlayer, getPlayer, getSameRoundPlayer, J
 import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentClasses } from '../players/EnemyPreview';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, stealShopItem } from '../commands/ShopUpgradeUtils';
+import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem } from '../commands/ShopUpgradeUtils';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
@@ -13,6 +13,7 @@ import { Dispatcher } from '@colyseus/command';
 import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCommand';
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
 import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
+import { BeforeShopRefreshTriggerCommand } from '../commands/triggers/BeforeShopRefreshTriggerCommand';
 import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCommand';
 import { OnSellTriggerCommand } from '../commands/triggers/OnSellTriggerCommand';
 import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
@@ -144,6 +145,9 @@ export class DraftRoom extends Room {
         this.state.player.misconductClaimUsed = false;
         // Haggler: same per-shop-phase reset reasoning as misconductClaimUsed above.
         this.state.player.hagglerRerollsUsed = 0;
+        // Fortune's Fool reads this at FIGHT_START to size the HP penalty — per-shop-phase reset,
+        // same reasoning as hagglerRerollsUsed above.
+        this.state.player.rerollsThisRound = 0;
 
         //set room state
         if (this.state.player.round === 1) await this.updateTalentSelection();
@@ -241,7 +245,14 @@ export class DraftRoom extends Room {
         // Misconduct's claim is deliberately NOT reset here — it's one free steal per shop
         // phase (round), not per shop build, so it survives manual refreshes (see onJoin).
         const excludeTypes: string[] = [];
-        const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level, excludeTypes);
+        // Second Thoughts (talent 202): a carried-over item from the shop that was just
+        // discarded, stashed by BeforeShopRefreshTriggerCommand. Only injected into a freshly
+        // rolled shop below — a restored locked shop keeps its own (already-priced) items, so
+        // the carry is discarded rather than injected there.
+        const carriedItem = this.state.player.carriedShopItem;
+        this.state.player.carriedShopItem = null;
+        const rollSize = carriedItem ? Math.max(0, newShopSize - 1) : newShopSize;
+        const shopFromDb = await getNumberOfItems(rollSize, this.state.player.level, excludeTypes);
         const lockedShop = this.state.player.lockedShop;
         if (lockedShop.length > 0) {
             this.state.shop.clear();
@@ -253,6 +264,12 @@ export class DraftRoom extends Room {
             await this.revalidateUpgradePreviews();
         } else if (this.state.shop.length < 6) {
             this.state.shop.clear();
+            if (carriedItem) {
+                carriedItem.sold = false;
+                carriedItem.equipped = false;
+                this.state.shop.push(carriedItem);
+                this.clients[0]?.send('shop_floating', { slot: 0, text: 'Kept!', rarity: carriedItem.rarity });
+            }
             for (const rolledItem of shopFromDb) {
                 const slot = this.state.shop.length;
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
@@ -387,7 +404,12 @@ export class DraftRoom extends Room {
     }
 
     private async buyItem(itemId: number, client: Client) {
-        const item = this.state.shop.find((item) => item.itemId === itemId);
+        // Exclude already-sold slots: itemId isn't unique across the shop array (e.g. Second
+        // Thoughts carrying an item over into a shop that also independently rolls the same
+        // itemId elsewhere) — bought items stay in `shop` with sold=true rather than being
+        // removed, so an unguarded find() on a duplicate itemId keeps resolving to the stale
+        // sold entry and rejects every later attempt to buy the other (still unsold) copy.
+        const item = this.state.shop.find((item) => item.itemId === itemId && !item.sold);
         if (!item) {
             client.send('error', 'Not possible to buy item!');
             return;
@@ -421,13 +443,13 @@ export class DraftRoom extends Room {
         }
         // Lucky Find mastery: every Mythic acquisition (plain buy, an upgrade-preview buy, or a
         // Misconduct steal-upgrade that lands on Mythic — all flow through here) grants a
-        // permanent +1% Lucky Find chance for the rest of the run (see ShopUpgradeUtils.
-        // baseLuckyFindChance callers / PlayerSchema.luckyFindMythicBonus). Celebrated on the
+        // permanent Lucky Find chance bonus for the rest of the run (see ShopUpgradeUtils.
+        // LUCKY_FIND_MYTHIC_BONUS / PlayerSchema.luckyFindMythicBonus). Celebrated on the
         // avatar via reward_gain (not the shop card) — upgrade-preview buys destroy and recreate
         // the item's DOM node, which broke the card-anchored shop_floating version of this celebration.
         if (item.rarity === ItemRarity.MYTHIC) {
             grantLuckyFindMythicBonus(this.state.player);
-            client.send('draft_log', `Mythic forged! Permanent +3% Lucky Find chance!`);
+            client.send('draft_log', `Mythic forged! Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`);
             client.send('reward_gain', { playerId: this.state.player.playerId, luckyFind: true } as RewardGainMessage);
         }
         if (luckyFree) {
@@ -581,17 +603,30 @@ export class DraftRoom extends Room {
     }
 
     private async refreshShop(client: Client) {
+        // Fortune's Fool (aura): rerolls are entirely free, checked before Haggler's per-shop
+        // charge pool so it doesn't burn Haggler's limited free rerolls either.
         // Haggler (item skill): spend a free reroll before falling back to the gold cost.
-        const freeReroll = this.state.player.hagglerFreeRerolls > 0;
+        const freeReroll = this.state.player.freeRerolls || this.state.player.hagglerFreeRerolls > 0;
         if (!freeReroll && this.state.player.gold < this.state.player.refreshShopCost) {
             client.send('error', 'Not enough gold!');
             return;
         }
-        if (freeReroll) {
+        if (this.state.player.freeRerolls) {
+            // no gold cost, no Haggler charge consumed
+        } else if (this.state.player.hagglerFreeRerolls > 0) {
             this.state.player.hagglerRerollsUsed++;
+            // Decrement the synced counter now rather than waiting for the next 1s aura tick to
+            // re-derive it — otherwise repeated refresh_shop messages inside that window all read
+            // a stale > 0 and take the free branch. The aura pass remains the source of truth and
+            // recomputes the same value.
+            this.state.player.hagglerFreeRerolls = Math.max(0, this.state.player.hagglerFreeRerolls - 1);
         } else {
             this.state.player.gold -= this.state.player.refreshShopCost;
         }
+        this.state.player.rerollsThisRound++;
+        // BEFORE_REFRESH: dispatched while the outgoing shop is still intact, so talents like
+        // Second Thoughts can inspect/carry an item from it before it's cleared below.
+        this.dispatcher.dispatch(new BeforeShopRefreshTriggerCommand());
         this.state.player.unlockShop();
         this.state.shop.clear();
         this.invalidateUndoSell();

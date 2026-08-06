@@ -190,6 +190,21 @@ Stats are **recalculated from scratch on every tick**:
 - **IDs 1–99**: regular talents; **IDs 101–503**: item-set collection bonuses (pattern: `CLASS_TIER`)
 - Each talent carries `triggerTypes: ArraySchema<string>` — the talent fires when any listed `TriggerType` is dispatched
 
+### Talent Design Guidelines
+
+Every new or reworked talent should satisfy all three:
+
+1. **Conditional** — not an unconditional stat drip. It should have a condition the player can play
+   around (a threshold, a resource, a timing window), so choosing it is a real decision and using it
+   well feels earned.
+2. **Feels good** — every activation must be visible: a talent-icon flash (`trigger_talent`), a
+   floating log (`draft_log` / `shop_floating` / `combat_log`), a number pop (`reward_gain`), or an
+   obvious gameplay state change. A talent that silently adjusts a stat is a bad talent even if the
+   math is fine.
+3. **Has a downside** — real negative effects (a resource cost, a stat given up, a self-damage, a
+   restriction), so higher power levels are paid for rather than handed out, and so negative-synergy
+   builds are possible around it.
+
 ---
 
 ## Trigger & Command System
@@ -227,6 +242,8 @@ Each trigger command:
 ```
 
 ### Adding a New Talent
+
+See [Talent Design Guidelines](#talent-design-guidelines) above before designing the behavior.
 
 1. Add the ID to `TalentType` enum in `src/talents/types/TalentTypes.ts`
 2. Add the behavior function to `TalentBehaviors` in `src/talents/behavior/TalentBehaviors.ts`

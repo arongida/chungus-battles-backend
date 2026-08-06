@@ -98,7 +98,9 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     player.accuracy = snapshot.accuracy;
     player.maxHp = snapshot.maxHp;
     player.defense = snapshot.defense;
-    player.dodgeRate = snapshot.dodgeRate;
+    // Zealot: zeroes dodge after every item/talent has contributed, so no other dodge source
+    // (items, other talents) can bring it back up while Zealot is owned.
+    player.dodgeRate = player.dodgeDisabled ? 0 : snapshot.dodgeRate;
     player.income = snapshot.income;
     player.hpRegen = snapshot.hpRegen;
 

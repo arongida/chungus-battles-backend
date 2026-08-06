@@ -45,14 +45,16 @@ export enum TalentType {
 	ROGUE_1 = 102,
 	MERCHANT_1 = 103,
 	WARRIOR_2 = 201,
-	ROGUE_2 = 202,
+	// Was QUICKNESS (+attack speed on refresh) — reworked into Second Thoughts, Season 21.
+	SECOND_THOUGHTS = 202,
 	BARGAIN_HUNTER = 203,
 	WARRIOR_3 = 301,
 	POISON_2 = 302,
 	MERCHANT_5 = 303,
 	WARRIOR_4 = 401,
 	MISCONDUCT = 402,
-	LEARN_BY_DOING = 403,
+	// Was LEARN_BY_DOING (+XP on refresh) — reworked into Fortune's Fool, Season 21.
+	FORTUNES_FOOL = 403,
 	WARRIOR_5 = 501,
 	GRAND_ROBBERY = 502,
 	JUST_A_SCRATCH = 503,

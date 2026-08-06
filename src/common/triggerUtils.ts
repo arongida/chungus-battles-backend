@@ -19,6 +19,12 @@ export function triggerEquippedItems(player: Player, context: BehaviorContext, t
         if (item.triggerTypes?.includes(triggerType)) {
             try {
                 const result = item.executeBehavior(context);
+                // AURA re-fires every ~1s for as long as the item is equipped — there's no
+                // discrete "activation" moment to flash for a continuous passive effect (it
+                // would just pulse forever), so skip the client notification entirely. Other
+                // triggers on the same item (e.g. Magic Ring's level-up/shop-start growth) are
+                // separate triggerEquippedItems calls and still notify normally.
+                if (triggerType === TriggerType.AURA) return;
                 const sendTrigger = () => context.client.send('trigger_item', {
                     playerId: context.attacker?.playerId ?? player.playerId,
                     itemId: item.itemId,

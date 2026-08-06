@@ -46,8 +46,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: WEAPON_SLOTS,
     triggerTypes: [TriggerType.ON_ATTACK],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.08 },
-      [ItemRarity.MYTHIC]: { ratio: 0.16 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.04 },
+      [ItemRarity.MYTHIC]: { ratio: 0.08 },
     },
     describe: (r) => `On hit: deal bonus damage equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.EXPLOIT_WEAKNESS], r).ratio)} of the enemy's defense.`,
   },
@@ -59,8 +59,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.25 },
-      [ItemRarity.MYTHIC]: { ratio: 0.5 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.15 },
+      [ItemRarity.MYTHIC]: { ratio: 0.3 },
     },
     describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.FLUID_MOTION], r).ratio)} of your dodge rate.`,
   },
@@ -72,8 +72,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { ratioPerStack: 0.02 },
-      [ItemRarity.MYTHIC]: { ratioPerStack: 0.04 },
+      [ItemRarity.LEGENDARY]: { ratioPerStack: 0.01 },
+      [ItemRarity.MYTHIC]: { ratioPerStack: 0.02 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.PLAGUE_BEARER], r);
@@ -166,8 +166,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.2 },
-      [ItemRarity.MYTHIC]: { ratio: 0.4 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.15 },
+      [ItemRarity.MYTHIC]: { ratio: 0.3 },
     },
     describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], r).ratio)} of your defense.`,
   },
@@ -179,8 +179,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.15 },
-      [ItemRarity.MYTHIC]: { ratio: 0.3 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.2 },
+      [ItemRarity.MYTHIC]: { ratio: 0.4 },
     },
     describe: (r) => `Reduce enemy attack speed by ${pct(skillValues(ITEM_SKILLS[ItemSkillType.INTIMIDATING_PRESENCE], r).ratio)}.`,
   },
@@ -192,8 +192,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { divisor: 20 },
-      [ItemRarity.MYTHIC]: { divisor: 10 },
+      [ItemRarity.LEGENDARY]: { divisor: 10 },
+      [ItemRarity.MYTHIC]: { divisor: 5 },
     },
     describe: (r) => `Gain 1 strength per ${skillValues(ITEM_SKILLS[ItemSkillType.TITANS_MIGHT], r).divisor} max HP.`,
   },
@@ -221,8 +221,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // HP instead. FIGHT_START is kept only for the Mythic invulnerability rider.
     triggerTypes: [TriggerType.AURA, TriggerType.FIGHT_START],
     values: {
-      [ItemRarity.LEGENDARY]: { hpRatio: 0.15, invulnMs: 0 },
-      [ItemRarity.MYTHIC]: { hpRatio: 0.30, invulnMs: 2000 },
+      [ItemRarity.LEGENDARY]: { hpRatio: 0.2, invulnMs: 0 },
+      [ItemRarity.MYTHIC]: { hpRatio: 0.4, invulnMs: 1300 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.BULWARK], r);
@@ -239,8 +239,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { defenseRatio: 0.5, hpRegen: 5 },
-      [ItemRarity.MYTHIC]: { defenseRatio: 1.0, hpRegen: 12 },
+      [ItemRarity.LEGENDARY]: { defenseRatio: 0.5, hpRegen: 10 },
+      [ItemRarity.MYTHIC]: { defenseRatio: 1.0, hpRegen: 20 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.LAST_STAND], r);
@@ -268,8 +268,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: WEAPON_SLOTS,
     triggerTypes: [TriggerType.ON_ATTACK, TriggerType.FIGHT_START],
     values: {
-      [ItemRarity.LEGENDARY]: { every: 4, ratio: 1.0 },
-      [ItemRarity.MYTHIC]: { every: 3, ratio: 1.5 },
+      [ItemRarity.LEGENDARY]: { every: 3, ratio: 1.0 },
+      [ItemRarity.MYTHIC]: { every: 2, ratio: 1.5 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.CRUSHING_BLOW], r);
@@ -302,7 +302,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { cap: 12 },
+      [ItemRarity.LEGENDARY]: { cap: 14 },
       [ItemRarity.MYTHIC]: { cap: Number.MAX_SAFE_INTEGER },
     },
     describe: (r) => {
@@ -320,8 +320,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.ON_SELL],
     values: {
-      [ItemRarity.LEGENDARY]: { gold: 1, xp: 1 },
-      [ItemRarity.MYTHIC]: { gold: 2, xp: 2 },
+      [ItemRarity.LEGENDARY]: { gold: 1, xp: 2 },
+      [ItemRarity.MYTHIC]: { gold: 2, xp: 4 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.CASH_BACK], r);
@@ -336,8 +336,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.1 },
-      [ItemRarity.MYTHIC]: { ratio: 0.2 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.15 },
+      [ItemRarity.MYTHIC]: { ratio: 0.3 },
     },
     describe: (r) => `Increase income by ${pct(skillValues(ITEM_SKILLS[ItemSkillType.COMPOUND_INTEREST], r).ratio)}.`,
   },
@@ -368,7 +368,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.LEGENDARY]: { perItem: 1 },
       [ItemRarity.MYTHIC]: { perItem: 2 },
     },
-    describe: (r) => `Shop prices drop ${skillValues(ITEM_SKILLS[ItemSkillType.BULK_DISCOUNT], r).perItem} gold per merchant item you own.`,
+    describe: (r) => `Shop prices drop ${skillValues(ITEM_SKILLS[ItemSkillType.BULK_DISCOUNT], r).perItem} gold per merchant item equipped.`,
   },
 
   [ItemSkillType.PROTECTION_MONEY]: {

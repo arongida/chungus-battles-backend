@@ -44,6 +44,11 @@ const PlayerSchema = new Schema({
     // normally, unlike pendingRegenBuff it is NOT reset in copyPlayer since it only affects the
     // owner's own future shop rolls, never an opponent-bot snapshot's fight stats.
     luckyFindMythicBonus: {type: Number, default: 0},
+    // Fortune's Fool (talent 403): reroll count for the current shop phase. Unlike most derived
+    // combat stats (dodgeRate, maxHp, ...) which are deliberately left out of this schema because
+    // they're recomputed from scratch every tick, this one has to survive the DraftRoom → DB →
+    // FightRoom round trip (FightRoom.onJoin's getPlayer) so FIGHT_START can still read it.
+    rerollsThisRound: {type: Number, default: 0},
     // "Runs ended" leaderboard stat: how many other characters' final loss this character
     // delivered. Mutated ONLY via incrementRunsEnded's targeted $inc on the killer's original
     // doc — deliberately excluded from playerToPlainObject so a concurrent live save from the
@@ -333,6 +338,7 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         attackSpeed: player.attackSpeed,
         pendingRegenBuff: player.pendingRegenBuff,
         luckyFindMythicBonus: player.luckyFindMythicBonus,
+        rerollsThisRound: player.rerollsThisRound,
         killedByPlayerId: player.killedByPlayerId,
         killedByOriginalPlayerId: player.killedByOriginalPlayerId,
         killedByName: player.killedByName,

@@ -319,7 +319,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     const { perItem } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
     let merchantCount = 0;
     attacker.equippedItems.forEach((i) => { if (i.class === ItemClass.MERCHANT) merchantCount++; });
-    attacker.inventory.forEach((i) => { if (i.class === ItemClass.MERCHANT) merchantCount++; });
+    //attacker.inventory.forEach((i) => { if (i.class === ItemClass.MERCHANT) merchantCount++; });
     const discount = merchantCount * perItem;
     shop.forEach((shopItem) => {
       if (shopItem.sold) return;
