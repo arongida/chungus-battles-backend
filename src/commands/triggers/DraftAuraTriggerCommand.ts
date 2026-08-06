@@ -22,6 +22,16 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         // clean base instead of accumulating or fighting over a raw overwrite.
         player.refreshShopCost = BASE_REFRESH_SHOP_COST;
         player.refreshShopCostMultiplier = 1;
+        // Fortune's Fool: re-seeded to false before aura talents run, same reasoning as
+        // refreshShopCostMultiplier above — so it can't survive dropping/replacing the talent.
+        player.freeRerolls = false;
+        // Item-skill draft grants (Haggler 301, Store Credit 302): re-seeded to 0/false before the
+        // equipped-item aura pass, same reasoning as freeRerolls above — triggerEquippedItems only
+        // visits equippedItems, so without this the last granted value latches forever once the
+        // item is unequipped or sold. The skills write them back each tick while still equipped.
+        player.hagglerFreeRerolls = 0;
+        player.storeCreditFreeClaim = false;
+        player.storeCreditFreeClaimCap = 0;
 
         const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes?.includes(TriggerType.AURA));
 

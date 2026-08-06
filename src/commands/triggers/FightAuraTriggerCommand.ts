@@ -46,19 +46,12 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
                 this.state.skillsTimers.push(
                     this.clock.setInterval(() => {
                         try {
-                            const result = item.executeBehavior(behaviorContext);
-                            // Aura items don't attack, so this is their only visual cue —
-                            // mirrors the trigger_item send in triggerEquippedItems.
-                            const sendTrigger = () => behaviorContext.client?.send('trigger_item', {
-                                playerId: player.playerId,
-                                itemId: item.itemId,
-                                slot,
-                            });
-                            if (result instanceof Promise) {
-                                result.then(sendTrigger).catch((e) => console.error(e));
-                            } else {
-                                sendTrigger();
-                            }
+                            // No trigger_item notification here (unlike other triggerEquippedItems
+                            // call sites) — this loop is AURA-only, and a continuous passive
+                            // effect re-firing every ~1s has no discrete activation moment worth
+                            // flashing (it would just pulse forever). See triggerUtils.ts's
+                            // matching AURA skip for the non-fight-specific item trigger path.
+                            item.executeBehavior(behaviorContext);
                         } catch (e) {
                             console.error(e);
                         }

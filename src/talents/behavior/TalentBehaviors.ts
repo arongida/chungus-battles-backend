@@ -11,8 +11,8 @@ import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { WEAPON_BASE_RANGES, clampTier } from "../../items/stats/itemStatPool";
-import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, shieldDescription, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER } from "../../commands/ShopUpgradeUtils";
-import { CombatLogMessage, RewardGainMessage, fmt } from "../../common/MessageTypes";
+import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, shieldDescription, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER } from "../../commands/ShopUpgradeUtils";
+import { CombatLogMessage, RewardGainMessage, DamageMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
 import { Player } from "../../players/schema/PlayerSchema";
@@ -337,9 +337,9 @@ export const TalentBehaviors = {
         if (reachedMythic) {
             grantLuckyFindMythicBonus(attacker);
             if (defender) {
-                client.send('combat_log', { text: `Permanent +3% Lucky Find chance from ${weapon.name} going Mythic!`, kind: 'reward', attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
+                client.send('combat_log', { text: `Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance from ${weapon.name} going Mythic!`, kind: 'reward', attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
             } else {
-                client.send('draft_log', `Permanent +3% Lucky Find chance from ${weapon.name} going Mythic!`);
+                client.send('draft_log', `Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance from ${weapon.name} going Mythic!`);
             }
             client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
         }
@@ -396,35 +396,27 @@ export const TalentBehaviors = {
         }
     },
 
+    // Pure AURA talent — no trigger_talent send. A continuous passive effect re-firing every ~1s
+    // has no discrete activation moment worth flashing (it would just pulse forever).
     [TalentType.STRONG]: (context: TalentBehaviorContext) => {
-        const { attacker, talent, client, attackerSnapshot } = context;
+        const { attacker, talent, attackerSnapshot } = context;
         const base = attackerSnapshot ?? attacker;
         const hpBonus = base.maxHp * talent.activationRate;
         const attackBonus = 10;
 
         talent.affectedStats.maxHp = hpBonus;
         talent.affectedStats.strength = attackBonus;
-
-        client.send('trigger_talent', {
-            playerId: attacker.playerId,
-            talentId: TalentType.STRONG,
-        });
     },
 
+    // Pure AURA talent — no trigger_talent send (see STRONG above).
     [TalentType.INTIMIDATING_WEALTH]: (context: TalentBehaviorContext) => {
-        const { attacker, defender, client, talent } = context;
+        const { attacker, defender, talent } = context;
 
         if (!defender) return;
         const attackSpeedBonus = attacker.income * talent.activationRate;
 
         talent.affectedStats.attackSpeed = 1 + attackSpeedBonus;
         talent.affectedEnemyStats.attackSpeed = Math.max(1 - attackSpeedBonus, 0.5);
-
-        client.send('trigger_talent', {
-            playerId: attacker.playerId,
-            talentId: TalentType.INTIMIDATING_WEALTH,
-        });
-
     },
 
     [TalentType.CORRODING_COLLECTION]: (context: TalentBehaviorContext) => {
@@ -439,13 +431,11 @@ export const TalentBehaviors = {
         });
     },
 
+    
     [TalentType.ZEALOT]: (context: TalentBehaviorContext) => {
-        const { attacker, client, talent } = context;
-        talent.affectedStats.attackSpeed = 1 + (attacker.defense * 0.6 * 0.01);
-        client.send('trigger_talent', {
-            playerId: attacker.playerId,
-            talentId: TalentType.ZEALOT,
-        });
+        const { attacker, talent } = context;
+        attacker.dodgeDisabled = true;
+        talent.affectedStats.attackSpeed = 1 + (attacker.defense * 0.8 * 0.01);
     },
 
     // Hidden Vials — ON_DODGE trigger. `defender` is the dodger (talent owner); the enemy who
@@ -609,7 +599,7 @@ export const TalentBehaviors = {
             client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}${steps > 0 ? ' (rarity up!)' : ''}!`);
             if (becameMythic) {
                 grantLuckyFindMythicBonus(attacker);
-                client.send('draft_log', `Mythic forged! Permanent +3% Lucky Find chance!`);
+                client.send('draft_log', `Mythic forged! Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`);
                 client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
             }
         }
@@ -722,7 +712,7 @@ export const TalentBehaviors = {
                     // Thief starts at level 2), same pattern as Magic Ring: rarity = level.
                     diceItem.rarity = Math.min(attacker.level, ItemRarity.MYTHIC);
                     diceItem.description = `Max damage equals ${Math.round((diceItem.rarity / 2) * 100)}% of income.`;
-                    diceItem.baseAttackSpeed = diceItem.rarity === 2 ? 0.9 : 0.6;
+                    diceItem.baseAttackSpeed = diceItem.rarity === 2 ? 0.81 : 0.54;
                     attacker.getItem(diceItem);
                     client.send('draft_log', `${attacker.name} found a gambler's dice!`);
                     client.send('trigger_talent', {
@@ -732,7 +722,7 @@ export const TalentBehaviors = {
                     // Only reachable at max level (5), where the dice is granted already Mythic.
                     if (diceItem.rarity === ItemRarity.MYTHIC) {
                         grantLuckyFindMythicBonus(attacker);
-                        client.send('draft_log', `Permanent +3% Lucky Find chance from the gambler's dice being Mythic!`);
+                        client.send('draft_log', `Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance from the gambler's dice being Mythic!`);
                         client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
                     }
                 }
@@ -771,7 +761,7 @@ export const TalentBehaviors = {
                     // Only reachable at max level (5), where the catch-up loop reaches Mythic.
                     if (ringWeapon.rarity === ItemRarity.MYTHIC) {
                         grantLuckyFindMythicBonus(attacker);
-                        client.send('draft_log', `Permanent +3% Lucky Find chance from the ring weapon being Mythic!`);
+                        client.send('draft_log', `Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance from the ring weapon being Mythic!`);
                         client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
                     }
                 }
@@ -990,7 +980,7 @@ export const TalentBehaviors = {
                 }
             } else if (trigger === TriggerType.FIGHT_END) {
                 if (talent.statDamageDealt <= 0) return;
-                const gold = 1 + Math.floor(talent.statDamageDealt / talent.base);
+                const gold = Math.floor(talent.statDamageDealt / talent.base);
                 attacker.gold += gold;
                 track(talent, 1, 0, 0, gold, 0, { client, playerId: attacker.playerId });
                 client.send('combat_log', { text: `${attacker.name} gets paid ${gold} gold for a highest hit of ${fmt(talent.statDamageDealt)}!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: gold } as CombatLogMessage);
@@ -1020,14 +1010,45 @@ export const TalentBehaviors = {
             });
         },
 
-    [TalentType.ROGUE_2]:
+    // Second Thoughts (reworked from Quickness, Season 21): BEFORE_REFRESH trigger — fires from
+    // BeforeShopRefreshTriggerCommand while the outgoing shop is still intact, so it can carry
+    // the priciest unsold item into the new shop at half price instead of losing it. The carry
+    // is tagged so it's excluded from being picked again next reroll — if it isn't bought, it's
+    // discarded when the shop rebuilds (it "survives only one reroll"). Actual injection into
+    // the new shop happens in DraftRoom.updateShop, which rolls one fewer fresh item whenever
+    // player.carriedShopItem is set — that lost slot is the drawback for not buying it.
+    [TalentType.SECOND_THOUGHTS]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent } = context;
+            const { attacker, client, talent, shop, trigger } = context;
+            if (trigger === TriggerType.AFTER_REFRESH) {
+                // Back-compat: in-progress runs may carry an embedded copy from before this
+                // rework (Quickness's after-refresh trigger). Repoint to before-refresh and
+                // bail — same migration idiom as Misconduct/Penny Stocks above.
+                talent.triggerTypes.clear();
+                talent.triggerTypes.push(TriggerType.BEFORE_REFRESH);
+                return;
+            }
+            if (!shop) return;
+            const candidates = shop.filter((item) => !item.sold);
+            if (candidates.length === 0) return;
+            const priciest = candidates.reduce((best, item) => item.price > best.price ? item : best, candidates[0]);
 
-            talent.affectedStats.attackSpeed += talent.base;
+            const carried = cloneItem(priciest);
+            carried.price = Math.max(0, Math.floor(carried.price / 2));
+            carried.sellPrice = Math.max(0, Math.floor(carried.sellPrice / 2));
+            carried.sold = false;
+            carried.equipped = false;
+            carried.upgradePreview = false;
+            carried.luckyFind = false;
+            carried.luckyFindSteps = 0;
+            carried.tags.push('second-thoughts-carried');
+            attacker.carriedShopItem = carried;
+
+            track(talent, 1);
+            client.send('draft_log', `Second thoughts — kept ${carried.name} at half price!`);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
-                talentId: TalentType.ROGUE_2,
+                talentId: TalentType.SECOND_THOUGHTS,
             });
         },
 
@@ -1063,36 +1084,68 @@ export const TalentBehaviors = {
             });
         },
 
-    [TalentType.LEARN_BY_DOING]:
+    // Fortune's Fool (reworked from Learn by doing, Season 21): two triggers on one talent.
+    // AURA (draft): grants free rerolls every tick it's owned (see PlayerSchema.freeRerolls /
+    // DraftRoom.refreshShop) and live-updates the description with the current HP cost, so the
+    // drawback is visible before you pay it — same self-describing pattern as Mercenary/Grand
+    // Robbery. Also fires during fight (AURA runs there too) but freeRerolls is unused mid-fight.
+    // FIGHT_START: charges the HP cost sized by how many times the shop was rerolled this round
+    // (player.rerollsThisRound, reset per shop phase in DraftRoom.onJoin). Written as a direct
+    // `attacker.hp -=` rather than takeDamage() — this is a pre-fight cost, not a hit, so it
+    // shouldn't touch fightStats.damageTaken or be blocked by invincibility. Capped so it can
+    // never drop below 1 HP.
+    [TalentType.FORTUNES_FOOL]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent } = context;
-            const xpGained = talent.base;
-            attacker.xp += xpGained;
-            track(talent, 1, 0, 0, 0, xpGained, { client, playerId: attacker.playerId });
-            client.send('combat_log', { text: `${attacker.name} gains + ${xpGained}XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
-            client.send('trigger_talent', {
-                playerId: attacker.playerId,
-                talentId: TalentType.LEARN_BY_DOING,
-            });
+            const { attacker, client, talent, trigger } = context;
+
+            if (trigger === TriggerType.AFTER_REFRESH) {
+                // Back-compat: in-progress runs may carry an embedded copy from before this
+                // rework (Learn by doing's after-refresh trigger). Repoint to aura + fight-start
+                // and bail — same migration idiom as Misconduct/Penny Stocks above.
+                talent.triggerTypes.clear();
+                talent.triggerTypes.push(TriggerType.AURA);
+                talent.triggerTypes.push(TriggerType.FIGHT_START);
+                return;
+            }
+
+            if (trigger === TriggerType.AURA) {
+                attacker.freeRerolls = true;
+                const pct = Math.round(Math.min(talent.scaling, talent.base * attacker.rerollsThisRound) * 100);
+                talent.description = attacker.rerollsThisRound > 0
+                    ? `Rerolls are free. ${attacker.rerollsThisRound} reroll(s) this round — start the fight at -${pct}% HP.`
+                    : `Rerolls are free. Each reroll this round costs 5% HP (max 99%) at the start of your next fight.`;
+                return;
+            }
+
+            if (trigger === TriggerType.FIGHT_START) {
+                const pct = Math.min(talent.scaling, talent.base * attacker.rerollsThisRound);
+                if (pct <= 0) return;
+                const hpLoss = Math.min(Math.floor(attacker.maxHp * pct), attacker.maxHp - 1);
+                if (hpLoss <= 0) return;
+                attacker.hp -= hpLoss;
+                track(talent, 1, hpLoss);
+                client.send('damage', { playerId: attacker.playerId, damage: hpLoss, type: 'normal' } as DamageMessage);
+                client.send('combat_log', { text: `${attacker.name} starts the fight wounded from ${attacker.rerollsThisRound} reroll(s), losing ${fmt(hpLoss)} HP!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, damage: hpLoss } as CombatLogMessage);
+                client.send('trigger_talent', {
+                    playerId: attacker.playerId,
+                    talentId: TalentType.FORTUNES_FOOL,
+                });
+            }
         },
 
     // Berserk — AURA trigger. Re-checked every ~1s; below 50% HP grants +100% strength (of base+item
     // strength, via attackerSnapshot so it doesn't feed on its own bonus) and +100% attack speed.
     // Writes `=` each tick (not `+=`), so UpdateStatsCommand's from-scratch resum removes the buff
     // automatically once healed back above 50% — no FIGHT_END reset needed.
+    // Pure AURA talent — no trigger_talent send (see STRONG above): "below 50%" stays true for
+    // as long as the fight does, which would otherwise pulse every tick the whole time.
     [TalentType.WARRIOR_4]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent, attackerSnapshot } = context;
+            const { attacker, talent, attackerSnapshot } = context;
             const base = attackerSnapshot ?? attacker;
             const below = attacker.hp < attacker.maxHp * talent.activationRate;
             talent.affectedStats.strength = below ? base.strength * talent.scaling : 0;
             talent.affectedStats.attackSpeed = below ? 1 + talent.scaling : 1;
-            if (below) {
-                client.send('trigger_talent', {
-                playerId: attacker.playerId,
-                talentId: TalentType.WARRIOR_4,
-            });
-            }
         },
 
     [TalentType.MISCONDUCT]: (context: TalentBehaviorContext) => {
@@ -1113,9 +1166,10 @@ export const TalentBehaviors = {
         attacker.misconductFreeClaim = !attacker.misconductClaimUsed;
     },
 
+    // Pure AURA talent — no trigger_talent send (see STRONG above).
     [TalentType.MERCHANT_5]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent, attackerSnapshot } = context;
+            const { attacker, talent, attackerSnapshot } = context;
             talent.affectedStats.income = talent.base;
             const base = attackerSnapshot ?? attacker;
             const bonusCoefficent = (base.income * talent.scaling) / 100;
@@ -1126,10 +1180,6 @@ export const TalentBehaviors = {
             talent.affectedStats.maxHp = Math.ceil(base.maxHp * bonusCoefficent);
             talent.affectedStats.dodgeRate = Math.ceil(base.dodgeRate * bonusCoefficent);
             talent.affectedStats.hpRegen = Math.ceil(base.hpRegen * bonusCoefficent);
-            client.send('trigger_talent', {
-                playerId: attacker.playerId,
-                talentId: TalentType.MERCHANT_5,
-            });
         },
 
     [TalentType.WARRIOR_5]:
@@ -1150,7 +1200,7 @@ export const TalentBehaviors = {
             let mythics = 0;
             [...shop].forEach((item) => { // copy: getItem mutates sold/shop state as it goes
                 if (item.sold) return;
-                const { steps, becameMythic } = stealShopItem(item, attacker, upgrade);
+                const { steps, becameMythic } = stealShopItem(item, attacker, upgrade, false);
                 stolen++;
                 if (steps > 0) upgraded++;
                 if (becameMythic) mythics++;
@@ -1167,7 +1217,7 @@ export const TalentBehaviors = {
             }
             if (mythics > 0) {
                 for (let i = 0; i < mythics; i++) grantLuckyFindMythicBonus(attacker);
-                client.send('draft_log', `Mythic forged! Permanent +${mythics * 3}% Lucky Find chance!`);
+                client.send('draft_log', `Mythic forged! Permanent +${mythics * LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`);
                 client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
             }
         },

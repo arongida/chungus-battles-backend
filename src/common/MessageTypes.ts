@@ -29,8 +29,9 @@ export type RewardGainMessage = {
   gold?: number;
   xp?: number;
   // True when a Mythic buy/upgrade just granted the permanent Lucky Find bonus — pops a
-  // "+1% 🍀" floating number and a mythic fireworks burst on the avatar instead of the
-  // shop card (see DraftRoom.buyItem / PlayerSchema.luckyFindMythicBonus).
+  // floating "+N% 🍀" number and a mythic fireworks burst on the avatar instead of the
+  // shop card (see DraftRoom.buyItem / PlayerSchema.luckyFindMythicBonus /
+  // ShopUpgradeUtils.LUCKY_FIND_MYTHIC_BONUS).
   luckyFind?: boolean;
 };
 

@@ -136,7 +136,12 @@ export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Flask, Ring 
 
 /** Flowering Staff (8): invulnerability window granted after each attack. */
 export function floweringStaffInvulnMs(rarity: number): number {
-    return 200 + 100 * rarity;
+    return 150 + 60 * rarity;
+}
+
+/** All shields: invulnerability window granted at fight start, scaled by item tier. */
+export function shieldInvulnMs(tier: number): number {
+    return 300 + 350 * tier;
 }
 
 /**
@@ -162,10 +167,13 @@ export const BURN_DURATION_MS = 3000;
  * (PlayerSchema.pendingRegenBuff) that applies for the wearer's next fight only, then is spent
  * (see FightRoom.handleFightEnd). Priced like any other item (HEALTH_FLASK_PRICE) rather than
  * scaled by level/gold. Roughly 3x the hpRegen a normal tier-3 item gives at a comparable price
- * (tier 3 gear costs 8 and rolls up to 4 hpRegen — see STAT_RANGES.hpRegen in itemStatPool.ts),
+ * (tier 3 gear costs 10 and rolls up to 4 hpRegen — see STAT_RANGES.hpRegen in itemStatPool.ts),
  * since this bonus only lasts one fight instead of being permanent.
+ *
+ * Documentation only — the authoritative value is Item(6).price in Mongo (see
+ * scripts/increaseItemPrices.ts); this constant is never imported.
  */
-export const HEALTH_FLASK_PRICE = 10;
+export const HEALTH_FLASK_PRICE = 12;
 export const HEALTH_FLASK_REGEN_PER_SECOND = 10;
 
 /** Band of Vigor (27): HP fraction below which "Second Wind" can proc, once per fight. */
@@ -178,5 +186,5 @@ export function secondWindHealFraction(rarity: number): number {
 
 /** Band of Vigor (27): invulnerability window granted on proc. */
 export function secondWindInvulnMs(rarity: number): number {
-    return 500 + 500 * rarity;
+    return 300 + 350 * rarity;
 }

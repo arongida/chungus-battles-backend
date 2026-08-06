@@ -2,7 +2,7 @@ import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
 import { EquipSlot, ItemRarity, ItemType } from '../types/ItemTypes';
 import { CombatLogMessage, RewardGainMessage, fmt } from '../../common/MessageTypes';
-import { grantLuckyFindMythicBonus } from '../../commands/ShopUpgradeUtils';
+import { grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT } from '../../commands/ShopUpgradeUtils';
 import {
     chungiHpDamageFraction,
     FLOWERING_STAFF_INVULN_COOLDOWN_MS,
@@ -12,6 +12,7 @@ import {
     secondWindHealFraction,
     secondWindInvulnMs,
     SECOND_WIND_THRESHOLD,
+    shieldInvulnMs,
     stackMagicRingBonuses,
     wandOfFireBurnStacks,
 } from './uniqueItemBalance';
@@ -35,7 +36,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         // would grant them the invulnerability.
         if (trigger !== TriggerType.FIGHT_START) return;
         if (!attacker || !clock) return;
-        const durationMs = 500 + 500 * item.tier;
+        const durationMs = shieldInvulnMs(item.tier);
         attacker.setInvincible(clock, durationMs, client);
         const seconds = (durationMs / 1000).toFixed(1);
         client?.send('combat_log', {
@@ -162,7 +163,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
             // Command<DraftRoom>), so draft_log is always the right channel here.
             if (item.rarity === ItemRarity.MYTHIC) {
                 grantLuckyFindMythicBonus(attacker);
-                client?.send('draft_log', `Permanent +3% Lucky Find chance from ${item.name} being Mythic!`);
+                client?.send('draft_log', `Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance from ${item.name} being Mythic!`);
                 client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
             }
         } else {
@@ -190,12 +191,12 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
                 // Command<DraftRoom>), so draft_log is always the right channel here.
                 if (item.rarity === ItemRarity.MYTHIC) {
                     grantLuckyFindMythicBonus(attacker);
-                    client?.send('draft_log', `Permanent +3% Lucky Find chance from ${item.name} being Mythic!`);
+                    client?.send('draft_log', `Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance from ${item.name} being Mythic!`);
                     client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
                 }
             }
         }
-        item.baseAttackSpeed = 0.6 * (1 + 0.5 * (item.rarity - 1));
+        item.baseAttackSpeed = 0.54 * (1 + 0.5 * (item.rarity - 1));
         item.baseMaxDamage = attacker.income * (item.rarity / 2);
         attacker.equippedItems.forEach((equipped, slot) => {
             if (equipped === item) attacker.equippedItems.set(slot, equipped);

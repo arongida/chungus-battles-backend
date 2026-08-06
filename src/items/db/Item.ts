@@ -4,6 +4,7 @@ import {Item} from "../schema/ItemSchema";
 import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {ArraySchema} from "@colyseus/schema";
 import {rollItemStats} from "../stats/itemStatRoller";
+import {reconcileItemSkill} from "../skills/itemSkillRoller";
 
 export const ItemSchema = new Schema({
     itemId: Number,
@@ -102,6 +103,10 @@ function getItemSchemaObject(itemFromDb: any): Item {
     const triggerTypesArr = new ArraySchema<string>();
     if (triggerTypes?.length) (triggerTypes as string[]).forEach(t => triggerTypesArr.push(t));
     newItemSchemaObject.triggerTypes = triggerTypesArr;
+
+    // Re-sync skillName/skillDescription/triggerTypes against the current ITEM_SKILLS table —
+    // covers shop rolls, quest items, and cloneItem() (dual-wield ghost copies, upgrade previews).
+    reconcileItemSkill(newItemSchemaObject);
 
     return newItemSchemaObject;
 }

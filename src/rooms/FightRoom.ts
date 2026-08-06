@@ -18,7 +18,7 @@ import { TalentType } from '../talents/types/TalentTypes';
 import { ensureMartialFists } from '../talents/behavior/TalentBehaviors';
 import { cloneItem, getItemById, getQuestItems } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyRarityUpgrade, getEquippedUpgradeableItems, grantLuckyFindMythicBonus, totalRemainingRaritySteps } from '../commands/ShopUpgradeUtils';
+import { applyRarityUpgrade, getEquippedUpgradeableItems, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, totalRemainingRaritySteps } from '../commands/ShopUpgradeUtils';
 import { FightAuraTriggerCommand } from '../commands/triggers/FightAuraTriggerCommand';
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
@@ -828,7 +828,7 @@ export class FightRoom extends Room {
 
             if (reachedMythic) {
                 grantLuckyFindMythicBonus(player);
-                this.logCombat('broadcast', { text: `${picked.item.name} became Mythic! Permanent +3% Lucky Find chance!`, kind: 'reward', itemId: picked.item.itemId });
+                this.logCombat('broadcast', { text: `${picked.item.name} became Mythic! Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`, kind: 'reward', itemId: picked.item.itemId });
                 this.broadcast('reward_gain', { playerId: player.playerId, luckyFind: true } as RewardGainMessage);
             }
         }
