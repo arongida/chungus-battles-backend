@@ -57,6 +57,14 @@ export function skillValues(def: ItemSkillDefinition, rarity: ItemRarity): Recor
   return fallback ?? {};
 }
 
+/** Rarities `def` actually defines a bracket for, ascending — e.g. `[LEGENDARY, MYTHIC]` for a
+ *  class skill, all 5 for a shield skill. Used by the /itemSkills catalog endpoint (app.config.ts)
+ *  so it shows exactly the tiers that mean something for each skill, instead of calling
+ *  describe() for every rarity and having skillValues' fallback silently repeat the same text. */
+export function definedRarityTiers(def: ItemSkillDefinition): ItemRarity[] {
+  return RARITY_ORDER.filter((r) => !!def.values[r]);
+}
+
 export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
   // ---------------------------------------------------------------- ROGUE ----
 

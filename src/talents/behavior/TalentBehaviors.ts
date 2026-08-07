@@ -846,7 +846,7 @@ export const TalentBehaviors = {
 
             const upgradeShield = (item: Item) => {
                 if (item.type !== ItemType.SHIELD) return;
-                item.baseAttackSpeed = item.rarity < 1 ? 0.6 : 0.3 * item.rarity;
+                item.baseAttackSpeed = 0.3 + 0.3 * item.rarity;
                 item.baseMinDamage = item.tier * item.rarity;
                 item.baseMaxDamage = item.tier * item.rarity * 2;
                 const equipOpts = item.equipOptions as any;
