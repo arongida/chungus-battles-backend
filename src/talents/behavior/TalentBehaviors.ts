@@ -628,11 +628,14 @@ export const TalentBehaviors = {
     // damage/attack-speed ranges so the fists grow deterministically each level-up instead of
     // re-rolling every aura tick. Also neutralizes talent.affectedStats every tick in case an
     // older save still carries stats learned under the pre-rework version.
-    // ON_ATTACK: fires whenever a fist lands a hit. Picks a random weapon stashed in the
-    // inventory and unleashes a full extra attack with it via performWeaponAttack — that attack
-    // re-enters the normal trigger dispatch, so the weapon's own on-hit effects (poison,
-    // invulnerability, burn, lifesteal, ...) apply exactly as if it had been equipped. Guarded on
-    // context.weapon being a fist so the extra attack (made with a real weapon) can't recurse.
+    // ON_ATTACK: fires whenever a fist lands a hit. Unleashes a full extra attack — via
+    // performWeaponAttack, so each re-enters the normal trigger dispatch and the weapon's own
+    // on-hit effects (poison, invulnerability, burn, lifesteal, ...) apply exactly as if it had
+    // been equipped — with EVERY eligible weapon stashed in the inventory, not just one. Guarded
+    // on context.weapon being a fist so these extra attacks (made with real weapons) can't
+    // recurse. Deliberately strong (a deep weapon stash can mean many attacks per fist hit); the
+    // tradeoff is that none of those weapons are actually equipped, so their affectedStats and
+    // any equip-gated item skills never apply — only their base damage and on-hit effects do.
     [TalentType.MARTIAL_ARTIST]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent, trigger, defender, weapon, performWeaponAttack } = context;
@@ -661,7 +664,7 @@ export const TalentBehaviors = {
                     fist.baseMinDamage = isRightFist ? baseMinDamage * 2 : baseMinDamage;
                     fist.baseMaxDamage = isRightFist ? baseMaxDamage * 2 : baseMaxDamage;
                     fist.baseAttackSpeed = isRightFist ? baseAttackSpeed * 0.5 : baseAttackSpeed;
-                    fist.description = 'A martial artist\'s fist. Each hit unleashes an extra strike with a random weapon from your inventory.';
+                    fist.description = 'A martial artist\'s fist. Each hit unleashes an extra strike with every weapon in your inventory.';
                     attacker.equippedItems.set(slot, fist);
                 }
 
@@ -689,13 +692,18 @@ export const TalentBehaviors = {
                 );
                 if (eligible.length === 0) return;
 
-                const extraWeapon = eligible[Math.floor(Math.random() * eligible.length)];
                 let fistSlot = 'martial';
                 attacker.equippedItems.forEach((equipped, slot) => {
                     if (equipped === weapon) fistSlot = slot;
                 });
-                const dealt = performWeaponAttack(attacker, defender, extraWeapon, fistSlot);
-                track(talent, 1, dealt);
+
+                // One extra attack per eligible weapon in the inventory — each call re-enters
+                // OnAttackTriggerCommand with weapon=that weapon, but the ON_ATTACK guard above
+                // (weapon must be a fist) stops it from recursing back into this loop.
+                for (const extraWeapon of eligible) {
+                    const dealt = performWeaponAttack(attacker, defender, extraWeapon, fistSlot);
+                    track(talent, 1, dealt);
+                }
             }
         },
 
