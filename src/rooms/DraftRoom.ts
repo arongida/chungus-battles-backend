@@ -21,6 +21,9 @@ import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 import { RewardGainMessage } from '../common/MessageTypes';
 import { HEALTH_FLASK_REGEN_PER_SECOND } from '../items/behavior/uniqueItemBalance';
+import { TalentType } from '../talents/types/TalentTypes';
+import { track } from '../talents/behavior/TalentBehaviors';
+import { merchantDiscounts } from '../talents/behavior/merchantDiscountState';
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -403,6 +406,15 @@ export class DraftRoom extends Room {
 
     }
 
+    /** Credits gold SAVED (not gained — no wallet change, so no reward_gain floater) to a talent's
+     *  statGoldGained/totalGoldGained, e.g. a free-claim's item value or a discount actually used.
+     *  No-op if the player doesn't currently have the talent or nothing was actually saved. */
+    private creditTalentGold(talentId: TalentType, gold: number) {
+        if (gold <= 0) return;
+        const talent = this.state.player.talents.find((t) => t.talentId === talentId);
+        if (talent) track(talent, 1, 0, 0, gold, 0);
+    }
+
     private async buyItem(itemId: number, client: Client) {
         // Exclude already-sold slots: itemId isn't unique across the shop array (e.g. Second
         // Thoughts carrying an item over into a shop that also independently rolls the same
@@ -424,6 +436,9 @@ export class DraftRoom extends Room {
             && item.price <= this.state.player.storeCreditFreeClaimCap;
         const comradeFree = !luckyFree && !goldGenieFree && !storeCreditFree && this.state.player.comradeFreeClaim && !item.sold;
         const misconductFree = !luckyFree && !goldGenieFree && !storeCreditFree && !comradeFree && this.state.player.misconductFreeClaim && !item.sold;
+        // Snapshot before the free-claim price wipe below, so the value can be credited to
+        // whichever talent granted the claim (see creditTalentGold calls further down).
+        const originalPrice = item.price;
         if (luckyFree || goldGenieFree || storeCreditFree || comradeFree) {
             item.price = 0;
             item.sellPrice = 0;
@@ -455,10 +470,12 @@ export class DraftRoom extends Room {
         if (luckyFree) {
             this.state.player.luckyFindClaimUsed = true;
             this.state.player.luckyFindFreeClaim = false;
+            this.creditTalentGold(TalentType.BLACK_MARKET_CONTRACT, originalPrice);
         }
         if (goldGenieFree) {
             this.state.player.goldGenieClaimUsed = true;
             this.state.player.goldGenieFreeClaim = false;
+            this.creditTalentGold(TalentType.GOLD_GENIE, originalPrice);
         }
         if (storeCreditFree) {
             this.state.player.storeCreditClaimUsed = true;
@@ -467,12 +484,21 @@ export class DraftRoom extends Room {
         if (comradeFree) {
             this.state.player.comradeClaimUsed = true;
             this.state.player.comradeFreeClaim = false;
+            this.creditTalentGold(TalentType.COMRADE, originalPrice);
         }
         if (misconductFree) {
             this.state.player.misconductClaimUsed = true;
             this.state.player.misconductFreeClaim = false;
             this.announceLuckyUpgrade(item, misconductSteps, slot, 'Misconduct! Rarity up!');
             client.send('draft_log', `Misconduct! Took ${item.name}${misconductSteps > 0 ? ' and upgraded it' : ''}!`);
+            // item.price reflects the post-upgrade re-pricing applied inside stealShopItem above —
+            // that's the value actually taken.
+            this.creditTalentGold(TalentType.MISCONDUCT, item.price);
+        }
+        // Flash Sale (Merchant_1): only on a genuinely paid purchase — a free-claimed item was
+        // free regardless of any earlier shop-wide discount, so crediting it there would double up.
+        if (!luckyFree && !goldGenieFree && !storeCreditFree && !comradeFree && !misconductFree) {
+            this.creditTalentGold(TalentType.MERCHANT_1, merchantDiscounts.get(item) ?? 0);
         }
         this.invalidateUndoSell();
         // Other shop slots for the same item (or previews built off the item just
@@ -622,6 +648,9 @@ export class DraftRoom extends Room {
             this.state.player.hagglerFreeRerolls = Math.max(0, this.state.player.hagglerFreeRerolls - 1);
         } else {
             this.state.player.gold -= this.state.player.refreshShopCost;
+            // Bargain Hunter: credit the gold actually saved by the reroll-cost halving on a paid
+            // reroll only — free rerolls (Fortune's Fool/Haggler, handled above) save nothing extra.
+            this.creditTalentGold(TalentType.BARGAIN_HUNTER, this.state.player.refreshShopCostBeforeDiscount - this.state.player.refreshShopCost);
         }
         this.state.player.rerollsThisRound++;
         // BEFORE_REFRESH: dispatched while the outgoing shop is still intact, so talents like

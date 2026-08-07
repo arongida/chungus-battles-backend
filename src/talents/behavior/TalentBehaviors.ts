@@ -18,6 +18,7 @@ import { Talent } from "../schema/TalentSchema";
 import { Player } from "../../players/schema/PlayerSchema";
 import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus } from "../../items/behavior/uniqueItemBalance";
 import { weaponWhispererSnapshots, weaponWhispererFinalRolls } from "./weaponWhispererState";
+import { merchantDiscounts } from "./merchantDiscountState";
 
 /** `reward`, when provided alongside a positive gold/xp amount, sends a `reward_gain` message to
  *  the recipient so the client can pop floating +gold/+xp text over their avatar. */
@@ -45,6 +46,7 @@ export const TalentBehaviors = {
         const { talent, defender, client } = context;
 
         talent.affectedStats.strength += talent.activationRate;
+        track(talent, 1);
         client.send('combat_log', { text: `${defender.name} rages, increased attack by 1!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: defender.playerId,
@@ -93,6 +95,7 @@ export const TalentBehaviors = {
         const { attacker, client, talent, trigger } = context;
         if (trigger === TriggerType.ON_ATTACK) {
             talent.affectedStats.attackSpeed += talent.activationRate;
+            track(talent, 1);
             client.send('combat_log', { text: `${attacker.name} gains ${talent.activationRate * 100}% attack speed!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -139,7 +142,7 @@ export const TalentBehaviors = {
     [TalentType.INVIGORATE]: (context: TalentBehaviorContext) => {
         const { attacker, defender, damage, client } = context;
         const leechAmount = damage * 0.15 + 1;
-        const healed = attacker.heal(leechAmount, defender);
+        const healed = attacker.heal(leechAmount);
         track(context.talent, 1, 0, healed);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
@@ -162,6 +165,7 @@ export const TalentBehaviors = {
 
             }
             talent.affectedStats.strength += 1;
+            track(talent, 1);
             client.send('combat_log', { text: `${attacker.name} snitches 1 strength from ${defender.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -178,6 +182,7 @@ export const TalentBehaviors = {
         const stolenItem = defender.inventory[stolenItemIndex];
         if (stolenItem) {
             defender.inventory.splice(stolenItemIndex, 1);
+            track(context.talent, 1);
             client.send('combat_log', { text: `${attacker.name} steals ${stolenItem.name} from ${defender.name}!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, itemId: stolenItem.itemId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -210,7 +215,7 @@ export const TalentBehaviors = {
             attacker: attacker,
         });
         defender.takeDamage(reducedAmount, client);
-        const scamHealed = attacker.heal(reducedAmount, defender);
+        const scamHealed = attacker.heal(reducedAmount);
         track(context.talent, 1, reducedAmount, scamHealed);
         client.send('combat_log', { text: `${attacker.name} scams ${fmt(scamHealed)} health from ${defender.name}!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: reducedAmount, healing: scamHealed } as CombatLogMessage);
         client.send('trigger_talent', {
@@ -228,7 +233,7 @@ export const TalentBehaviors = {
     [TalentType.BURNING_BLOOD]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, clock, talent } = context;
         const stacks = Math.max(1, Math.floor(1 + attacker.hpRegen));
-        defender.addBurnStacks(clock, client, stacks);
+        defender.addBurnStacks(clock, client, stacks, talent);
         track(talent, 1);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
@@ -268,6 +273,7 @@ export const TalentBehaviors = {
         } else {
             client.send('combat_log', { text: `${defender.name} has no weapons to disarm!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
         }
+        track(context.talent, 1);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.DISARM,
@@ -420,11 +426,11 @@ export const TalentBehaviors = {
     },
 
     [TalentType.CORRODING_COLLECTION]: (context: TalentBehaviorContext) => {
-        const { attacker, defender, client, clock } = context;
+        const { attacker, defender, client, clock, talent } = context;
         const poisonStackToApply = defender.inventory.length * 2;
-        defender.addPoisonStacks(clock, client, poisonStackToApply);
+        defender.addPoisonStacks(clock, client, poisonStackToApply, talent);
 
-        client.send('combat_log', { text: `${attacker.name} corrodes ${defender.name}'s collection!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
+        client.send('combat_log', { text: `${attacker.name} corrodes ${defender.name}'s collection!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.CORRODING_COLLECTION,
@@ -442,8 +448,8 @@ export const TalentBehaviors = {
     // missed is `attacker`. Applies the DoT stacks to the enemy.
     [TalentType.HIDDEN_VIALS]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, clock, talent } = context;
-        attacker.addBurnStacks(clock, client, talent.activationRate);
-        attacker.addPoisonStacks(clock, client, talent.activationRate);
+        attacker.addBurnStacks(clock, client, talent.activationRate, talent);
+        attacker.addPoisonStacks(clock, client, talent.activationRate, talent);
         track(talent, 1);
         client.send('trigger_talent', {
             playerId: defender.playerId,
@@ -494,13 +500,19 @@ export const TalentBehaviors = {
         }
     },
 
+    // KNOWN ISSUE (pre-existing, not fixed here): this swaps `strength` directly, but
+    // recalculatePlayerStats (statsUtils.ts) re-derives strength from scratch on the very next
+    // 100ms tick, reverting the swap before it has any real effect. The activation still fires
+    // and is tracked below, but the swap itself is effectively a no-op — needs an affectedStats-
+    // based rework to actually land.
     [TalentType.TRICKSTER]: (context: TalentBehaviorContext) => {
-        const { client, attacker, defender } = context;
+        const { client, attacker, defender, talent } = context;
         const enemyAttack = defender.strength;
         const playerAttack = attacker.strength;
         attacker.strength = enemyAttack;
         defender.strength = playerAttack;
-        client.send('combat_log', { text: `${attacker.name} tricks ${defender.name}!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
+        track(talent, 1);
+        client.send('combat_log', { text: `${attacker.name} tricks ${defender.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.TRICKSTER,
@@ -554,15 +566,18 @@ export const TalentBehaviors = {
     },
 
     [TalentType.GUARDIAN_ANGEL]: (context: TalentBehaviorContext) => {
-        const { attacker, client, defender, clock, talent, damage } = context;
+        const { client, defender, clock, talent, damage } = context;
         if (defender.hp - damage <= 0 && !defender.talentsOnCooldown.includes(TalentType.GUARDIAN_ANGEL)) {
             defender.hp = 1;
             defender.setInvincible(clock, talent.activationRate, client);
             defender.talentsOnCooldown.push(TalentType.GUARDIAN_ANGEL);
+            track(talent, 1);
 
-            client.send('combat_log', { text: `You are invincible for ${talent.activationRate / 1000} seconds!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
+            // Owner of the talent is `defender` (the one being saved), not `attacker` — this used
+            // to flash/log on the attacker's avatar instead of the player who was actually saved.
+            client.send('combat_log', { text: `${defender.name} is saved and invincible for ${talent.activationRate / 1000} seconds!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId } as CombatLogMessage);
             client.send('trigger_talent', {
-                playerId: attacker.playerId,
+                playerId: defender.playerId,
                 talentId: TalentType.GUARDIAN_ANGEL,
             });
         }
@@ -678,7 +693,8 @@ export const TalentBehaviors = {
                 attacker.equippedItems.forEach((equipped, slot) => {
                     if (equipped === weapon) fistSlot = slot;
                 });
-                performWeaponAttack(attacker, defender, extraWeapon, fistSlot);
+                const dealt = performWeaponAttack(attacker, defender, extraWeapon, fistSlot);
+                track(talent, 1, dealt);
             }
         },
 
@@ -811,6 +827,7 @@ export const TalentBehaviors = {
                 stat = "hp regeneration";
             }
 
+            track(talent, 1);
             client.send('combat_log', { text: `${attacker.name} gets ${amount} bonus ${stat} from Joker talent.`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -933,10 +950,15 @@ export const TalentBehaviors = {
     [TalentType.MERCHANT_1]:
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent, shop } = context;
+            if (!shop) return;
             const discount = talent.base * attacker.level;
-            shop?.forEach((item) => {
+            shop.forEach((item) => {
+                const priceBefore = item.price;
                 item.price = Math.max(0, item.price - discount);
                 item.sellPrice = Math.max(0, item.sellPrice - discount);
+                // Actual reduction (clamped, so a cheap item's share can be less than the nominal
+                // discount) — read by DraftRoom.buyItem to credit gold saved only on items bought.
+                merchantDiscounts.set(item, priceBefore - item.price);
             });
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -1064,7 +1086,7 @@ export const TalentBehaviors = {
     [TalentType.POISON_2]:
         (context: TalentBehaviorContext) => {
             const { attacker, defender, client, clock, talent } = context;
-            defender.addPoisonStacks(clock, client, talent.activationRate);
+            defender.addPoisonStacks(clock, client, talent.activationRate, talent);
             track(talent, 1, 0, 0, 0);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -1073,11 +1095,15 @@ export const TalentBehaviors = {
         },
 
     // Unstoppable Force — ACTIVE trigger (activationRate 0.5 => every 2s). Flags the owner's next
-    // weapon attack to be un-dodgeable and deal double damage; consumed in FightRoom.tryWeaponAttack.
+    // weapon attack to be un-dodgeable and deal double damage; consumed (and credited) in
+    // FightRoom.tryWeaponAttack. Guarded so an already-charged attack doesn't re-flash the icon
+    // every tick while the player's weapon is slower than the charge interval — activations are
+    // counted once per actual empowered hit landing, not once per charge.
     [TalentType.WARRIOR_3]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client } = context;
-            attacker.empoweredNextAttack = true;
+            const { attacker, client, talent } = context;
+            if (attacker.empoweredAttackSource) return;
+            attacker.empoweredAttackSource = talent;
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.WARRIOR_3,
@@ -1198,16 +1224,18 @@ export const TalentBehaviors = {
             let stolen = 0;
             let upgraded = 0;
             let mythics = 0;
+            let stolenValue = 0;
             [...shop].forEach((item) => { // copy: getItem mutates sold/shop state as it goes
                 if (item.sold) return;
                 const { steps, becameMythic } = stealShopItem(item, attacker, upgrade, false);
                 stolen++;
+                stolenValue += item.price; // post-steal (post-upgrade) price — what was actually taken
                 if (steps > 0) upgraded++;
                 if (becameMythic) mythics++;
             });
 
             talent.tags?.push('grand-robbery-used');
-            talent.description = `Grand Robbery! Stole ${stolen} item(s) from the shop${upgraded > 0 ? ' (all upgraded!)' : ''}!`
+            track(talent, stolen, 0, 0, stolenValue, 0);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.GRAND_ROBBERY,

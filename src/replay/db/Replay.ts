@@ -73,6 +73,8 @@ const ZERO_SIDE: FightSideStats = {
     damageReducedByDefense: 0,
     attacksDodged: 0,
     damageBlockedByInvincible: 0,
+    empoweredAttacks: 0,
+    empoweredDamage: 0,
 };
 
 /** Cumulative fight stats for a character across every recorded fight (aggregated
@@ -94,6 +96,8 @@ export async function getGameStats(originalPlayerId: number): Promise<GameStatsR
             pDef: { $sum: '$stats.player.damageReducedByDefense' },
             pDodge: { $sum: '$stats.player.attacksDodged' },
             pInvuln: { $sum: '$stats.player.damageBlockedByInvincible' },
+            pEmpAtk: { $sum: '$stats.player.empoweredAttacks' },
+            pEmpDmg: { $sum: '$stats.player.empoweredDamage' },
             eWeapon: { $sum: '$stats.enemy.damageDealt.weapon' },
             eBurn: { $sum: '$stats.enemy.damageDealt.burn' },
             ePoison: { $sum: '$stats.enemy.damageDealt.poison' },
@@ -101,6 +105,8 @@ export async function getGameStats(originalPlayerId: number): Promise<GameStatsR
             eDef: { $sum: '$stats.enemy.damageReducedByDefense' },
             eDodge: { $sum: '$stats.enemy.attacksDodged' },
             eInvuln: { $sum: '$stats.enemy.damageBlockedByInvincible' },
+            eEmpAtk: { $sum: '$stats.enemy.empoweredAttacks' },
+            eEmpDmg: { $sum: '$stats.enemy.empoweredDamage' },
         } },
     ]).exec();
 
@@ -120,6 +126,8 @@ export async function getGameStats(originalPlayerId: number): Promise<GameStatsR
                 damageReducedByDefense: agg.pDef ?? 0,
                 attacksDodged: agg.pDodge ?? 0,
                 damageBlockedByInvincible: agg.pInvuln ?? 0,
+                empoweredAttacks: agg.pEmpAtk ?? 0,
+                empoweredDamage: agg.pEmpDmg ?? 0,
             },
             enemy: {
                 damageDealt: { weapon: agg.eWeapon ?? 0, burn: agg.eBurn ?? 0, poison: agg.ePoison ?? 0 },
@@ -127,6 +135,8 @@ export async function getGameStats(originalPlayerId: number): Promise<GameStatsR
                 damageReducedByDefense: agg.eDef ?? 0,
                 attacksDodged: agg.eDodge ?? 0,
                 damageBlockedByInvincible: agg.eInvuln ?? 0,
+                empoweredAttacks: agg.eEmpAtk ?? 0,
+                empoweredDamage: agg.eEmpDmg ?? 0,
             },
         },
     };

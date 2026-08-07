@@ -117,6 +117,8 @@ export type FightSideStats = {
   damageReducedByDefense: number;
   attacksDodged: number;
   damageBlockedByInvincible: number;
+  empoweredAttacks: number;
+  empoweredDamage: number;
 };
 
 export type FightStatsMessage = {

@@ -56,6 +56,9 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
 
         triggerEquippedItems(this.state.player, behaviorContext, TriggerType.AURA);
 
+        // Snapshot the pre-discount cost so DraftRoom.refreshShop can credit Bargain Hunter with
+        // the gold actually saved by the halving below.
+        player.refreshShopCostBeforeDiscount = player.refreshShopCost;
         // Applied last (after aura talents and item skills) so Bargain Hunter's halving is
         // order-independent — it always lands on the fully-adjusted cost, not a partial one.
         player.refreshShopCost = applyRefreshCostMultiplier(player.refreshShopCost, player.refreshShopCostMultiplier);

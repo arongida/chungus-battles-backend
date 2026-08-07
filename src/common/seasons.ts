@@ -21,6 +21,9 @@ export const SEASONS: SeasonInfo[] = [
     number: 22,
     name: 'Slower Better',
     changes: [
+      'Unstoppable Force now flashes and logs on the empowered hit itself, and reports its bonus damage',
+      'Guardian Angel now flashes on the saved fighter instead of the attacker',
+      'Talents now report their own contribution: damage-over-time damage is credited to whoever applied the stacks, and extra attacks, saves and gold saved are tracked',
       'Weapon base attack speed reduced by ~10%',
       'Bonus attack speed granted by items reduced by ~10%',
       'All invulnerability windows reduced by ~1/3: shields, Flowering Staff, Band of Vigor, Bulwark and Guardian Angel',
