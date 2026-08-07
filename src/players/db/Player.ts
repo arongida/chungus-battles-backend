@@ -9,7 +9,7 @@ import {StatsSchema} from "../../common/db/Stats";
 import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollItemStats} from "../../items/stats/itemStatRoller";
-import {reconcileItemSkill} from "../../items/skills/itemSkillRoller";
+import {ensureShieldSkill, reconcileItemSkill} from "../../items/skills/itemSkillRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 import {recalculatePlayerStats} from "../../common/statsUtils";
@@ -152,6 +152,14 @@ function getPlayerSchemaObject(playerFromDb: any): Player {
         newPlayerLockedShopArraySchema.push(buildItemSchema(item));
     });
     newPlayerSchemaObject.lockedShop = newPlayerLockedShopArraySchema;
+
+    // Back-fill: shields saved before item skills existed (or a shield granted outside the
+    // normal shop-roll path) get their skill on load, same as reconcileItemSkill re-syncs an
+    // already-skilled item's display text above (buildItemSchema). Covers every shield this
+    // player object can carry — equipped, inventory and locked shop.
+    newPlayerSchemaObject.equippedItems.forEach((item) => ensureShieldSkill(item, newPlayerSchemaObject));
+    newPlayerSchemaObject.inventory.forEach((item) => ensureShieldSkill(item, newPlayerSchemaObject));
+    newPlayerSchemaObject.lockedShop.forEach((item) => ensureShieldSkill(item, newPlayerSchemaObject));
 
     return newPlayerSchemaObject;
 }

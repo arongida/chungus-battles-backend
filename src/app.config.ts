@@ -12,8 +12,7 @@ import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, getWallOfFame
 import {GAME_VERSION} from './common/types';
 import { getAllItems } from "./items/db/Item";
 import { getItemRollPreview } from "./items/stats/itemRollPreview";
-import { ItemRarity, ItemType } from "./items/types/ItemTypes";
-import { shieldDescription } from "./commands/ShopUpgradeUtils";
+import { ItemRarity } from "./items/types/ItemTypes";
 import { getAllTalents } from "./talents/db/Talent";
 import { getReplaysByOriginalPlayer, getReplayById, getGameStats } from './replay/db/Replay';
 import { SEASONS } from './common/seasons';
@@ -83,8 +82,9 @@ export const server = defineServer({
             const items = await getAllItems();
             res.status(200).send(items.map(item => ({
                 ...item.toJSON(),
-                // Shield descriptions are generated at roll time; the authored one is stale.
-                description: item.type === ItemType.SHIELD ? shieldDescription(item.tier) : item.description,
+                // Shields (like class items) roll their skill per-player-owned instance, not on
+                // the raw DB template this endpoint reads — skillName/skillDescription are blank
+                // here by design, same as an un-upgraded class item's catalog entry.
                 rollPreview: getItemRollPreview(item),
             })));
         });

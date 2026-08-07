@@ -30,4 +30,14 @@ export enum ItemSkillType {
   BULK_DISCOUNT = 306,
   PROTECTION_MONEY = 307,
   WAR_CHEST = 308,
+
+  // Shield-only skills (any shield, regardless of class) — see itemSkillRoller.ts's
+  // type-based pool branch. Active from Common rarity, unlike class skills (Legendary+),
+  // since they replace the old flat fight-start invulnerability which also worked at
+  // every rarity.
+  AEGIS = 401,
+  RIPOSTE = 402,
+  SHIELD_WALL = 403,
+  SHIELD_BASH = 404,
+  BRACE = 405,
 }

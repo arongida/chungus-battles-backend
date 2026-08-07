@@ -6,6 +6,7 @@ import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContex
 import {triggerEquippedItems} from '../../common/triggerUtils';
 import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
 import {baseLuckyFindChance, BASE_REFRESH_SHOP_COST, applyRefreshCostMultiplier} from '../ShopUpgradeUtils';
+import {ensureShieldSkill} from '../../items/skills/itemSkillRoller';
 
 export class DraftAuraTriggerCommand extends Command<DraftRoom> {
     execute() {
@@ -32,6 +33,16 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         player.hagglerFreeRerolls = 0;
         player.storeCreditFreeClaim = false;
         player.storeCreditFreeClaimCap = 0;
+
+        // Shields roll their skill from Common (no Legendary gate — see ensureShieldSkill), so
+        // unlike class-item skills this can't ride on a rarity-upgrade event. Sweep every shield
+        // the player can currently see each tick; the `!item.skillId` latch in ensureShieldSkill
+        // makes repeat calls free once a shield has one. Covers freshly rolled shop items (this
+        // command runs synchronously right after DraftRoom.updateShop builds the shop — see the
+        // comment there) as well as inventory/equipped shields carried over from a save.
+        player.equippedItems.forEach((item) => ensureShieldSkill(item, player));
+        player.inventory.forEach((item) => ensureShieldSkill(item, player));
+        this.state.shop.forEach((item) => ensureShieldSkill(item, player));
 
         const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes?.includes(TriggerType.AURA));
 

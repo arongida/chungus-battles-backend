@@ -11,7 +11,8 @@ import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { WEAPON_BASE_RANGES, clampTier } from "../../items/stats/itemStatPool";
-import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, shieldDescription, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER } from "../../commands/ShopUpgradeUtils";
+import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER } from "../../commands/ShopUpgradeUtils";
+import { ensureShieldSkill } from "../../items/skills/itemSkillRoller";
 import { CombatLogMessage, RewardGainMessage, DamageMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
@@ -845,13 +846,17 @@ export const TalentBehaviors = {
 
             const upgradeShield = (item: Item) => {
                 if (item.type !== ItemType.SHIELD) return;
-                item.baseAttackSpeed = 0.6 * item.rarity;
-                item.baseMinDamage = item.tier * item.rarity - 1;
-                item.baseMaxDamage = item.tier * item.rarity + 1;
+                item.baseAttackSpeed = item.rarity < 1 ? 0.6 : 0.3 * item.rarity;
+                item.baseMinDamage = item.tier * item.rarity;
+                item.baseMaxDamage = item.tier * item.rarity * 2;
                 const equipOpts = item.equipOptions as any;
                 if (equipOpts && !equipOpts.includes(EquipSlot.MAIN_HAND)) {
-                    equipOpts.push(EquipSlot.MAIN_HAND);
+                    equipOpts.unshift(EquipSlot.MAIN_HAND);
                 }
+                // Shields roll their skill from Common (see ensureShieldSkill) — sweeping every
+                // shield here alongside the weapon-conversion catches any that predate the talent
+                // pick, same as the DraftAuraTriggerCommand sweep does for the rest of the draft.
+                ensureShieldSkill(item, attacker);
             };
 
             attacker.inventory.forEach(upgradeShield);
@@ -864,7 +869,6 @@ export const TalentBehaviors = {
                 if (baseShield) {
                     const shield = cloneItem(baseShield);
                     upgradeShield(shield);
-                    shield.description = shieldDescription(shield.tier); // normally set by rollItemStats when a shield rolls into the shop
                     attacker.gold += shield.price; // refund so getItem nets to free
                     attacker.getItem(shield);
                     client?.send('draft_log', `${attacker.name} got a free shield from Shady Shields!`);

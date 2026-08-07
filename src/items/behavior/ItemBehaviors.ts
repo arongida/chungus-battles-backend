@@ -1,6 +1,6 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
-import { EquipSlot, ItemRarity, ItemType } from '../types/ItemTypes';
+import { EquipSlot, ItemRarity } from '../types/ItemTypes';
 import { CombatLogMessage, RewardGainMessage, fmt } from '../../common/MessageTypes';
 import { grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT } from '../../commands/ShopUpgradeUtils';
 import {
@@ -12,7 +12,6 @@ import {
     secondWindHealFraction,
     secondWindInvulnMs,
     SECOND_WIND_THRESHOLD,
-    shieldInvulnMs,
     stackMagicRingBonuses,
     wandOfFireBurnStacks,
 } from './uniqueItemBalance';
@@ -29,23 +28,10 @@ const floweringStaffLastProcMs = new WeakMap<Item, number>();
 const secondWindUsed = new WeakMap<Item, boolean>();
 
 export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContext) => void | Promise<void>> = {
-    // All shields — FIGHT_START: grant invulnerability (500 + 500*tier ms).
-    [ItemType.SHIELD]: ({ attacker, trigger, clock, client, item }) => {
-        // Old enemy snapshots may still carry shields with 'on-attacked'
-        // triggers; in that context `attacker` is the opponent, so firing
-        // would grant them the invulnerability.
-        if (trigger !== TriggerType.FIGHT_START) return;
-        if (!attacker || !clock) return;
-        const durationMs = shieldInvulnMs(item.tier);
-        attacker.setInvincible(clock, durationMs, client);
-        const seconds = (durationMs / 1000).toFixed(1);
-        client?.send('combat_log', {
-            text: `${attacker.name}'s ${item.name}: ${seconds}s invulnerability!`,
-            kind: 'item',
-            attackerId: attacker.playerId,
-            itemId: item.itemId,
-        } as CombatLogMessage);
-    },
+    // Shields no longer have a type-keyed behavior here — the old flat fight-start
+    // invulnerability was replaced by the shield-skill pool (ItemSkillType.AEGIS et al., see
+    // ItemSkillBehaviors.ts and itemSkillBalance.ts's SHIELD_SKILLS), granted per-shield via
+    // ensureShieldSkill instead of a blanket type behavior.
     // Flowering Staff (8) — AURA: takes both hands. ON_ATTACK: brief invulnerability.
     8: ({ attacker, trigger, clock, client, item }) => {
         if (!attacker) return;

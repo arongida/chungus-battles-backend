@@ -28,6 +28,11 @@ const coatedEdgeCounters = new WeakMap<Item, number>();
 const openingActCounters = new WeakMap<Item, number>();
 const crushingBlowCounters = new WeakMap<Item, number>();
 const protectionMoneyLastProcMs = new WeakMap<Item, number>();
+// Shield Bash: last proc time (clock-elapsed ms), reset on FIGHT_START — same idiom as
+// protectionMoneyLastProcMs above.
+const shieldBashLastProcMs = new WeakMap<Item, number>();
+// Brace: hits-taken counter, reset on FIGHT_START — same idiom as coatedEdgeCounters above.
+const braceCounters = new WeakMap<Item, number>();
 // Bulk Discount: undiscounted price/sellPrice per SHOP item, captured the first tick a slot is
 // seen. Every later tick recomputes from this stable base rather than the shop item's current
 // (possibly already-discounted) price — aura fires every 1s, so subtracting from the live price
@@ -373,6 +378,105 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     client?.send('combat_log', {
       text: `${attacker.name}'s ${item.name} opens the war chest: ${spend} gold spent for +${strength} strength and +${defense} defense!`,
       kind: 'item', attackerId: attacker.playerId, itemId: item.itemId, goldDelta: -spend,
+    } as CombatLogMessage);
+  },
+
+  // ---------------------------------------------------------------- SHIELD ----
+  // Rolled onto any shield (itemSkillRoller.ts's type-based branch), active from Common. In
+  // ON_ATTACKED, `attacker` is the incoming striker and `defender` is the shield's owner (see
+  // OnAttackedTriggerCommand.ts — it fires on the defender's equipped items); in FIGHT_START /
+  // FIGHT_END / AURA, `attacker` is the shield's owner (see FightStartTriggerCommand /
+  // FightEndTriggerCommand / FightAuraTriggerCommand — each side's own context always names its
+  // own player `attacker`).
+
+  [ItemSkillType.AEGIS]: (context) => {
+    const { attacker, item, client, clock, trigger } = context;
+    if (trigger !== TriggerType.FIGHT_START || !attacker || !clock || !item) return;
+    const { invulnMs } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    attacker.setInvincible(clock, invulnMs, client);
+    client?.send('combat_log', {
+      text: `${attacker.name}'s ${item.name} raises Aegis: ${(invulnMs / 1000).toFixed(1)}s invulnerability!`,
+      kind: 'item', attackerId: attacker.playerId, itemId: item.itemId,
+    } as CombatLogMessage);
+  },
+
+  [ItemSkillType.RIPOSTE]: (context) => {
+    const { attacker, defender, item, client, commandDispatcher, trigger } = context;
+    if (trigger !== TriggerType.ON_ATTACKED || !attacker || !defender || !item) return;
+    const { ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    const rawCounter = defender.defense * ratio;
+    if (rawCounter <= 0) return;
+    const counterDamage = attacker.getDamageAfterDefense(rawCounter);
+    commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender: attacker, damage: counterDamage, attacker: defender });
+    attacker.takeDamage(counterDamage, client);
+    client?.send('combat_log', {
+      text: `${defender.name}'s ${item.name} ripostes ${attacker.name} for ${fmt(counterDamage)} damage!`,
+      kind: 'item', attackerId: defender.playerId, defenderId: attacker.playerId, itemId: item.itemId, damage: counterDamage,
+    } as CombatLogMessage);
+  },
+
+  [ItemSkillType.SHIELD_WALL]: (context) => {
+    const { attacker, defender, item, trigger } = context;
+    if (!item) return;
+    if (trigger === TriggerType.FIGHT_END) {
+      item.skillAffectedStats.defense = 0;
+      return;
+    }
+    if (trigger === TriggerType.AURA) {
+      if (!attacker) return;
+      const { attackSpeedPenalty } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+      // Self-clearing `=` write, same field convention as every other AURA skill — safe to share
+      // skillAffectedStats with the accumulating ON_ATTACKED write below since they touch
+      // disjoint fields (attackSpeed here, defense there).
+      item.skillAffectedStats.attackSpeed = 1 - attackSpeedPenalty;
+      return;
+    }
+    if (trigger !== TriggerType.ON_ATTACKED || !defender) return;
+    const { defensePerHit, maxDefense } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    const current = item.skillAffectedStats.defense;
+    if (current >= maxDefense) return;
+    item.skillAffectedStats.defense = Math.min(maxDefense, current + defensePerHit);
+  },
+
+  [ItemSkillType.SHIELD_BASH]: (context) => {
+    const { attacker, defender, item, client, clock, trigger } = context;
+    if (!item) return;
+    if (trigger === TriggerType.FIGHT_START) {
+      shieldBashLastProcMs.delete(item);
+      return;
+    }
+    if (trigger !== TriggerType.ON_ATTACKED || !attacker || !defender || !clock) return;
+    const { slowRatio, slowMs, cooldownMs } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    const last = shieldBashLastProcMs.get(item);
+    if (last !== undefined && clock.elapsedTime - last < cooldownMs) return;
+    shieldBashLastProcMs.set(item, clock.elapsedTime);
+    item.skillAffectedEnemyStats.attackSpeed = Math.max(1 - slowRatio, 0.1);
+    clock.setTimeout(() => { item.skillAffectedEnemyStats.attackSpeed = 1; }, slowMs);
+    client?.send('combat_log', {
+      text: `${defender.name}'s ${item.name} bashes ${attacker.name}: -${pctText(slowRatio)} attack speed for ${slowMs / 1000}s!`,
+      kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, itemId: item.itemId,
+    } as CombatLogMessage);
+  },
+
+  [ItemSkillType.BRACE]: (context) => {
+    const { attacker, defender, item, client, clock, trigger } = context;
+    if (!item) return;
+    if (trigger === TriggerType.FIGHT_START) {
+      braceCounters.set(item, 0);
+      return;
+    }
+    if (trigger !== TriggerType.ON_ATTACKED || !attacker || !defender || !clock) return;
+    const { every } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    const count = (braceCounters.get(item) ?? 0) + 1;
+    braceCounters.set(item, count);
+    if (count % every !== 0) return;
+    // ON_ATTACKED runs synchronously right before FightRoom.tryWeaponAttack's takeDamage call —
+    // a short invincibility window here swallows exactly this one hit without blocking anything
+    // that lands afterward.
+    defender.setInvincible(clock, 100, client);
+    client?.send('combat_log', {
+      text: `${defender.name}'s ${item.name} braces and blocks ${attacker.name}'s hit entirely!`,
+      kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, itemId: item.itemId,
     } as CombatLogMessage);
   },
 };

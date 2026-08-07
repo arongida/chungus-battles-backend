@@ -5,6 +5,7 @@ import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentC
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem } from '../commands/ShopUpgradeUtils';
+import { ensureShieldSkill } from '../items/skills/itemSkillRoller';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
@@ -590,6 +591,10 @@ export class DraftRoom extends Room {
         applyExtraRaritySteps(rebuilt, template, this.state.player, stale.luckyFindSteps);
         rebuilt.luckyFind = stale.luckyFind;
         rebuilt.luckyFindSteps = stale.luckyFindSteps;
+        // Shields roll from Common, not off a rarity upgrade — grant it here so a rebuilt
+        // preview slot never briefly shows a shield with no skill row (the DraftAuraTriggerCommand
+        // sweep would eventually catch it too, but this keeps the rebuild self-contained).
+        ensureShieldSkill(rebuilt, this.state.player);
         this.state.shop.splice(index, 1, rebuilt);
     }
 
