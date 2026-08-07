@@ -10,6 +10,7 @@ import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {BURN_DURATION_MS} from "../../items/behavior/uniqueItemBalance";
 import {FightStats} from "./FightStats";
 import {weaponWhispererSnapshots} from "../../talents/behavior/weaponWhispererState";
+import {addDotSource, creditHealingPrevented, DotSourceLedger, removeDotSource} from "../../common/dotSources";
 
 export class Player extends Schema implements IStats {
     @type('number') playerId: number;
@@ -39,6 +40,11 @@ export class Player extends Schema implements IStats {
     attackTimers: Map<string, Delayed> = new Map();
     poisonTimer: Delayed;
     burnTimer: Delayed;
+    // Which Talent applied each currently-live poison/burn stack, and how many — used to split a
+    // DoT tick's damage proportionally by source instead of crediting it to a hard-coded talentId.
+    // Stacks applied by items have no entry (their share simply goes uncredited). See dotSources.ts.
+    poisonSources: DotSourceLedger = new Map();
+    burnSources: DotSourceLedger = new Map();
     regenTimer: Delayed;
     invincibleTimer: Delayed;
     talentsOnCooldown: TalentType[] = [];
@@ -47,14 +53,19 @@ export class Player extends Schema implements IStats {
     // refreshShopCost after ALL aura talents have run (see DraftAuraTriggerCommand), so halving
     // composes with Comrade's +income regardless of talent pick order. Re-seeded to 1 each tick.
     refreshShopCostMultiplier: number = 1;
+    // Bargain Hunter: the reroll cost before its multiplier was applied, snapshotted each aura
+    // tick by DraftAuraTriggerCommand. Read by DraftRoom.refreshShop to credit the talent with the
+    // gold actually saved on a paid reroll.
+    refreshShopCostBeforeDiscount: number = 0;
     healingEffectiveness: number = 1;
     // Black Market Contact: true once the current shop's free lucky-find claim has been spent
     // (DraftRoom.buyItem), reset per shop build (DraftRoom.updateShop). Same latch pattern as
     // comradeClaimUsed.
     luckyFindClaimUsed: boolean = false;
-    // Unstoppable Force (WARRIOR_3): true for one weapon attack after the talent's ACTIVE tick
-    // fires. Consumed in FightRoom.tryWeaponAttack (skips dodge, doubles damage).
-    empoweredNextAttack: boolean = false;
+    // Unstoppable Force (WARRIOR_3): the Talent that charged the owner's next weapon attack, for
+    // one weapon attack after the talent's ACTIVE tick fires. Consumed in FightRoom.tryWeaponAttack
+    // (skips dodge, doubles damage) and used there to credit the bonus damage to its source.
+    empoweredAttackSource: Talent = null;
     // Zealot (talent 28, reworked): set true by Zealot's aura behavior every ~1s it's owned
     // (talents are never un-picked, so this never needs to reset back to false). Clamped in
     // recalculatePlayerStats (statsUtils.ts), which zeroes dodgeRate after computing it whenever
@@ -291,7 +302,7 @@ export class Player extends Schema implements IStats {
         this.invincibleTimer = clock.setTimeout(endInvincibility, invincibleLenghtMS);
     }
 
-    heal(amount: number, poisonSource?: Player): number {
+    heal(amount: number): number {
         if (amount <= 0) {
             this.hp += amount;
             return amount;
@@ -300,14 +311,9 @@ export class Player extends Schema implements IStats {
         const hpBefore = this.hp;
         this.hp += healed;
         const prevented = amount - healed;
-        if (prevented > 0 && poisonSource) {
-            poisonSource.talents.forEach((t) => {
-                if (t.talentId === TalentType.POISON_2) {
-                    t.statHealingPrevented += prevented;
-                    t.totalHealingPrevented += prevented;
-                }
-            });
-        }
+        // Credited against THIS player's own poison stacks (whatever reduced healingEffectiveness),
+        // split proportionally across whichever talents applied them. See dotSources.ts.
+        if (prevented > 0) creditHealingPrevented(this.poisonSources, this.poisonStack, prevented);
         // Actual HP gained — the hp setter clamps at maxHp, so overheal must not
         // be reported as healing (it inflates healing stats and replay HP tracking).
         const gained = this.hp - hpBefore;
@@ -351,12 +357,14 @@ export class Player extends Schema implements IStats {
         return 1 - 100 / (100 + effectiveDodgeRate);
     }
 
-    addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {
+    addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1, source?: Talent) {
         this.poisonStack += stack;
+        addDotSource(this.poisonSources, source, stack);
         playerClient.send('combat_log', { text: `${this.name} is poisoned! ${this.poisonStack} stacks!`, kind: 'poison_apply', defenderId: this.playerId, poisonStacks: this.poisonStack } as CombatLogMessage);
 
         clock.setTimeout(() => {
             this.poisonStack -= stack;
+            removeDotSource(this.poisonSources, source, stack);
             if (this.poisonStack === 0 && this.poisonTimer) {
                 this.poisonTimer.clear();
                 this.poisonTimer = null;
@@ -364,12 +372,14 @@ export class Player extends Schema implements IStats {
         }, 6000);
     }
 
-    addBurnStacks(clock: ClockTimer, playerClient: Client, stack: number = 1) {
+    addBurnStacks(clock: ClockTimer, playerClient: Client, stack: number = 1, source?: Talent) {
         this.burnStack += stack;
+        addDotSource(this.burnSources, source, stack);
         playerClient.send('combat_log', { text: `${this.name} is burning! ${this.burnStack} stacks!`, kind: 'burn_apply', defenderId: this.playerId, burnStacks: this.burnStack } as CombatLogMessage);
 
         clock.setTimeout(() => {
             this.burnStack -= stack;
+            removeDotSource(this.burnSources, source, stack);
             if (this.burnStack === 0 && this.burnTimer) {
                 this.burnTimer.clear();
                 this.burnTimer = null;

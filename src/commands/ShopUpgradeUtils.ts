@@ -4,7 +4,7 @@ import { ItemRarity, ItemType } from '../items/types/ItemTypes';
 import { cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { TalentType } from '../talents/types/TalentTypes';
-import { grantItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
+import { ensureShieldSkill, grantItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
 import {
   BURN_DAMAGE_PER_STACK,
   BURN_DURATION_MS,
@@ -15,7 +15,6 @@ import {
   secondWindHealFraction,
   secondWindInvulnMs,
   SECOND_WIND_THRESHOLD,
-  shieldInvulnMs,
   TWO_HANDED_WEAPON_IDS,
   wandOfFireBurnStacks,
 } from '../items/behavior/uniqueItemBalance';
@@ -54,10 +53,6 @@ function updateRarityDescription(target: Item, player: Player): void {
   if (updater) target.description = updater(target, player);
 }
 
-export function shieldDescription(tier: number): string {
-  return `${(shieldInvulnMs(tier) / 1000).toFixed(2)}s invulnerability at fight start.`;
-}
-
 /** Returns true when this step just brought `target` to MYTHIC (i.e. it wasn't already there) —
  *  callers that represent a genuine acquisition (as opposed to rolling/previewing an unowned
  *  shop item) should react to a true return by calling grantLuckyFindMythicBonus. */
@@ -84,7 +79,12 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
   // `target.class` so unique/quest items are untouched. Runs for shop-preview clones too (see
   // DraftRoom.updateShop/rebuildShopSlot), which is why rollItemSkill is seeded deterministically
   // rather than using Math.random() — otherwise the preview would re-roll every 1s aura tick.
-  if (target.class && target.rarity >= ItemRarity.LEGENDARY) {
+  //
+  // Shields already carry a skill from Common (ensureShieldSkill — see its call sites), so this
+  // never needs to roll one; it only needs to re-describe it here at the item's new rarity.
+  if (target.type === ItemType.SHIELD) {
+    refreshItemSkillDescription(target);
+  } else if (target.class && target.rarity >= ItemRarity.LEGENDARY) {
     if (!target.skillId) {
       const def = rollItemSkill(target, player);
       if (def) grantItemSkill(target, def);

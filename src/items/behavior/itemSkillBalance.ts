@@ -7,33 +7,62 @@ import { EquipSlot, ItemClass, ItemRarity } from '../types/ItemTypes';
 import { TriggerType } from '../../common/types';
 import { ItemSkillType } from '../types/ItemSkillTypes';
 
+/** Class skills only ever roll onto a `class`-bearing item (ItemClass); shield skills roll
+ *  onto any shield regardless of `class` (see itemSkillRoller.ts's type-based pool branch). */
+export type ItemSkillGroup = ItemClass | 'shield';
+
 export interface ItemSkillDefinition {
   id: ItemSkillType;
-  class: ItemClass;
+  class: ItemSkillGroup;
   name: string;
   /** Equip slots this skill is allowed to roll onto. OnAttackTriggerCommand only ever fires
    *  the weapon that swung, so any skill using ON_ATTACK/ON_DODGE combat procs must be
-   *  weapon-only (see rollItemSkill's slot filter). */
+   *  weapon-only (see rollItemSkill's slot filter). Shields have baseAttackSpeed 0 and never
+   *  swing (see FightRoom.startWeaponAttackTimers), so no shield skill may use ON_ATTACK either. */
   slots: EquipSlot[];
   /** Unioned onto item.triggerTypes when the skill is granted (see grantItemSkill). */
   triggerTypes: TriggerType[];
-  /** Rarity-keyed tuning — ItemSkillBehaviors reads skillValues(def, item.rarity). */
-  values: Record<ItemRarity.LEGENDARY | ItemRarity.MYTHIC, Record<string, number>>;
+  /** Rarity-keyed tuning — ItemSkillBehaviors reads skillValues(def, item.rarity). Class skills
+   *  only define LEGENDARY/MYTHIC (they never roll below Legendary). Shield skills define every
+   *  bracket, since shield skills are active from Common — see skillValues' fallback below. */
+  values: Partial<Record<ItemRarity, Record<string, number>>>;
   describe(rarity: ItemRarity): string;
 }
 
 const ANY_SLOT: EquipSlot[] = [EquipSlot.ARMOR, EquipSlot.HELMET, EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND];
 const WEAPON_SLOTS: EquipSlot[] = [EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND];
 const GEAR_SLOTS: EquipSlot[] = [EquipSlot.ARMOR, EquipSlot.HELMET];
+// Shields normally live in offHand; Shady Shields (talent) moves them into mainHand too.
+const SHIELD_SLOTS: EquipSlot[] = [EquipSlot.OFF_HAND, EquipSlot.MAIN_HAND];
 
 function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
-/** Looks up the rarity-appropriate value bracket for a skill (LEGENDARY or MYTHIC — item
- *  rarity never rolls a skill below Legendary, see rollItemSkill). */
+const RARITY_ORDER = [ItemRarity.COMMON, ItemRarity.RARE, ItemRarity.EPIC, ItemRarity.LEGENDARY, ItemRarity.MYTHIC];
+
+/** Looks up the rarity-appropriate value bracket for a skill. Returns the highest defined
+ *  bracket at or below `rarity`, falling back to the lowest defined bracket for anything below
+ *  that (so a class skill — which only defines LEGENDARY/MYTHIC — still resolves to LEGENDARY's
+ *  numbers for rarity 1-3, exactly as before this was widened to support shield skills, which
+ *  define every bracket from COMMON up). */
 export function skillValues(def: ItemSkillDefinition, rarity: ItemRarity): Record<string, number> {
-  return def.values[rarity >= ItemRarity.MYTHIC ? ItemRarity.MYTHIC : ItemRarity.LEGENDARY];
+  let fallback: Record<string, number> | undefined;
+  for (const r of RARITY_ORDER) {
+    const bracket = def.values[r];
+    if (!bracket) continue;
+    if (!fallback) fallback = bracket;
+    if (r <= rarity) fallback = bracket;
+  }
+  return fallback ?? {};
+}
+
+/** Rarities `def` actually defines a bracket for, ascending — e.g. `[LEGENDARY, MYTHIC]` for a
+ *  class skill, all 5 for a shield skill. Used by the /itemSkills catalog endpoint (app.config.ts)
+ *  so it shows exactly the tiers that mean something for each skill, instead of calling
+ *  describe() for every rarity and having skillValues' fallback silently repeat the same text. */
+export function definedRarityTiers(def: ItemSkillDefinition): ItemRarity[] {
+  return RARITY_ORDER.filter((r) => !!def.values[r]);
 }
 
 export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
@@ -106,8 +135,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // ItemSkillBehaviors.ts — this is one of the rare skills that writes -= instead of =).
     triggerTypes: [TriggerType.ON_DODGE, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.LEGENDARY]: { healRatio: 0.03, dodgeCost: 1 },
-      [ItemRarity.MYTHIC]: { healRatio: 0.05, dodgeCost: 1 },
+      [ItemRarity.LEGENDARY]: { healRatio: 0.02, dodgeCost: 3 },
+      [ItemRarity.MYTHIC]: { healRatio: 0.04, dodgeCost: 2 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHADOWSTEP], r);
@@ -408,6 +437,114 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       return `Fight start: spend up to ${v.maxGold} gold — gain ${v.strengthPerGold} strength and ${v.defensePerGold} defense per gold spent for this fight.`;
     },
   },
+
+  // --------------------------------------------------------------- SHIELD ----
+  // Any shield (76-80) rolls one of these regardless of ItemClass — shields carry
+  // `class: ""` in Mongo. Active from Common (see skillValues' fallback), replacing the old
+  // flat fight-start invulnerability (ItemBehaviors[ItemType.SHIELD], removed alongside this).
+
+  [ItemSkillType.AEGIS]: {
+    id: ItemSkillType.AEGIS,
+    class: 'shield',
+    name: 'Aegis',
+    slots: SHIELD_SLOTS,
+    triggerTypes: [TriggerType.FIGHT_START],
+    values: {
+      [ItemRarity.COMMON]: { invulnMs: 500 },
+      [ItemRarity.RARE]: { invulnMs: 700 },
+      [ItemRarity.EPIC]: { invulnMs: 900 },
+      [ItemRarity.LEGENDARY]: { invulnMs: 1200 },
+      [ItemRarity.MYTHIC]: { invulnMs: 1500 },
+    },
+    describe: (r) => {
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.AEGIS], r);
+      return `Fight start: ${(v.invulnMs / 1000).toFixed(1)}s invulnerability.`;
+    },
+  },
+
+  [ItemSkillType.RIPOSTE]: {
+    id: ItemSkillType.RIPOSTE,
+    class: 'shield',
+    name: 'Riposte',
+    slots: SHIELD_SLOTS,
+    triggerTypes: [TriggerType.ON_ATTACKED],
+    values: {
+      [ItemRarity.COMMON]: { ratio: 0.10 },
+      [ItemRarity.RARE]: { ratio: 0.15 },
+      [ItemRarity.EPIC]: { ratio: 0.20 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.25 },
+      [ItemRarity.MYTHIC]: { ratio: 0.30 },
+    },
+    describe: (r) => {
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.RIPOSTE], r);
+      return `On being attacked: counter for damage equal to ${pct(v.ratio)} of your defense.`;
+    },
+  },
+
+  // Shield Wall is the one shield skill that keeps a downside (the attack-speed tax) — its
+  // numbers are pushed considerably harder than the other four to make that trade worth taking.
+  [ItemSkillType.SHIELD_WALL]: {
+    id: ItemSkillType.SHIELD_WALL,
+    class: 'shield',
+    name: 'Shield Wall',
+    slots: SHIELD_SLOTS,
+    // ON_ATTACKED accumulates the defense stack (+=, persists for the fight); AURA applies the
+    // self-clearing attack-speed tax (=, every tick) — two different write styles on the same
+    // skillAffectedStats because they touch disjoint fields. FIGHT_END resets the defense stack.
+    triggerTypes: [TriggerType.ON_ATTACKED, TriggerType.AURA, TriggerType.FIGHT_END],
+    values: {
+      [ItemRarity.COMMON]: { defensePerHit: 3, maxDefense: 40, attackSpeedPenalty: 0.20 },
+      [ItemRarity.RARE]: { defensePerHit: 4, maxDefense: 55, attackSpeedPenalty: 0.20 },
+      [ItemRarity.EPIC]: { defensePerHit: 5, maxDefense: 75, attackSpeedPenalty: 0.25 },
+      [ItemRarity.LEGENDARY]: { defensePerHit: 6, maxDefense: 100, attackSpeedPenalty: 0.25 },
+      [ItemRarity.MYTHIC]: { defensePerHit: 8, maxDefense: 130, attackSpeedPenalty: 0.30 },
+    },
+    describe: (r) => {
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_WALL], r);
+      return `Each hit taken grants +${v.defensePerHit} defense for the rest of the fight (max +${v.maxDefense}), but you always suffer -${pct(v.attackSpeedPenalty)} attack speed.`;
+    },
+  },
+
+  [ItemSkillType.SHIELD_BASH]: {
+    id: ItemSkillType.SHIELD_BASH,
+    class: 'shield',
+    name: 'Shield Bash',
+    slots: SHIELD_SLOTS,
+    // FIGHT_START resets the proc cooldown; ON_ATTACKED procs the slow (on cooldown).
+    triggerTypes: [TriggerType.FIGHT_START, TriggerType.ON_ATTACKED],
+    values: {
+      [ItemRarity.COMMON]: { slowRatio: 0.20, slowMs: 3000, cooldownMs: 4000 },
+      [ItemRarity.RARE]: { slowRatio: 0.25, slowMs: 3000, cooldownMs: 4000 },
+      [ItemRarity.EPIC]: { slowRatio: 0.30, slowMs: 3000, cooldownMs: 4000 },
+      [ItemRarity.LEGENDARY]: { slowRatio: 0.35, slowMs: 3000, cooldownMs: 4000 },
+      [ItemRarity.MYTHIC]: { slowRatio: 0.40, slowMs: 3000, cooldownMs: 4000 },
+    },
+    describe: (r) => {
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_BASH], r);
+      return `On being attacked (max once every ${v.cooldownMs / 1000}s): slow the enemy by ${pct(v.slowRatio)} attack speed for ${v.slowMs / 1000}s.`;
+    },
+  },
+
+  [ItemSkillType.BRACE]: {
+    id: ItemSkillType.BRACE,
+    class: 'shield',
+    name: 'Brace',
+    slots: SHIELD_SLOTS,
+    // FIGHT_START resets the hit counter; ON_ATTACKED blocks every Nth hit.
+    triggerTypes: [TriggerType.FIGHT_START, TriggerType.ON_ATTACKED],
+    values: {
+      [ItemRarity.COMMON]: { every: 4 },
+      [ItemRarity.RARE]: { every: 4 },
+      [ItemRarity.EPIC]: { every: 3 },
+      [ItemRarity.LEGENDARY]: { every: 3 },
+      [ItemRarity.MYTHIC]: { every: 2 },
+    },
+    describe: (r) => {
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.BRACE], r);
+      const ordinal = v.every === 2 ? '2nd' : v.every === 3 ? '3rd' : `${v.every}th`;
+      return `Every ${ordinal} hit taken is fully blocked.`;
+    },
+  },
 };
 
 export const SKILLS_BY_CLASS: Record<ItemClass, ItemSkillDefinition[]> = {
@@ -415,3 +552,7 @@ export const SKILLS_BY_CLASS: Record<ItemClass, ItemSkillDefinition[]> = {
   [ItemClass.WARRIOR]: Object.values(ITEM_SKILLS).filter((d) => d.class === ItemClass.WARRIOR),
   [ItemClass.MERCHANT]: Object.values(ITEM_SKILLS).filter((d) => d.class === ItemClass.MERCHANT),
 };
+
+/** Shield-only skill pool — rolled onto any shield (ItemType.SHIELD) regardless of `class`,
+ *  see itemSkillRoller.ts's type-based branch. */
+export const SHIELD_SKILLS: ItemSkillDefinition[] = Object.values(ITEM_SKILLS).filter((d) => d.class === 'shield');

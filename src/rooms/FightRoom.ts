@@ -27,6 +27,7 @@ import { ItemType } from '../items/types/ItemTypes';
 import { CombatLogMessage, FightSideStats, FightStatsMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
+import { creditDotDamage } from '../common/dotSources';
 
 const ALLOWED_FIGHT_SPEEDS = [0.5, 1, 2];
 
@@ -322,6 +323,8 @@ export class FightRoom extends Room {
             damageReducedByDefense: Math.round(self.fightStats.damageReducedByDefense),
             attacksDodged: self.fightStats.attacksDodged,
             damageBlockedByInvincible: Math.round(self.fightStats.damageBlockedByInvincible),
+            empoweredAttacks: self.fightStats.empoweredAttacks,
+            empoweredDamage: Math.round(self.fightStats.empoweredDamage),
         });
         return {
             player: sideFor(this.state.player, this.state.enemy),
@@ -381,6 +384,8 @@ export class FightRoom extends Room {
         this.state.skillsTimers.forEach((timer) => timer.clear());
         this.state.player.regenTimer?.clear();
         this.state.enemy.regenTimer?.clear();
+        this.state.player.empoweredAttackSource = null;
+        this.state.enemy.empoweredAttackSource = null;
         this.logCombat('broadcast', { text: 'The battle has ended!', kind: 'fight_end' });
         this.handleFightEnd();
     }
@@ -458,7 +463,7 @@ export class FightRoom extends Room {
     startRegenTimer(player: Player, opponent?: Player) {
         if (player.hpRegen) {
             player.regenTimer = this.clock.setInterval(() => {
-                const healed = player.heal(player.hpRegen, opponent);
+                const healed = player.heal(player.hpRegen);
                 if (healed === 0) return;
                 const isMinusRegen = healed < 0;
                 this.logCombat(this.state.playerClient, { text: `${player.name} regenerates ${fmt(healed)} hp!`, kind: 'regen', attackerId: player.playerId, healing: healed });
@@ -474,9 +479,6 @@ export class FightRoom extends Room {
 
     checkPoison(attacker: Player, defender: Player) {
         if (defender.poisonStack <= 0) return;
-        const poisonTalents = attacker.talents.filter(t =>
-            t.talentId === TalentType.POISON_2
-        );
 
         if (!defender.poisonTimer) {
             defender.poisonTimer = this.clock.setInterval(() => {
@@ -490,7 +492,9 @@ export class FightRoom extends Room {
                 });
 
                 defender.takeDamage(poisonDamage, this.state.playerClient, 'poison');
-                poisonTalents.forEach(t => track(t, 0, poisonDamage));
+                // Credited to whichever talent(s) actually applied the live stacks (Poison Coating,
+                // Hidden Vials, Corroding Collection, ...), split proportionally — see dotSources.ts.
+                creditDotDamage(defender.poisonSources, defender.poisonStack, poisonDamage);
                 this.logCombat(this.state.playerClient, { text: `${defender.name} takes ${fmt(poisonDamage)} poison damage!`, kind: 'poison_tick', defenderId: defender.playerId, damage: poisonDamage, poisonStacks: defender.poisonStack });
             }, 1000);
         }
@@ -498,7 +502,6 @@ export class FightRoom extends Room {
 
     checkBurn(attacker: Player, defender: Player) {
         if (defender.burnStack <= 0) return;
-        const burnTalents = attacker.talents.filter(t => t.talentId === TalentType.BURNING_BLOOD);
         if (!defender.burnTimer) {
             defender.burnTimer = this.clock.setInterval(() => {
                 const burnDamage = defender.burnStack * BURN_DAMAGE_PER_STACK;
@@ -511,13 +514,16 @@ export class FightRoom extends Room {
                 });
 
                 defender.takeDamage(burnDamage, this.state.playerClient, 'burn');
-                burnTalents.forEach(t => track(t, 0, burnDamage));
+                // See checkPoison — same proportional per-source credit.
+                creditDotDamage(defender.burnSources, defender.burnStack, burnDamage);
                 this.logCombat(this.state.playerClient, { text: `${defender.name} takes ${fmt(burnDamage)} burn damage!`, kind: 'burn_tick', defenderId: defender.playerId, damage: burnDamage, burnStacks: defender.burnStack });
             }, 1000);
         }
     }
 
-    tryWeaponAttack(attacker: Player, defender: Player, weapon: Item, slot: string, isCounter = false) {
+    /** Returns the damage actually dealt to defender (0 on a dodge or a fully-mitigated hit), so
+     *  callers that trigger extra attacks (Martial Artist, Dual Wield) can credit it. */
+    tryWeaponAttack(attacker: Player, defender: Player, weapon: Item, slot: string, isCounter = false): number {
         const minDmg = weapon.baseMinDamage + attacker.accuracy;
         const strengthMultiplier = weapon.strengthScaling;
         const maxDmg = weapon.baseMaxDamage + attacker.strength * strengthMultiplier;
@@ -525,8 +531,9 @@ export class FightRoom extends Room {
 
         // Unstoppable Force (WARRIOR_3): consumes the empowered flag for this attack — skips the
         // dodge roll entirely and doubles the final damage below.
-        const empowered = attacker.empoweredNextAttack;
-        if (empowered) attacker.empoweredNextAttack = false;
+        const empowerSource = attacker.empoweredAttackSource;
+        const empowered = !!empowerSource;
+        if (empowered) attacker.empoweredAttackSource = null;
 
         if (!empowered && defender.dodgeRate > 0) {
             const dodgeChance = defender.getDodgeChance(attacker.accuracy);
@@ -539,12 +546,16 @@ export class FightRoom extends Room {
                     defender: defender,
                     isCounter: isCounter,
                 });
-                return;
+                return 0;
             }
         }
 
         let damage = defender.getDamageAfterDefense(attackRoll);
-        if (empowered) damage *= 2;
+        let empoweredBonus = 0;
+        if (empowered) {
+            empoweredBonus = damage;
+            damage *= 2;
+        }
 
         this.dispatcher.dispatch(new OnAttackedTriggerCommand(), {
             attacker: attacker,
@@ -566,9 +577,26 @@ export class FightRoom extends Room {
 
         defender.takeDamage(damage, this.state.playerClient);
 
+        // Dual Wield: the off-hand ghost copy has no talent context of its own to credit through,
+        // so the damage is attributed here by weapon tag.
+        if (weapon.tags?.includes('dual_wield_copy')) {
+            const dualWieldTalent = attacker.talents.find(t => t.talentId === TalentType.DUAL_WIELD);
+            if (dualWieldTalent) track(dualWieldTalent, 1, damage);
+        }
+
         this.state.playerClient.send('trigger_item', { playerId: attacker.playerId, itemId: weapon.itemId, slot });
         this.logCombat(this.state.playerClient, { text: `${attacker.name}'s ${weapon.name} hits ${defender.name} for ${fmt(damage)} damage!`, kind: 'attack', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId, slot, damage, rolledDamage: attackRoll, mitigatedDamage: attackRoll - damage, defenderHpAfter: defender.hp });
         this.state.playerClient.send('attack', attacker.playerId);
+
+        if (empowered) {
+            track(empowerSource, 1, empoweredBonus);
+            attacker.fightStats.empoweredAttacks++;
+            attacker.fightStats.empoweredDamage += empoweredBonus;
+            this.logCombat(this.state.playerClient, { text: `${attacker.name} is unstoppable — ${fmt(empoweredBonus)} bonus damage!`, kind: 'talent', talentId: empowerSource.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: empoweredBonus });
+            this.state.playerClient.send('trigger_talent', { playerId: attacker.playerId, talentId: empowerSource.talentId });
+        }
+
+        return damage;
     }
 
     //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
@@ -586,6 +614,12 @@ export class FightRoom extends Room {
         this.state.enemy.talents.forEach(t => t.resetCombatStats());
         this.state.player.fightStats.reset();
         this.state.enemy.fightStats.reset();
+        this.state.player.poisonSources.clear();
+        this.state.enemy.poisonSources.clear();
+        this.state.player.burnSources.clear();
+        this.state.enemy.burnSources.clear();
+        this.state.player.empoweredAttackSource = null;
+        this.state.enemy.empoweredAttackSource = null;
 
         //start attack timers
         this.startWeaponAttackTimers(this.state.player, this.state.enemy);

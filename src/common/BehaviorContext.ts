@@ -29,8 +29,9 @@ export interface BehaviorContext {
     weapon?: Item;
     attackerSnapshot?: StatsSnapshot;
     isReflectedDamage?: boolean;
-    /** Executes a full weapon attack (FightRoom.tryWeaponAttack) — set on ON_DODGE for counter-attacks. */
-    performWeaponAttack?: (attacker: Player, defender: Player, weapon: Item, slot: string) => void;
+    /** Executes a full weapon attack (FightRoom.tryWeaponAttack) — set on ON_DODGE for counter-attacks.
+     *  Returns the damage actually dealt (0 on a dodge), so callers can credit it. */
+    performWeaponAttack?: (attacker: Player, defender: Player, weapon: Item, slot: string) => number;
     /** True when this trigger chain originates from a counter-attack — prevents counter loops. */
     isCounterAttack?: boolean;
     /** Outcome of the fight — set on FIGHT_END so talents can condition rewards on winning. */

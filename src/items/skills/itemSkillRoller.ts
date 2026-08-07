@@ -3,8 +3,8 @@
 
 import { Item } from '../schema/ItemSchema';
 import { Player } from '../../players/schema/PlayerSchema';
-import { ItemClass, ItemRarity } from '../types/ItemTypes';
-import { ITEM_SKILLS, ItemSkillDefinition, SKILLS_BY_CLASS } from '../behavior/itemSkillBalance';
+import { ItemClass, ItemRarity, ItemType } from '../types/ItemTypes';
+import { ITEM_SKILLS, ItemSkillDefinition, SHIELD_SKILLS, SKILLS_BY_CLASS } from '../behavior/itemSkillBalance';
 
 /** Deterministic hash-to-[0,1) — NOT Math.random(). Legendary shop-preview slots
  *  (DraftRoom.updateShop / revalidateUpgradePreviews) rebuild on every 1s aura tick and on
@@ -25,13 +25,15 @@ function seededRandom(...parts: number[]): number {
   return (h >>> 0) / 4294967296;
 }
 
-/** Rolls a skill for `item` from its class's pool, filtered to slots the item can actually be
- *  equipped in (an ON_ATTACK skill on a helmet would never fire — see itemSkillBalance.ts).
- *  Duplicates are allowed by design — the same skill can be rolled regardless of what the player
- *  already owns, with no cap on how many copies they end up with. Returns null for non-class items
- *  or an item whose equipOptions don't overlap any skill's slot list. */
+/** Rolls a skill for `item` from its pool — the shield-only pool for any ItemType.SHIELD
+ *  (regardless of `class`, which shields leave empty), otherwise its `class`'s pool — filtered
+ *  to slots the item can actually be equipped in (an ON_ATTACK skill on a helmet would never
+ *  fire — see itemSkillBalance.ts). Duplicates are allowed by design — the same skill can be
+ *  rolled regardless of what the player already owns, with no cap on how many copies they end up
+ *  with. Returns null for non-class, non-shield items or an item whose equipOptions don't
+ *  overlap any skill's slot list. */
 export function rollItemSkill(item: Item, player: Player): ItemSkillDefinition | null {
-  const pool = SKILLS_BY_CLASS[item.class as ItemClass];
+  const pool = item.type === ItemType.SHIELD ? SHIELD_SKILLS : SKILLS_BY_CLASS[item.class as ItemClass];
   if (!pool || pool.length === 0) return null;
 
   const equipOptions = new Set(Array.from(item.equipOptions as any as Iterable<string>));
@@ -66,6 +68,18 @@ export function grantItemSkill(item: Item, def: ItemSkillDefinition): void {
   def.triggerTypes.forEach((t) => {
     if (!item.triggerTypes.includes(t)) item.triggerTypes.push(t);
   });
+}
+
+/** Grants a shield its skill if it doesn't have one yet — the shield equivalent of
+ *  ShopUpgradeUtils.applyRarityUpgrade's class-item skill roll, except shields roll from
+ *  Common (no rarity gate) since they're replacing a mechanic that already worked at every
+ *  rarity. No-op for non-shields or a shield that already rolled (the `!item.skillId` latch
+ *  makes this idempotent and safe to call every aura tick — see call sites in
+ *  DraftAuraTriggerCommand, Player.ts, DraftRoom.rebuildShopSlot and Shady Shields). */
+export function ensureShieldSkill(item: Item, player: Player): void {
+  if (item.type !== ItemType.SHIELD || item.skillId) return;
+  const def = rollItemSkill(item, player);
+  if (def) grantItemSkill(item, def);
 }
 
 /** Re-describes an already-granted skill at the item's current rarity — called on the

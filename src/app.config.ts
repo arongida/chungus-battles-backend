@@ -12,12 +12,11 @@ import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, getWallOfFame
 import {GAME_VERSION} from './common/types';
 import { getAllItems } from "./items/db/Item";
 import { getItemRollPreview } from "./items/stats/itemRollPreview";
-import { ItemRarity, ItemType } from "./items/types/ItemTypes";
-import { shieldDescription } from "./commands/ShopUpgradeUtils";
+import { ItemRarity } from "./items/types/ItemTypes";
 import { getAllTalents } from "./talents/db/Talent";
 import { getReplaysByOriginalPlayer, getReplayById, getGameStats } from './replay/db/Replay';
 import { SEASONS } from './common/seasons';
-import { ITEM_SKILLS } from './items/behavior/itemSkillBalance';
+import { definedRarityTiers, ITEM_SKILLS } from './items/behavior/itemSkillBalance';
 
 export const server = defineServer({
 
@@ -83,8 +82,9 @@ export const server = defineServer({
             const items = await getAllItems();
             res.status(200).send(items.map(item => ({
                 ...item.toJSON(),
-                // Shield descriptions are generated at roll time; the authored one is stale.
-                description: item.type === ItemType.SHIELD ? shieldDescription(item.tier) : item.description,
+                // Shields (like class items) roll their skill per-player-owned instance, not on
+                // the raw DB template this endpoint reads — skillName/skillDescription are blank
+                // here by design, same as an un-upgraded class item's catalog entry.
                 rollPreview: getItemRollPreview(item),
             })));
         });
@@ -98,10 +98,13 @@ export const server = defineServer({
             res.json({ currentSeason: GAME_VERSION, seasons: SEASONS });
         });
 
-        // Class-item skill catalog (see items/behavior/itemSkillBalance.ts). describe() is a
-        // closure over the definition, not JSON-serializable, so each entry is mapped to a plain
-        // object rather than sending ITEM_SKILLS directly — same reasoning as /items' rollPreview
-        // and shield-description overlays above.
+        // Item skill catalog (see items/behavior/itemSkillBalance.ts). describe() is a closure
+        // over the definition, not JSON-serializable, so each entry is mapped to a plain object
+        // rather than sending ITEM_SKILLS directly — same reasoning as /items' rollPreview above.
+        // `descriptions` only includes the rarity tiers `d.values` actually defines — LEGENDARY
+        // and MYTHIC for class skills, all 5 for shield skills (see definedRarityTiers) — so a
+        // class skill doesn't show 3 redundant Common/Rare/Epic lines that would all resolve to
+        // its Legendary text via skillValues' fallback.
         app.get('/itemSkills', (_req, res) => {
             res.json(Object.values(ITEM_SKILLS).map(d => ({
                 id: d.id,
@@ -109,8 +112,11 @@ export const server = defineServer({
                 class: d.class,
                 slots: d.slots,
                 triggerTypes: d.triggerTypes,
-                legendaryDescription: d.describe(ItemRarity.LEGENDARY),
-                mythicDescription: d.describe(ItemRarity.MYTHIC),
+                descriptions: definedRarityTiers(d).map(r => ({
+                    rarity: r,
+                    label: ItemRarity[r].charAt(0) + ItemRarity[r].slice(1).toLowerCase(),
+                    text: d.describe(r),
+                })),
             })));
         });
 

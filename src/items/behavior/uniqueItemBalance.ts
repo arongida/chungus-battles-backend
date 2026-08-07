@@ -139,11 +139,6 @@ export function floweringStaffInvulnMs(rarity: number): number {
     return 150 + 60 * rarity;
 }
 
-/** All shields: invulnerability window granted at fight start, scaled by item tier. */
-export function shieldInvulnMs(tier: number): number {
-    return 300 + 350 * tier;
-}
-
 /**
  * Flowering Staff (8): minimum time between invulnerability procs. Must stay
  * above the longest possible window so shields can never chain into

@@ -12,7 +12,6 @@ import {
     STAT_RANGES,
     WEAPON_BASE_RANGES,
 } from './itemStatPool';
-import { shieldDescription } from '../../commands/ShopUpgradeUtils';
 import { TWO_HANDED_WEAPON_IDS } from '../behavior/uniqueItemBalance';
 
 // ── Float roller (2-decimal precision) ───────────────────────────────────────
@@ -81,10 +80,6 @@ export function rollItemStats(item: Item): void {
         (newStats as any)[stat] = rollStat(stat, tier);
     }
     item.affectedStats = newStats;
-
-    if (item.type === ItemType.SHIELD) {
-        item.description = shieldDescription(item.tier);
-    }
 
     // Weapon base damage — archetype-specific per-tier ranges.
     // Two-handers keep their authored damage profile.
