@@ -5,6 +5,7 @@ import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {ArraySchema} from "@colyseus/schema";
 import {rollItemStats} from "../stats/itemStatRoller";
 import {reconcileItemSkill} from "../skills/itemSkillRoller";
+import {ItemType} from "../types/ItemTypes";
 
 export const ItemSchema = new Schema({
     itemId: Number,
@@ -121,6 +122,24 @@ function getItemSchemaObject(itemFromDb: any): Item {
 export async function getRandomItemsByTier(tier: number, count: number): Promise<Item[]> {
     const itemArrayFromDb = await itemModel.aggregate([
         {$match: {tier, tags: {$ne: 'quest'}}},
+        {$sample: {size: count}},
+    ]);
+
+    return itemArrayFromDb.map(item => {
+        const schemaItem = getItemSchemaObject(item);
+        rollItemStats(schemaItem);
+        return schemaItem;
+    });
+}
+
+/**
+ * Random sample of non-quest, non-ring WEAPONS at an exact tier (Martial Artist's per-round free
+ * weapon grant). Rings (Band of Vigor, Ring of Immortality) are type WEAPON but excluded here: a
+ * free Ring of Immortality every round would transform into a free Legendary every round.
+ */
+export async function getRandomWeaponsByTier(tier: number, count: number): Promise<Item[]> {
+    const itemArrayFromDb = await itemModel.aggregate([
+        {$match: {tier, type: ItemType.WEAPON, tags: {$nin: ['quest', 'ring']}}},
         {$sample: {size: count}},
     ]);
 
