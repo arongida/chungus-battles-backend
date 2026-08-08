@@ -21,6 +21,7 @@ export const SEASONS: SeasonInfo[] = [
     number: 22,
     name: 'Slower Better',
     changes: [
+      'Martial Artist now finds a free random weapon of your tier each round (rolled like a shop item, Lucky Find included, sellable as normal)',
       'Unstoppable Force now flashes and logs on the empowered hit itself, and reports its bonus damage',
       'Guardian Angel now flashes on the saved fighter instead of the attacker',
       'Talents now report their own contribution: damage-over-time damage is credited to whoever applied the stacks, and extra attacks, saves and gold saved are tracked',

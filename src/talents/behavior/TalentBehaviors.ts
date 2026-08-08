@@ -8,7 +8,7 @@ import { rollTheDice } from "../../common/utils";
 import { TalentBehaviorContext } from "./TalentBehaviorContext";
 import { ArraySchema } from "@colyseus/schema";
 import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
-import { cloneItem, getItemById } from "../../items/db/Item";
+import { cloneItem, getItemById, getRandomWeaponsByTier } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { WEAPON_BASE_RANGES, clampTier } from "../../items/stats/itemStatPool";
 import { applyRarityUpgrade, applyLuckyShopUpgrades, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER } from "../../commands/ShopUpgradeUtils";
@@ -47,6 +47,11 @@ export function track(
 // A fresh Player join rebuilds Talent instances, so no per-fight reset is needed.
 const pickpocketLastProcMs = new WeakMap<Talent, number>();
 const PICKPOCKET_COOLDOWN_MS = 1000;
+
+// Martial Artist: one free weapon per DraftRoom join (= per round). Keyed by Talent instance —
+// Player.ts:137 rebuilds Talent objects on every DB load, so the latch self-clears each round
+// while a mid-round reconnect (allowReconnection resumes the same instance) can't double-grant.
+const martialWeaponGranted = new WeakMap<Talent, boolean>();
 
 export const TalentBehaviors = {
     [TalentType.RAGE]: (context: TalentBehaviorContext) => {
@@ -627,13 +632,23 @@ export const TalentBehaviors = {
         }
     },
 
-    // Martial Artist — two triggers on the same talent:
+    // Martial Artist — three triggers on the same talent:
     // AURA: conjures a ghost fist into each hand slot (stripping any real item, like before the
     // rework) and scales them like a rolled rogue-archetype weapon of tier === player.level
     // (levels 1-5 map onto tiers/rarities 1-5 exactly) — using the midpoint of that tier's
     // damage/attack-speed ranges so the fists grow deterministically each level-up instead of
     // re-rolling every aura tick. Also neutralizes talent.affectedStats every tick in case an
     // older save still carries stats learned under the pre-rework version.
+    // SHOP_START / AURA (shared block): grants one free random weapon of the player's tier per
+    // round — the economy side of a talent whose whole payoff scales with how many weapons are
+    // stashed in the inventory (see ON_ATTACK below), which otherwise has to be bought at full
+    // shop price for stats that never apply. SHOP_START (500ms after DraftRoom.onJoin, once per
+    // round) is the normal grant path; AURA also checks the latch so picking the talent mid-round
+    // grants immediately instead of waiting for next round's SHOP_START. Guarded on `shop` being
+    // present so this stays draft-only — FightAuraTriggerCommand's AURA context has no `shop`.
+    // Latched via martialWeaponGranted (keyed by Talent instance, which is rebuilt fresh from the
+    // DB on every DraftRoom join — see Player.ts's talent reconstruction) so exactly one grant
+    // happens per round regardless of which trigger gets there first.
     // ON_ATTACK: fires whenever a fist lands a hit. Unleashes a full extra attack — via
     // performWeaponAttack, so each re-enters the normal trigger dispatch and the weapon's own
     // on-hit effects (poison, invulnerability, burn, lifesteal, ...) apply exactly as if it had
@@ -643,47 +658,87 @@ export const TalentBehaviors = {
     // tradeoff is that none of those weapons are actually equipped, so their affectedStats and
     // any equip-gated item skills never apply — only their base damage and on-hit effects do.
     [TalentType.MARTIAL_ARTIST]:
-        (context: TalentBehaviorContext) => {
-            const { attacker, client, talent, trigger, defender, weapon, performWeaponAttack } = context;
+        async (context: TalentBehaviorContext) => {
+            const { attacker, client, talent, trigger, defender, weapon, performWeaponAttack, shop } = context;
 
-            if (trigger === TriggerType.AURA) {
+            if (trigger === TriggerType.AURA || trigger === TriggerType.SHOP_START) {
                 if (!attacker) return;
-                ensureMartialFists(attacker, client, talent);
 
-                const tier = clampTier(attacker.level);
-                const range = WEAPON_BASE_RANGES[ItemClass.ROGUE][tier];
-                const baseMinDamage = Math.round((range.minDamage.min + range.minDamage.max) / 2);
-                const baseMaxDamage = baseMinDamage + Math.round((range.maxDamageSpread.min + range.maxDamageSpread.max) / 2);
-                const baseAttackSpeed = Math.round(((range.attackSpeed.min + range.attackSpeed.max) / 2) * 100) / 100;
+                if (trigger === TriggerType.AURA) {
+                    ensureMartialFists(attacker, client, talent);
 
-                for (const slot of [EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND]) {
-                    const fist = attacker.equippedItems.get(slot);
-                    if (!fist?.tags?.includes(MARTIAL_FIST_TAG)) continue;
-                    // Left fist (main hand) hits twice as fast; right fist (off hand) hits twice
-                    // as hard — same total output, different rhythm.
-                    const isRightFist = slot === EquipSlot.OFF_HAND;
-                    // Mutate in place — fight attack timers hold this Item by reference and
-                    // re-read its damage every punch, so the instance must never be swapped
-                    // mid-fight.
-                    fist.tier = tier;
-                    fist.rarity = tier;
-                    fist.baseMinDamage = isRightFist ? baseMinDamage * 2 : baseMinDamage;
-                    fist.baseMaxDamage = isRightFist ? baseMaxDamage * 2 : baseMaxDamage;
-                    fist.baseAttackSpeed = isRightFist ? baseAttackSpeed * 0.5 : baseAttackSpeed;
-                    fist.description = 'A martial artist\'s fist. Each hit unleashes an extra strike with every weapon in your inventory.';
-                    attacker.equippedItems.set(slot, fist);
+                    const tier = clampTier(attacker.level);
+                    const range = WEAPON_BASE_RANGES[ItemClass.ROGUE][tier];
+                    const baseMinDamage = Math.round((range.minDamage.min + range.minDamage.max) / 2);
+                    const baseMaxDamage = baseMinDamage + Math.round((range.maxDamageSpread.min + range.maxDamageSpread.max) / 2);
+                    const baseAttackSpeed = Math.round(((range.attackSpeed.min + range.attackSpeed.max) / 2) * 100) / 100;
+
+                    for (const slot of [EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND]) {
+                        const fist = attacker.equippedItems.get(slot);
+                        if (!fist?.tags?.includes(MARTIAL_FIST_TAG)) continue;
+                        // Left fist (main hand) hits twice as fast; right fist (off hand) hits twice
+                        // as hard — same total output, different rhythm.
+                        const isRightFist = slot === EquipSlot.OFF_HAND;
+                        // Mutate in place — fight attack timers hold this Item by reference and
+                        // re-read its damage every punch, so the instance must never be swapped
+                        // mid-fight.
+                        fist.tier = tier;
+                        fist.rarity = tier;
+                        fist.baseMinDamage = isRightFist ? baseMinDamage * 2 : baseMinDamage;
+                        fist.baseMaxDamage = isRightFist ? baseMaxDamage * 2 : baseMaxDamage;
+                        fist.baseAttackSpeed = isRightFist ? baseAttackSpeed * 0.5 : baseAttackSpeed;
+                        fist.description = 'A martial artist\'s fist. Each hit unleashes an extra strike with every weapon in your inventory.';
+                        attacker.equippedItems.set(slot, fist);
+                    }
+
+                    // Rebuilt from scratch every tick — clears any stats learned under the
+                    // pre-rework version of this talent.
+                    talent.affectedStats.strength = 0;
+                    talent.affectedStats.accuracy = 0;
+                    talent.affectedStats.maxHp = 0;
+                    talent.affectedStats.defense = 0;
+                    talent.affectedStats.income = 0;
+                    talent.affectedStats.hpRegen = 0;
+                    talent.affectedStats.dodgeRate = 0;
+                    talent.affectedStats.attackSpeed = 1;
                 }
 
-                // Rebuilt from scratch every tick — clears any stats learned under the
-                // pre-rework version of this talent.
-                talent.affectedStats.strength = 0;
-                talent.affectedStats.accuracy = 0;
-                talent.affectedStats.maxHp = 0;
-                talent.affectedStats.defense = 0;
-                talent.affectedStats.income = 0;
-                talent.affectedStats.hpRegen = 0;
-                talent.affectedStats.dodgeRate = 0;
-                talent.affectedStats.attackSpeed = 1;
+                if (shop && !martialWeaponGranted.get(talent)) {
+                    // Latched before the DB round-trip below, not after — otherwise the 1s aura
+                    // tick could re-enter and grant a second weapon while the first await is
+                    // still pending.
+                    martialWeaponGranted.set(talent, true);
+                    try {
+                        const weaponGrant = (await getRandomWeaponsByTier(clampTier(attacker.level), 1))[0];
+                        if (weaponGrant) {
+                            // Rolled like a shop item, Lucky Find included.
+                            const steps = applyLuckyShopUpgrades(weaponGrant, weaponGrant, attacker);
+                            weaponGrant.luckyFind = steps > 0;
+                            weaponGrant.luckyFindSteps = steps;
+                            // Straight into the inventory, deliberately NOT via getItem(): there's
+                            // no gold to refund, and getItem's tryAutoEquipIntoEmptySlot would drop
+                            // it into a hand slot that ensureMartialFists strips right back out on
+                            // the next tick. Same idiom as the Ring of Immortality transform
+                            // (ItemBehaviors.ts). sellPrice stays as rolled — normal 70%, sellable.
+                            weaponGrant.sold = true;
+                            weaponGrant.equipped = false;
+                            attacker.inventory.push(weaponGrant);
+                            track(talent, 1);
+                            client?.send('trigger_talent', {
+                                playerId: attacker.playerId,
+                                talentId: TalentType.MARTIAL_ARTIST,
+                            });
+                            client?.send('draft_log', `Training pays off — found a ${weaponGrant.name}!`);
+                            if (weaponGrant.rarity === ItemRarity.MYTHIC) {
+                                grantLuckyFindMythicBonus(attacker);
+                                client?.send('draft_log', `Mythic forged! Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`);
+                                client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+                            }
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
                 return;
             }
 
@@ -1307,7 +1362,7 @@ function createMartialFist(slot: EquipSlot): Item {
     const fist = new Item();
     fist.itemId = 0;
     fist.name = slot === EquipSlot.MAIN_HAND ? 'Left Fist' : 'Right Fist';
-    fist.description = 'A martial artist\'s fist. Each hit unleashes an extra strike with a random weapon from your inventory.';
+    fist.description = 'A martial artist\'s fist. Each hit unleashes an extra strike with every weapon in your inventory.';
     fist.type = ItemType.WEAPON;
     fist.baseAttackSpeed = 0.8;
     fist.strengthScaling = 1;
