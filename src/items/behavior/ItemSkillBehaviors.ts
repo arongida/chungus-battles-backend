@@ -21,25 +21,12 @@ import { CombatLogMessage, RewardGainMessage, fmt } from '../../common/MessageTy
 import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerCommand';
 import { applyExtraRaritySteps } from '../../commands/ShopUpgradeUtils';
 import type { Item } from '../schema/ItemSchema';
-
-// Per-fight attack counters, keyed by item instance (rebuilt fresh each fight from DB
-// snapshots — same WeakMap idiom as ItemBehaviors.ts's floweringStaffLastProcMs).
-const coatedEdgeCounters = new WeakMap<Item, number>();
-const openingActCounters = new WeakMap<Item, number>();
-const crushingBlowCounters = new WeakMap<Item, number>();
-const protectionMoneyLastProcMs = new WeakMap<Item, number>();
-// Shield Bash: last proc time (clock-elapsed ms), reset on FIGHT_START — same idiom as
-// protectionMoneyLastProcMs above.
-const shieldBashLastProcMs = new WeakMap<Item, number>();
-// Brace: hits-taken counter, reset on FIGHT_START — same idiom as coatedEdgeCounters above.
-const braceCounters = new WeakMap<Item, number>();
-// Bulk Discount: undiscounted price/sellPrice per SHOP item, captured the first tick a slot is
-// seen. Every later tick recomputes from this stable base rather than the shop item's current
-// (possibly already-discounted) price — aura fires every 1s, so subtracting from the live price
-// each tick would compound the discount down to 0 within a few seconds. A slot rebuilt into a
-// new Item object (rebuildShopSlot/revalidateUpgradePreviews) is a fresh WeakMap key, so it
-// re-captures a correct undiscounted base automatically.
-const bulkDiscountBasePrices = new WeakMap<Item, { price: number; sellPrice: number }>();
+// Per-item runtime counters — moved to their own module so itemSkillStatus.ts's live status-line
+// refresher can read the same state these behaviors write, see itemSkillState.ts's header comment.
+import {
+  coatedEdgeCounters, openingActCounters, crushingBlowCounters, protectionMoneyLastProcMs,
+  shieldBashLastProcMs, braceCounters, bulkDiscountBasePrices,
+} from './itemSkillState';
 
 export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) => void> = {
   // ---------------------------------------------------------------- ROGUE ----
@@ -402,15 +389,25 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
 
   [ItemSkillType.RIPOSTE]: (context) => {
     const { attacker, defender, item, client, commandDispatcher, trigger } = context;
-    if (trigger !== TriggerType.ON_ATTACKED || !attacker || !defender || !item) return;
-    const { ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    if (!item) return;
+    if (trigger === TriggerType.FIGHT_END) {
+      item.skillAffectedStats.defense = 0;
+      return;
+    }
+    if (trigger !== TriggerType.ON_ATTACKED || !attacker || !defender) return;
+    const { ratio, defenseCost } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
     const rawCounter = defender.defense * ratio;
     if (rawCounter <= 0) return;
     const counterDamage = attacker.getDamageAfterDefense(rawCounter);
     commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender: attacker, damage: counterDamage, attacker: defender });
     attacker.takeDamage(counterDamage, client);
+    // Accumulating -= write (unlike every AURA skill's self-clearing =) — the cost persists for
+    // the rest of the fight; FIGHT_END above is the only reset. Clamp against the live defense so
+    // this can't drive the stat negative once other sources also touch it (same idiom as Shadowstep).
+    const consumed = Math.min(defenseCost, Math.max(0, defender.defense));
+    if (consumed > 0) item.skillAffectedStats.defense -= consumed;
     client?.send('combat_log', {
-      text: `${defender.name}'s ${item.name} ripostes ${attacker.name} for ${fmt(counterDamage)} damage!`,
+      text: `${defender.name}'s ${item.name} ripostes ${attacker.name} for ${fmt(counterDamage)} damage${consumed > 0 ? ` — ${consumed} defense spent!` : '!'}`,
       kind: 'item', attackerId: defender.playerId, defenderId: attacker.playerId, itemId: item.itemId, damage: counterDamage,
     } as CombatLogMessage);
   },
@@ -459,25 +456,22 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   },
 
   [ItemSkillType.BRACE]: (context) => {
-    const { attacker, defender, item, client, clock, trigger } = context;
+    const { defender, item, trigger } = context;
     if (!item) return;
     if (trigger === TriggerType.FIGHT_START) {
       braceCounters.set(item, 0);
       return;
     }
-    if (trigger !== TriggerType.ON_ATTACKED || !attacker || !defender || !clock) return;
+    if (trigger !== TriggerType.ON_ATTACKED || !defender) return;
     const { every } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
     const count = (braceCounters.get(item) ?? 0) + 1;
     braceCounters.set(item, count);
     if (count % every !== 0) return;
-    // ON_ATTACKED runs synchronously right before FightRoom.tryWeaponAttack's takeDamage call —
-    // a short invincibility window here swallows exactly this one hit without blocking anything
-    // that lands afterward.
-    defender.setInvincible(clock, 100, client);
-    client?.send('combat_log', {
-      text: `${defender.name}'s ${item.name} braces and blocks ${attacker.name}'s hit entirely!`,
-      kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, itemId: item.itemId,
-    } as CombatLogMessage);
+    // Sets a one-shot flag instead of a timed invulnerability window — consumed by the exact
+    // weapon swing that triggered ON_ATTACKED (FightRoom.tryWeaponAttack), so it can't accumulate
+    // or bleed onto DoT ticks / other attacks the way a duration-based window did at high attack
+    // speed. Combat log is emitted there, once the block is actually applied.
+    defender.pendingBlockSource = item;
   },
 };
 

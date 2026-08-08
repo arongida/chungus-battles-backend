@@ -42,6 +42,12 @@ export function track(
     }
 }
 
+// Pickpocket (ROGUE_1): last proc time (clock-elapsed ms) per Talent instance, keyed with a
+// WeakMap — same idiom as ItemSkillBehaviors.ts's shieldBashLastProcMs/protectionMoneyLastProcMs.
+// A fresh Player join rebuilds Talent instances, so no per-fight reset is needed.
+const pickpocketLastProcMs = new WeakMap<Talent, number>();
+const PICKPOCKET_COOLDOWN_MS = 1000;
+
 export const TalentBehaviors = {
     [TalentType.RAGE]: (context: TalentBehaviorContext) => {
         const { talent, defender, client } = context;
@@ -980,7 +986,10 @@ export const TalentBehaviors = {
 
     [TalentType.ROGUE_1]:
         (context: TalentBehaviorContext) => {
-            const { defender, client } = context;
+            const { defender, client, talent, clock } = context;
+            const last = pickpocketLastProcMs.get(talent);
+            if (clock && last !== undefined && clock.elapsedTime - last < PICKPOCKET_COOLDOWN_MS) return;
+            if (clock) pickpocketLastProcMs.set(talent, clock.elapsedTime);
             defender.gold += 1;
             track(context.talent, 1, 0, 0, 1, 0, { client, playerId: defender.playerId });
             client.send('combat_log', { text: `${defender.name} found 1 gold during dodge roll!`, kind: 'reward', talentId: context.talent.talentId, attackerId: defender.playerId, goldDelta: 1 } as CombatLogMessage);

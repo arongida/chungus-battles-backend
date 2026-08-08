@@ -6,10 +6,32 @@
 import { EquipSlot, ItemClass, ItemRarity } from '../types/ItemTypes';
 import { TriggerType } from '../../common/types';
 import { ItemSkillType } from '../types/ItemSkillTypes';
+import { fmt } from '../../common/MessageTypes';
+import {
+  coatedEdgeCounters, openingActCounters, crushingBlowCounters, protectionMoneyLastProcMs,
+  shieldBashLastProcMs, braceCounters,
+} from './itemSkillState';
+// Type-only — see itemSkillState.ts's header comment on why this doesn't create a runtime cycle
+// with ItemSchema.ts (which imports ItemSkillBehaviors.ts, which imports this file).
+import type { Item } from '../schema/ItemSchema';
+import type { Player } from '../../players/schema/PlayerSchema';
+import type { ClockTimer } from '@colyseus/timer';
 
 /** Class skills only ever roll onto a `class`-bearing item (ItemClass); shield skills roll
  *  onto any shield regardless of `class` (see itemSkillRoller.ts's type-based pool branch). */
 export type ItemSkillGroup = ItemClass | 'shield';
+
+/** Context passed to `status()` every UpdateStatsCommand tick, for an EQUIPPED item only (see
+ *  itemSkillStatus.ts's refreshItemSkillStatus, the only caller). */
+export interface ItemSkillStatusContext {
+  item: Item;
+  player: Player;
+  /** Only set in FightRoom. */
+  enemy?: Player;
+  /** Only set in FightRoom. */
+  clock?: ClockTimer;
+  inFight: boolean;
+}
 
 export interface ItemSkillDefinition {
   id: ItemSkillType;
@@ -27,6 +49,10 @@ export interface ItemSkillDefinition {
    *  bracket, since shield skills are active from Common — see skillValues' fallback below. */
   values: Partial<Record<ItemRarity, Record<string, number>>>;
   describe(rarity: ItemRarity): string;
+  /** Live one-line state for an EQUIPPED item (e.g. "+42 / +100 defense"), or '' to render no
+   *  status line at all — see itemSkillStatus.ts. Omitted entirely for skills with no
+   *  meaningful moment-to-moment state (Aegis, Light Fingers, Market Manipulation, Cash Back). */
+  status?(ctx: ItemSkillStatusContext): string;
 }
 
 const ANY_SLOT: EquipSlot[] = [EquipSlot.ARMOR, EquipSlot.HELMET, EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND];
@@ -79,6 +105,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { ratio: 0.08 },
     },
     describe: (r) => `On hit: deal bonus damage equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.EXPLOIT_WEAKNESS], r).ratio)} of the enemy's defense.`,
+    status: (ctx) => {
+      if (!ctx.inFight || !ctx.enemy) return '';
+      const { ratio } = skillValues(ITEM_SKILLS[ItemSkillType.EXPLOIT_WEAKNESS], ctx.item.rarity);
+      return `+${fmt(ctx.enemy.defense * ratio)} bonus damage per hit`;
+    },
   },
 
   [ItemSkillType.FLUID_MOTION]: {
@@ -92,6 +123,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { ratio: 0.3 },
     },
     describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.FLUID_MOTION], r).ratio)} of your dodge rate.`,
+    status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.accuracy)} accuracy`,
   },
 
   [ItemSkillType.PLAGUE_BEARER]: {
@@ -108,6 +140,13 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.PLAGUE_BEARER], r);
       return `While the enemy is poisoned, gain ${pct(v.ratioPerStack)} attack speed per poison stack.`;
     },
+    status: (ctx) => {
+      if (!ctx.inFight) return '';
+      const stacks = ctx.enemy?.poisonStack ?? 0;
+      if (stacks <= 0) return 'enemy not poisoned';
+      const { ratioPerStack } = skillValues(ITEM_SKILLS[ItemSkillType.PLAGUE_BEARER], ctx.item.rarity);
+      return `+${pct(stacks * ratioPerStack)} attack speed (${stacks} poison stacks)`;
+    },
   },
 
   [ItemSkillType.COATED_EDGE]: {
@@ -123,6 +162,12 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.COATED_EDGE], r);
       return `Every ${v.every === 2 ? '2nd' : `${v.every}rd`} attack applies ${v.stacks} poison stacks.`;
+    },
+    status: (ctx) => {
+      if (!ctx.inFight) return '';
+      const { every } = skillValues(ITEM_SKILLS[ItemSkillType.COATED_EDGE], ctx.item.rarity);
+      const count = coatedEdgeCounters.get(ctx.item) ?? 0;
+      return `${count % every}/${every} attacks charged`;
     },
   },
 
@@ -142,6 +187,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHADOWSTEP], r);
       return `Each dodge heals ${pct(v.healRatio)} of your max HP, but costs you ${v.dodgeCost} dodge rate for the rest of the fight.`;
     },
+    status: (ctx) => (ctx.inFight ? `${fmt(-ctx.item.skillAffectedStats.dodgeRate)} dodge rate spent this fight` : ''),
   },
 
   [ItemSkillType.OPENING_ACT]: {
@@ -155,6 +201,12 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { count: 5 },
     },
     describe: (r) => `Your first ${skillValues(ITEM_SKILLS[ItemSkillType.OPENING_ACT], r).count} attacks each fight deal double damage.`,
+    status: (ctx) => {
+      if (!ctx.inFight) return '';
+      const { count } = skillValues(ITEM_SKILLS[ItemSkillType.OPENING_ACT], ctx.item.rarity);
+      const remaining = Math.max(0, count - (openingActCounters.get(ctx.item) ?? 0));
+      return remaining > 0 ? `${remaining} double-damage attack${remaining > 1 ? 's' : ''} left` : 'used up';
+    },
   },
 
   [ItemSkillType.SMOKE_BOMB]: {
@@ -170,6 +222,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SMOKE_BOMB], r);
       return `Fight start: enemy loses ${pct(v.ratio)} accuracy for ${v.durationMs / 1000}s.`;
+    },
+    status: (ctx) => {
+      if (!ctx.inFight) return '';
+      const debuff = -ctx.item.skillAffectedEnemyStats.accuracy;
+      return debuff > 0 ? `enemy -${fmt(debuff)} accuracy (active)` : 'expired';
     },
   },
 
@@ -202,6 +259,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { ratio: 0.3 },
     },
     describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], r).ratio)} of your defense.`,
+    status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.accuracy)} accuracy`,
   },
 
   [ItemSkillType.INTIMIDATING_PRESENCE]: {
@@ -215,6 +273,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { ratio: 0.4 },
     },
     describe: (r) => `Reduce enemy attack speed by ${pct(skillValues(ITEM_SKILLS[ItemSkillType.INTIMIDATING_PRESENCE], r).ratio)}.`,
+    status: (ctx) => {
+      if (!ctx.inFight) return '';
+      const as = ctx.item.skillAffectedEnemyStats.attackSpeed;
+      return as === 1 ? '' : `enemy attack speed -${pct(1 - as)}`;
+    },
   },
 
   [ItemSkillType.TITANS_MIGHT]: {
@@ -228,6 +291,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { divisor: 5 },
     },
     describe: (r) => `Gain 1 strength per ${skillValues(ITEM_SKILLS[ItemSkillType.TITANS_MIGHT], r).divisor} max HP.`,
+    status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.strength)} strength`,
   },
 
   [ItemSkillType.IRON_HIDE]: {
@@ -241,6 +305,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { divisor: 4 },
     },
     describe: (r) => `Gain 1 defense per ${skillValues(ITEM_SKILLS[ItemSkillType.IRON_HIDE], r).divisor} max HP.`,
+    status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.defense)} defense`,
   },
 
   [ItemSkillType.BULWARK]: {
@@ -262,6 +327,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
         ? `+${pct(v.hpRatio)} max HP, and gain ${v.invulnMs / 1000}s invulnerability at fight start.`
         : `+${pct(v.hpRatio)} max HP.`;
     },
+    status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.maxHp)} max HP`,
   },
 
   [ItemSkillType.LAST_STAND]: {
@@ -278,6 +344,12 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.LAST_STAND], r);
       return `Below 50% HP: +${pct(v.defenseRatio)} defense and +${v.hpRegen} HP regen.`;
     },
+    status: (ctx) => {
+      const active = ctx.item.skillAffectedStats.hpRegen > 0;
+      return active
+        ? `active: +${fmt(ctx.item.skillAffectedStats.defense)} defense, +${fmt(ctx.item.skillAffectedStats.hpRegen)} regen`
+        : 'inactive - above 50% HP';
+    },
   },
 
   [ItemSkillType.WARLORDS_ROAR]: {
@@ -291,6 +363,14 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { ratio: 0.2 },
     },
     describe: (r) => `Fight start: reduce enemy strength by ${pct(skillValues(ITEM_SKILLS[ItemSkillType.WARLORDS_ROAR], r).ratio)} of your defense.`,
+    status: (ctx) => {
+      const { ratio } = skillValues(ITEM_SKILLS[ItemSkillType.WARLORDS_ROAR], ctx.item.rarity);
+      if (ctx.inFight) {
+        const reduction = -ctx.item.skillAffectedEnemyStats.strength;
+        return reduction > 0 ? `enemy -${fmt(reduction)} strength` : 'not triggered yet';
+      }
+      return `would be -${fmt(ctx.player.defense * ratio)} strength`;
+    },
   },
 
   [ItemSkillType.CRUSHING_BLOW]: {
@@ -306,6 +386,12 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.CRUSHING_BLOW], r);
       return `Every ${v.every === 3 ? '3rd' : `${v.every}th`} attack deals +${pct(v.ratio)} bonus damage.`;
+    },
+    status: (ctx) => {
+      if (!ctx.inFight) return '';
+      const { every } = skillValues(ITEM_SKILLS[ItemSkillType.CRUSHING_BLOW], ctx.item.rarity);
+      const count = crushingBlowCounters.get(ctx.item) ?? 0;
+      return `${count % every}/${every} attacks charged`;
     },
   },
 
@@ -325,6 +411,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       const count = skillValues(ITEM_SKILLS[ItemSkillType.HAGGLER], r).count;
       return `${count} free shop reroll${count > 1 ? 's' : ''} per round.`;
     },
+    status: (ctx) => {
+      if (ctx.inFight) return '';
+      const left = ctx.player.hagglerFreeRerolls;
+      return `${left} free reroll${left === 1 ? '' : 's'} left`;
+    },
   },
 
   [ItemSkillType.STORE_CREDIT]: {
@@ -343,6 +434,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
         ? 'Shop phase: claim one free item, any price.'
         : `Shop phase: claim one free item priced ${v.cap} gold or less.`;
     },
+    status: (ctx) => (ctx.inFight ? '' : (ctx.player.storeCreditFreeClaim ? 'free claim available' : 'claim used this round')),
   },
 
   [ItemSkillType.CASH_BACK]: {
@@ -372,6 +464,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { ratio: 0.3 },
     },
     describe: (r) => `Increase income by ${pct(skillValues(ITEM_SKILLS[ItemSkillType.COMPOUND_INTEREST], r).ratio)}.`,
+    status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.income)} income`,
   },
 
   [ItemSkillType.MARKET_MANIPULATION]: {
@@ -401,6 +494,13 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.MYTHIC]: { perItem: 2 },
     },
     describe: (r) => `Shop prices drop ${skillValues(ITEM_SKILLS[ItemSkillType.BULK_DISCOUNT], r).perItem} gold per merchant item equipped.`,
+    status: (ctx) => {
+      if (ctx.inFight) return '';
+      const { perItem } = skillValues(ITEM_SKILLS[ItemSkillType.BULK_DISCOUNT], ctx.item.rarity);
+      let merchantCount = 0;
+      ctx.player.equippedItems.forEach((i) => { if (i.class === ItemClass.MERCHANT) merchantCount++; });
+      return `${merchantCount} merchant item${merchantCount === 1 ? '' : 's'} equipped - shop prices -${merchantCount * perItem} gold`;
+    },
   },
 
   [ItemSkillType.PROTECTION_MONEY]: {
@@ -419,6 +519,15 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
         ? `On being attacked: gain ${v.gold} gold (max once per second).`
         : `On being attacked: gain ${v.gold} gold.`;
     },
+    status: (ctx) => {
+      if (!ctx.inFight) return '';
+      const { cooldownMs } = skillValues(ITEM_SKILLS[ItemSkillType.PROTECTION_MONEY], ctx.item.rarity);
+      if (cooldownMs <= 0 || !ctx.clock) return 'ready';
+      const last = protectionMoneyLastProcMs.get(ctx.item);
+      if (last === undefined) return 'ready';
+      const remaining = cooldownMs - (ctx.clock.elapsedTime - last);
+      return remaining > 0 ? `${(remaining / 1000).toFixed(1)}s` : 'ready';
+    },
   },
 
   [ItemSkillType.WAR_CHEST]: {
@@ -435,6 +544,18 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.WAR_CHEST], r);
       return `Fight start: spend up to ${v.maxGold} gold — gain ${v.strengthPerGold} strength and ${v.defensePerGold} defense per gold spent for this fight.`;
+    },
+    status: (ctx) => {
+      const { maxGold, strengthPerGold, defensePerGold } = skillValues(ITEM_SKILLS[ItemSkillType.WAR_CHEST], ctx.item.rarity);
+      if (ctx.inFight) {
+        const strength = ctx.item.skillAffectedStats.strength;
+        const defense = ctx.item.skillAffectedStats.defense;
+        return strength > 0 || defense > 0
+          ? `spent gold: +${fmt(strength)} strength, +${fmt(defense)} defense`
+          : 'no gold spent';
+      }
+      const spend = Math.min(maxGold, Math.max(0, Math.floor(ctx.player.gold)));
+      return `would spend ${spend} gold: +${spend * strengthPerGold} strength, +${spend * defensePerGold} defense`;
     },
   },
 
@@ -462,23 +583,27 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     },
   },
 
+  // Riposte keeps a downside (like Shield Wall): each counter permanently burns a slice of your
+  // own defense for the rest of the fight (reset on FIGHT_END), so it decays with use rather than
+  // being pure upside like Aegis/Brace.
   [ItemSkillType.RIPOSTE]: {
     id: ItemSkillType.RIPOSTE,
     class: 'shield',
     name: 'Riposte',
     slots: SHIELD_SLOTS,
-    triggerTypes: [TriggerType.ON_ATTACKED],
+    triggerTypes: [TriggerType.ON_ATTACKED, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.COMMON]: { ratio: 0.10 },
-      [ItemRarity.RARE]: { ratio: 0.15 },
-      [ItemRarity.EPIC]: { ratio: 0.20 },
-      [ItemRarity.LEGENDARY]: { ratio: 0.25 },
-      [ItemRarity.MYTHIC]: { ratio: 0.30 },
+      [ItemRarity.COMMON]: { ratio: 0.04, defenseCost: 1 },
+      [ItemRarity.RARE]: { ratio: 0.08, defenseCost: 1 },
+      [ItemRarity.EPIC]: { ratio: 0.12, defenseCost: 2 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.16, defenseCost: 2 },
+      [ItemRarity.MYTHIC]: { ratio: 0.20, defenseCost: 3 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.RIPOSTE], r);
-      return `On being attacked: counter for damage equal to ${pct(v.ratio)} of your defense.`;
+      return `On being attacked: counter for damage equal to ${pct(v.ratio)} of your defense, but lose ${v.defenseCost} defense for the rest of the fight.`;
     },
+    status: (ctx) => (ctx.inFight ? `${fmt(-ctx.item.skillAffectedStats.defense)} defense spent this fight` : ''),
   },
 
   // Shield Wall is the one shield skill that keeps a downside (the attack-speed tax) — its
@@ -503,6 +628,10 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_WALL], r);
       return `Each hit taken grants +${v.defensePerHit} defense for the rest of the fight (max +${v.maxDefense}), but you always suffer -${pct(v.attackSpeedPenalty)} attack speed.`;
     },
+    status: (ctx) => {
+      const { maxDefense } = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_WALL], ctx.item.rarity);
+      return `+${fmt(ctx.item.skillAffectedStats.defense)} / +${maxDefense} defense`;
+    },
   },
 
   [ItemSkillType.SHIELD_BASH]: {
@@ -522,6 +651,14 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_BASH], r);
       return `On being attacked (max once every ${v.cooldownMs / 1000}s): slow the enemy by ${pct(v.slowRatio)} attack speed for ${v.slowMs / 1000}s.`;
+    },
+    status: (ctx) => {
+      if (!ctx.inFight || !ctx.clock) return '';
+      const { cooldownMs } = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_BASH], ctx.item.rarity);
+      const last = shieldBashLastProcMs.get(ctx.item);
+      if (last === undefined) return 'ready';
+      const remaining = cooldownMs - (ctx.clock.elapsedTime - last);
+      return remaining > 0 ? `${(remaining / 1000).toFixed(1)}s` : 'ready';
     },
   },
 
@@ -543,6 +680,12 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.BRACE], r);
       const ordinal = v.every === 2 ? '2nd' : v.every === 3 ? '3rd' : `${v.every}th`;
       return `Every ${ordinal} hit taken is fully blocked.`;
+    },
+    status: (ctx) => {
+      if (!ctx.inFight) return '';
+      const { every } = skillValues(ITEM_SKILLS[ItemSkillType.BRACE], ctx.item.rarity);
+      const count = braceCounters.get(ctx.item) ?? 0;
+      return `${count % every}/${every} hits to next block`;
     },
   },
 };

@@ -41,6 +41,11 @@ export const SEASONS: SeasonInfo[] = [
       'Liquid Assets replaced by War Chest: at fight start spend up to 10 gold (15 at Mythic) for +3 strength and +2 defense per gold spent for that fight (+4/+3 at Mythic)',
       'Shields no longer grant a flat fight-start invulnerability - every shield now rolls one of five shield-only skills (Aegis, Riposte, Shield Wall, Shield Bash, Brace), active from Common and stronger at every rarity',
       'Martial Artist buffed: each fist hit now attacks with every weapon in your inventory instead of a single random one',
+      'Store Credit fixed: the free item is now once per shop phase, not once per reroll',
+      'Riposte now permanently burns 1-3 of your defense per counter for the rest of the fight',
+      'Unstoppable Force nerfed: empowered attacks deal 50% bonus damage instead of double damage',
+      'Pickpocket (rogue collection): gold on dodge is now capped at once per second',
+      'Item skills now show their live values on the item card - current stacks, bonuses, charges and cooldowns',
     ],
   },
   {

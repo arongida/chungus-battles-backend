@@ -30,6 +30,9 @@ import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 import { creditDotDamage } from '../common/dotSources';
 
 const ALLOWED_FIGHT_SPEEDS = [0.5, 1, 2];
+// Unstoppable Force (WARRIOR_3) is currently the only source of an empowered attack — bonus
+// damage multiplier applied to the base hit, not a flat double, per the season 22 nerf.
+const EMPOWERED_DAMAGE_MULTIPLIER = 1.5;
 
 export class FightRoom extends Room {
     declare state: FightState;
@@ -323,6 +326,8 @@ export class FightRoom extends Room {
             damageReducedByDefense: Math.round(self.fightStats.damageReducedByDefense),
             attacksDodged: self.fightStats.attacksDodged,
             damageBlockedByInvincible: Math.round(self.fightStats.damageBlockedByInvincible),
+            attacksBlocked: self.fightStats.attacksBlocked,
+            damageBlocked: Math.round(self.fightStats.damageBlocked),
             empoweredAttacks: self.fightStats.empoweredAttacks,
             empoweredDamage: Math.round(self.fightStats.empoweredDamage),
         });
@@ -553,8 +558,8 @@ export class FightRoom extends Room {
         let damage = defender.getDamageAfterDefense(attackRoll);
         let empoweredBonus = 0;
         if (empowered) {
-            empoweredBonus = damage;
-            damage *= 2;
+            empoweredBonus = damage * (EMPOWERED_DAMAGE_MULTIPLIER - 1);
+            damage += empoweredBonus;
         }
 
         this.dispatcher.dispatch(new OnAttackedTriggerCommand(), {
@@ -563,6 +568,25 @@ export class FightRoom extends Room {
             damage: damage,
             weapon: weapon,
         });
+
+        // Brace (shield skill): ON_ATTACKED above may have armed a one-shot block on the defender.
+        // Consuming it here — before ON_ATTACK/ON_DAMAGE — fully negates this exact swing without
+        // touching hp, dodge stats, or any timed invulnerability state, so it can't accumulate or
+        // swallow unrelated damage (DoT ticks, other swings) the way the old duration-based
+        // invulnerability window did at high attack speed.
+        const blockSource = defender.consumePendingBlock();
+        if (blockSource) {
+            defender.fightStats.attacksBlocked++;
+            defender.fightStats.damageBlocked += damage;
+            this.logCombat(this.state.playerClient, {
+                text: `${defender.name}'s ${blockSource.name} braces and blocks ${attacker.name}'s ${weapon.name} entirely!`,
+                kind: 'block', attackerId: attacker.playerId, defenderId: defender.playerId,
+                weaponItemId: weapon.itemId, itemId: blockSource.itemId, slot, damage,
+            });
+            this.state.playerClient.send('attack', attacker.playerId);
+            return 0;
+        }
+
         this.dispatcher.dispatch(new OnAttackTriggerCommand(), {
             attacker: attacker,
             defender: defender,
@@ -620,6 +644,8 @@ export class FightRoom extends Room {
         this.state.enemy.burnSources.clear();
         this.state.player.empoweredAttackSource = null;
         this.state.enemy.empoweredAttackSource = null;
+        this.state.player.pendingBlockSource = null;
+        this.state.enemy.pendingBlockSource = null;
 
         //start attack timers
         this.startWeaponAttackTimers(this.state.player, this.state.enemy);
