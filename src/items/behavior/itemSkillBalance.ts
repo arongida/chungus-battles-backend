@@ -593,11 +593,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: SHIELD_SLOTS,
     triggerTypes: [TriggerType.ON_ATTACKED, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.COMMON]: { ratio: 0.10, defenseCost: 1 },
-      [ItemRarity.RARE]: { ratio: 0.15, defenseCost: 1 },
-      [ItemRarity.EPIC]: { ratio: 0.20, defenseCost: 2 },
-      [ItemRarity.LEGENDARY]: { ratio: 0.25, defenseCost: 2 },
-      [ItemRarity.MYTHIC]: { ratio: 0.30, defenseCost: 3 },
+      [ItemRarity.COMMON]: { ratio: 0.04, defenseCost: 1 },
+      [ItemRarity.RARE]: { ratio: 0.08, defenseCost: 1 },
+      [ItemRarity.EPIC]: { ratio: 0.12, defenseCost: 2 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.16, defenseCost: 2 },
+      [ItemRarity.MYTHIC]: { ratio: 0.20, defenseCost: 3 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.RIPOSTE], r);
