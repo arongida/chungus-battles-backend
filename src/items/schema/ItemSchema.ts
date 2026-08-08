@@ -54,6 +54,11 @@ export class Item extends Schema {
   // immediately correct. Accumulated by statsUtils.recalculatePlayerStats alongside affectedStats.
   @type(AffectedStats) skillAffectedStats: AffectedStats = new AffectedStats();
   @type(AffectedStats) skillAffectedEnemyStats: AffectedStats = new AffectedStats();
+  // Live, per-tick skill state as display text (e.g. "+42 / +100 defense") — rebuilt every tick
+  // by items/skills/itemSkillStatus.ts for EQUIPPED items only, empty otherwise. Deliberately
+  // NOT persisted to Mongo (items/db/Item.ts has no field for it), same reasoning as
+  // skillAffectedStats above: it is recomputed from live state within one tick of any load.
+  @type('string') skillStatus: string = '';
   // Server-only, not synced: Gold Genie (TalentBehaviors.ts) rolls its post-Legendary lucky-find
   // chance exactly once per shop slot — this latches that so repeat aura ticks don't re-roll it.
   goldGenieLuckyRolled: boolean = false;

@@ -66,6 +66,11 @@ export class Player extends Schema implements IStats {
     // one weapon attack after the talent's ACTIVE tick fires. Consumed in FightRoom.tryWeaponAttack
     // (skips dodge, doubles damage) and used there to credit the bonus damage to its source.
     empoweredAttackSource: Talent = null;
+    // Brace (shield skill): the Item that fully blocks the next incoming weapon hit, set during
+    // that hit's ON_ATTACKED pass. Consumed in FightRoom.tryWeaponAttack — same one-shot-flag idiom
+    // as empoweredAttackSource above, so it can't accumulate the way a duration-based invulnerability
+    // window would at high attack speed. Cleared per-fight in FightRoom.startBattle.
+    pendingBlockSource: Item = null;
     // Zealot (talent 28, reworked): set true by Zealot's aura behavior every ~1s it's owned
     // (talents are never un-picked, so this never needs to reset back to false). Clamped in
     // recalculatePlayerStats (statsUtils.ts), which zeroes dodgeRate after computing it whenever
@@ -88,8 +93,9 @@ export class Player extends Schema implements IStats {
     // claimed this way also gets the rarity-upgrade steal treatment (see ShopUpgradeUtils.
     // stealShopItem / DraftRoom.buyItem).
     misconductClaimUsed: boolean = false;
-    // Store Credit (item skill): same latch pattern as comradeClaimUsed — reset per shop build
-    // (DraftRoom.updateShop), not per shop phase.
+    // Store Credit (item skill): one free item per shop PHASE, not per shop build — same
+    // per-phase reset reasoning as hagglerRerollsUsed below (DraftRoom.onJoin), unlike
+    // comradeClaimUsed/goldGenieClaimUsed/luckyFindClaimUsed which refresh on every reroll.
     storeCreditClaimUsed: boolean = false;
     // Haggler (item skill): how many of this shop-phase's free rerolls have already been spent
     // (DraftRoom.refreshShop). Reset once per shop PHASE (DraftRoom.onJoin), not per shop build —
@@ -302,6 +308,14 @@ export class Player extends Schema implements IStats {
         this.invincibleTimer = clock.setTimeout(endInvincibility, invincibleLenghtMS);
     }
 
+    /** Consumes and returns the pending Brace block, if any. One-shot: the weapon swing that reads
+     *  it also clears it, so a proc can never outlive the single hit it was meant to negate. */
+    consumePendingBlock(): Item | null {
+        const source = this.pendingBlockSource;
+        this.pendingBlockSource = null;
+        return source;
+    }
+
     heal(amount: number): number {
         if (amount <= 0) {
             this.hp += amount;
@@ -489,6 +503,10 @@ export class Player extends Schema implements IStats {
             weaponWhispererSnapshots.delete(item);
         }
         item.equipped = false;
+        // Live skill status line (itemSkillStatus.ts) only ever describes an EQUIPPED item — clear
+        // it immediately so the inventory card doesn't keep showing the last fight's/tick's number
+        // until the next UpdateStatsCommand tick catches up.
+        item.skillStatus = '';
         this.inventory.push(item);
         this.equippedItems.delete(slot);
     }

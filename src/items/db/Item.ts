@@ -72,8 +72,10 @@ function getItemSchemaObject(itemFromDb: any): Item {
     // affectedStats/affectedEnemyStats: cloneItem() round-trips a LIVE item through toJSON(),
     // which serializes them as plain objects — left in `primitives`, .assign() would clobber the
     // Item constructor's real AffectedStats instance with that plain object (breaking Colyseus
-    // schema sync — "AffectedStats was expected, but Object was provided").
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    // schema sync — "AffectedStats was expected, but Object was provided"). skillStatus is
+    // excluded for the same "pure runtime output, never worth carrying over" reason — leaving it
+    // out of `primitives` lets it fall back to the schema default ('') rather than a stale string.
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
     if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);

@@ -147,6 +147,9 @@ export class DraftRoom extends Room {
         // session via allowReconnection instead of re-running onJoin), unlike Comrade/Gold Genie/
         // Lucky Find whose claims are meant to refresh on every manual shop refresh too.
         this.state.player.misconductClaimUsed = false;
+        // Store Credit (item skill): same per-shop-phase reset reasoning as misconductClaimUsed
+        // above — one free claim per round, not one per reroll.
+        this.state.player.storeCreditClaimUsed = false;
         // Haggler: same per-shop-phase reset reasoning as misconductClaimUsed above.
         this.state.player.hagglerRerollsUsed = 0;
         // Fortune's Fool reads this at FIGHT_START to size the HP penalty — per-shop-phase reset,
@@ -245,9 +248,9 @@ export class DraftRoom extends Room {
         this.state.player.comradeClaimUsed = false;
         this.state.player.goldGenieClaimUsed = false;
         this.state.player.luckyFindClaimUsed = false;
-        this.state.player.storeCreditClaimUsed = false;
-        // Misconduct's claim is deliberately NOT reset here — it's one free steal per shop
-        // phase (round), not per shop build, so it survives manual refreshes (see onJoin).
+        // Misconduct's and Store Credit's claims are deliberately NOT reset here — each is one
+        // free item per shop phase (round), not per shop build, so they survive manual refreshes
+        // (see onJoin).
         const excludeTypes: string[] = [];
         // Second Thoughts (talent 202): a carried-over item from the shop that was just
         // discarded, stashed by BeforeShopRefreshTriggerCommand. Only injected into a freshly

@@ -6,6 +6,10 @@ export class FightStats {
     damageReducedByDefense: number = 0;
     attacksDodged: number = 0;
     damageBlockedByInvincible: number = 0;
+    // Brace (shield skill): count and would-be damage of hits fully negated by a consumed
+    // pendingBlockSource. Set in FightRoom.tryWeaponAttack.
+    attacksBlocked: number = 0;
+    damageBlocked: number = 0;
     // Unstoppable Force (WARRIOR_3): count and bonus (extra, not full-hit) damage of this side's
     // empowered attacks this fight. Set in FightRoom.tryWeaponAttack.
     empoweredAttacks: number = 0;
@@ -17,6 +21,8 @@ export class FightStats {
         this.damageReducedByDefense = 0;
         this.attacksDodged = 0;
         this.damageBlockedByInvincible = 0;
+        this.attacksBlocked = 0;
+        this.damageBlocked = 0;
         this.empoweredAttacks = 0;
         this.empoweredDamage = 0;
     }

@@ -77,7 +77,7 @@ export type GameWinMessage = {
 
 export type CombatLogKind =
   | 'countdown' | 'fight_start' | 'fight_end' | 'end_burn'
-  | 'attack' | 'dodge' | 'counter'
+  | 'attack' | 'dodge' | 'counter' | 'block'
   | 'regen' | 'poison_apply' | 'poison_tick'
   | 'burn_apply' | 'burn_tick'
   | 'heal' | 'leech'
@@ -117,6 +117,8 @@ export type FightSideStats = {
   damageReducedByDefense: number;
   attacksDodged: number;
   damageBlockedByInvincible: number;
+  attacksBlocked: number;
+  damageBlocked: number;
   empoweredAttacks: number;
   empoweredDamage: number;
 };
