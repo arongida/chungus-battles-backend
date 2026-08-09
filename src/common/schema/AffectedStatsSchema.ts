@@ -9,6 +9,10 @@ export class AffectedStats extends Schema {
     @type('number') dodgeRate: number = 0;
     @type('number') income: number = 0;
     @type('number') hpRegen: number = 0;
+    // Special bonus stat — never rolled on normal items (absent from RollableStat/itemStatPool),
+    // only granted by active talents and a handful of unique items (Wand of Fire, Flowering
+    // Staff, Magic Ring). Declared last so field indices stay stable. See common/cooldown.ts.
+    @type('number') cooldownReduction: number = 0;
 
 
     mergeInto(affectedStatsToMerge: AffectedStats) {
@@ -20,6 +24,7 @@ export class AffectedStats extends Schema {
         this.hpRegen += affectedStatsToMerge.hpRegen;
         this.defense += affectedStatsToMerge.defense;
         this.dodgeRate += affectedStatsToMerge.dodgeRate;
+        this.cooldownReduction += affectedStatsToMerge.cooldownReduction;
 
         let attackSpeedToMerge = affectedStatsToMerge.attackSpeed ?? 1;
         if (attackSpeedToMerge === 0) attackSpeedToMerge = 1;

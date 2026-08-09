@@ -287,8 +287,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { divisor: 10 },
-      [ItemRarity.MYTHIC]: { divisor: 5 },
+      [ItemRarity.LEGENDARY]: { divisor: 12 },
+      [ItemRarity.MYTHIC]: { divisor: 6 },
     },
     describe: (r) => `Gain 1 strength per ${skillValues(ITEM_SKILLS[ItemSkillType.TITANS_MIGHT], r).divisor} max HP.`,
     status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.strength)} strength`,
@@ -378,14 +378,19 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.WARRIOR,
     name: 'Crushing Blow',
     slots: WEAPON_SLOTS,
-    triggerTypes: [TriggerType.ON_ATTACK, TriggerType.FIGHT_START],
+    // ON_ATTACK is deliberately absent — the empowerment check now runs directly in
+    // FightRoom.tryWeaponAttack (before the dodge roll), not through the trigger system. See
+    // ItemSkillBehaviors.ts's CRUSHING_BLOW entry for why.
+    triggerTypes: [TriggerType.FIGHT_START],
     values: {
-      [ItemRarity.LEGENDARY]: { every: 3, ratio: 1.0 },
-      [ItemRarity.MYTHIC]: { every: 2, ratio: 1.5 },
+      [ItemRarity.LEGENDARY]: { every: 3 },
+      [ItemRarity.MYTHIC]: { every: 2 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.CRUSHING_BLOW], r);
-      return `Every ${v.every === 3 ? '3rd' : `${v.every}th`} attack deals +${pct(v.ratio)} bonus damage.`;
+      // +50% mirrors FightRoom's EMPOWERED_DAMAGE_MULTIPLIER (shared by every empowered-attack
+      // source) — not read from there directly to avoid a FightRoom <-> item-skill import cycle.
+      return `Every ${v.every === 3 ? '3rd' : `${v.every}th`} attack is empowered: unavoidable, +50% bonus damage.`;
     },
     status: (ctx) => {
       if (!ctx.inFight) return '';
@@ -571,11 +576,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: SHIELD_SLOTS,
     triggerTypes: [TriggerType.FIGHT_START],
     values: {
-      [ItemRarity.COMMON]: { invulnMs: 500 },
-      [ItemRarity.RARE]: { invulnMs: 700 },
-      [ItemRarity.EPIC]: { invulnMs: 900 },
-      [ItemRarity.LEGENDARY]: { invulnMs: 1200 },
-      [ItemRarity.MYTHIC]: { invulnMs: 1500 },
+      [ItemRarity.COMMON]: { invulnMs: 1200 },
+      [ItemRarity.RARE]: { invulnMs: 1400 },
+      [ItemRarity.EPIC]: { invulnMs:  1600},
+      [ItemRarity.LEGENDARY]: { invulnMs: 1800 },
+      [ItemRarity.MYTHIC]: { invulnMs: 2000 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.AEGIS], r);
@@ -594,14 +599,14 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     triggerTypes: [TriggerType.ON_ATTACKED, TriggerType.FIGHT_END],
     values: {
       [ItemRarity.COMMON]: { ratio: 0.04, defenseCost: 1 },
-      [ItemRarity.RARE]: { ratio: 0.08, defenseCost: 1 },
-      [ItemRarity.EPIC]: { ratio: 0.12, defenseCost: 2 },
-      [ItemRarity.LEGENDARY]: { ratio: 0.16, defenseCost: 2 },
-      [ItemRarity.MYTHIC]: { ratio: 0.20, defenseCost: 3 },
+      [ItemRarity.RARE]: { ratio: 0.08, defenseCost: 2 },
+      [ItemRarity.EPIC]: { ratio: 0.12, defenseCost: 3 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.16, defenseCost: 4 },
+      [ItemRarity.MYTHIC]: { ratio: 0.20, defenseCost: 5 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.RIPOSTE], r);
-      return `On being attacked: counter for damage equal to ${pct(v.ratio)} of your defense, but lose ${v.defenseCost} defense for the rest of the fight.`;
+      return `On being attacked: counter for damage equal to ${pct(v.ratio)} of your defense, but lose ${v.defenseCost}% defense for the rest of the fight.`;
     },
     status: (ctx) => (ctx.inFight ? `${fmt(-ctx.item.skillAffectedStats.defense)} defense spent this fight` : ''),
   },
@@ -618,11 +623,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // skillAffectedStats because they touch disjoint fields. FIGHT_END resets the defense stack.
     triggerTypes: [TriggerType.ON_ATTACKED, TriggerType.AURA, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.COMMON]: { defensePerHit: 3, maxDefense: 40, attackSpeedPenalty: 0.20 },
-      [ItemRarity.RARE]: { defensePerHit: 4, maxDefense: 55, attackSpeedPenalty: 0.20 },
-      [ItemRarity.EPIC]: { defensePerHit: 5, maxDefense: 75, attackSpeedPenalty: 0.25 },
-      [ItemRarity.LEGENDARY]: { defensePerHit: 6, maxDefense: 100, attackSpeedPenalty: 0.25 },
-      [ItemRarity.MYTHIC]: { defensePerHit: 8, maxDefense: 130, attackSpeedPenalty: 0.30 },
+      [ItemRarity.COMMON]: { defensePerHit: 4, maxDefense: 50, attackSpeedPenalty: 0.20 },
+      [ItemRarity.RARE]: { defensePerHit: 5, maxDefense: 75, attackSpeedPenalty: 0.20 },
+      [ItemRarity.EPIC]: { defensePerHit: 6, maxDefense: 100, attackSpeedPenalty: 0.25 },
+      [ItemRarity.LEGENDARY]: { defensePerHit: 7, maxDefense: 150, attackSpeedPenalty: 0.25 },
+      [ItemRarity.MYTHIC]: { defensePerHit: 8, maxDefense: 200, attackSpeedPenalty: 0.30 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_WALL], r);
@@ -670,11 +675,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // FIGHT_START resets the hit counter; ON_ATTACKED blocks every Nth hit.
     triggerTypes: [TriggerType.FIGHT_START, TriggerType.ON_ATTACKED],
     values: {
-      [ItemRarity.COMMON]: { every: 4 },
-      [ItemRarity.RARE]: { every: 4 },
-      [ItemRarity.EPIC]: { every: 3 },
-      [ItemRarity.LEGENDARY]: { every: 3 },
-      [ItemRarity.MYTHIC]: { every: 2 },
+      [ItemRarity.COMMON]: { every: 6 },
+      [ItemRarity.RARE]: { every: 5 },
+      [ItemRarity.EPIC]: { every: 5 },
+      [ItemRarity.LEGENDARY]: { every: 4 },
+      [ItemRarity.MYTHIC]: { every: 3 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.BRACE], r);

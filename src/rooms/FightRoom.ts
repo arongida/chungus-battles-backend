@@ -15,7 +15,7 @@ import { OnDamageTriggerCommand } from '../commands/triggers/OnDamageTriggerComm
 import { OnAttackedTriggerCommand } from '../commands/triggers/OnAttackedTriggerCommand';
 import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerCommand';
 import { TalentType } from '../talents/types/TalentTypes';
-import { ensureMartialFists } from '../talents/behavior/TalentBehaviors';
+import { migrateLegacyMartialFists } from '../talents/behavior/TalentBehaviors';
 import { cloneItem, getItemById, getQuestItems } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { applyRarityUpgrade, getEquippedUpgradeableItems, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, totalRemainingRaritySteps } from '../commands/ShopUpgradeUtils';
@@ -24,14 +24,19 @@ import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
 import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
+import { ItemSkillType } from '../items/types/ItemSkillTypes';
+import { ITEM_SKILLS, skillValues } from '../items/behavior/itemSkillBalance';
+import { crushingBlowCounters } from '../items/behavior/itemSkillState';
+import { Talent } from '../talents/schema/TalentSchema';
 import { CombatLogMessage, FightSideStats, FightStatsMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 import { creditDotDamage } from '../common/dotSources';
 
 const ALLOWED_FIGHT_SPEEDS = [0.5, 1, 2];
-// Unstoppable Force (WARRIOR_3) is currently the only source of an empowered attack — bonus
-// damage multiplier applied to the base hit, not a flat double, per the season 22 nerf.
+// Shared by every empowered-attack source (Unstoppable Force / WARRIOR_3, Crushing Blow item
+// skill): bonus damage multiplier applied to the base hit, not a flat double, per the season 22
+// nerf.
 const EMPOWERED_DAMAGE_MULTIPLIER = 1.5;
 
 export class FightRoom extends Room {
@@ -433,10 +438,11 @@ export class FightRoom extends Room {
     startWeaponAttackTimers(player: Player, enemy: Player) {
         player.clearAllAttackTimers();
 
-        // Opponent snapshots saved before the Martial Artist rework have no fists in their hand
-        // slots; timers are only created once, here, so prime the fists before iterating.
+        // Opponent snapshots saved before the Martial Artist rework may still have synthetic
+        // fists occupying both hands; timers are only created once, here, so migrate them out
+        // before iterating.
         if (player.talents.some((t) => t.talentId === TalentType.MARTIAL_ARTIST)) {
-            ensureMartialFists(player);
+            migrateLegacyMartialFists(player);
         }
 
         player.equippedItems.forEach((item, slot) => {
@@ -466,20 +472,21 @@ export class FightRoom extends Room {
     }
 
     startRegenTimer(player: Player, opponent?: Player) {
-        if (player.hpRegen) {
-            player.regenTimer = this.clock.setInterval(() => {
-                const healed = player.heal(player.hpRegen);
-                if (healed === 0) return;
-                const isMinusRegen = healed < 0;
-                this.logCombat(this.state.playerClient, { text: `${player.name} regenerates ${fmt(healed)} hp!`, kind: 'regen', attackerId: player.playerId, healing: healed });
-                this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {
-                    playerId: player.playerId,
-                    healing: healed,
-                    damage: healed * -1,
-                    type: 'normal',
-                });
-            }, 1000);
-        }
+        // Always runs, even for a player that starts at 0 hpRegen — Flowering Staff's regen
+        // steal (ItemBehaviors.ts) can push a live hpRegen negative mid-fight, and this timer
+        // must already exist to apply that bleed. player.heal(0) is already a no-op below.
+        player.regenTimer = this.clock.setInterval(() => {
+            const healed = player.heal(player.hpRegen);
+            if (healed === 0) return;
+            const isMinusRegen = healed < 0;
+            this.logCombat(this.state.playerClient, { text: `${player.name} regenerates ${fmt(healed)} hp!`, kind: 'regen', attackerId: player.playerId, healing: healed });
+            this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {
+                playerId: player.playerId,
+                healing: healed,
+                damage: healed * -1,
+                type: 'normal',
+            });
+        }, 1000);
     }
 
     checkPoison(attacker: Player, defender: Player) {
@@ -534,11 +541,23 @@ export class FightRoom extends Room {
         const maxDmg = weapon.baseMaxDamage + attacker.strength * strengthMultiplier;
         const attackRoll = Math.random() * (maxDmg - minDmg) + minDmg;
 
-        // Unstoppable Force (WARRIOR_3): consumes the empowered flag for this attack — skips the
-        // dodge roll entirely and doubles the final damage below.
-        const empowerSource = attacker.empoweredAttackSource;
+        // Unstoppable Force (WARRIOR_3): consumes a flag pre-charged on an earlier tick — skips
+        // the dodge roll entirely and boosts the final damage below.
+        let empowerSource: Talent | Item = attacker.empoweredAttackSource;
+        if (empowerSource) attacker.empoweredAttackSource = null;
+
+        // Crushing Blow (item skill): every `every`th attack from this weapon IS the empowered
+        // hit itself, not a charge for the following one — has to be decided here, before the
+        // dodge roll, since the item's own ON_ATTACK trigger only fires after this swing's
+        // damage/dodge are already resolved (too late to retroactively make it unavoidable).
+        if (weapon.skillId === ItemSkillType.CRUSHING_BLOW) {
+            const { every } = skillValues(ITEM_SKILLS[ItemSkillType.CRUSHING_BLOW], weapon.rarity);
+            const count = (crushingBlowCounters.get(weapon) ?? 0) + 1;
+            crushingBlowCounters.set(weapon, count);
+            if (count % every === 0 && !empowerSource) empowerSource = weapon;
+        }
+
         const empowered = !!empowerSource;
-        if (empowered) attacker.empoweredAttackSource = null;
 
         if (!empowered && defender.dodgeRate > 0) {
             const dodgeChance = defender.getDodgeChance(attacker.accuracy);
@@ -613,11 +632,16 @@ export class FightRoom extends Room {
         this.state.playerClient.send('attack', attacker.playerId);
 
         if (empowered) {
-            track(empowerSource, 1, empoweredBonus);
             attacker.fightStats.empoweredAttacks++;
             attacker.fightStats.empoweredDamage += empoweredBonus;
-            this.logCombat(this.state.playerClient, { text: `${attacker.name} is unstoppable — ${fmt(empoweredBonus)} bonus damage!`, kind: 'talent', talentId: empowerSource.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: empoweredBonus });
-            this.state.playerClient.send('trigger_talent', { playerId: attacker.playerId, talentId: empowerSource.talentId });
+            if (empowerSource instanceof Item) {
+                this.logCombat(this.state.playerClient, { text: `${attacker.name}'s ${empowerSource.name} lands a crushing, unavoidable blow for ${fmt(empoweredBonus)} bonus damage!`, kind: 'item', itemId: empowerSource.itemId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: empoweredBonus });
+                this.state.playerClient.send('trigger_item', { playerId: attacker.playerId, itemId: empowerSource.itemId, slot });
+            } else {
+                track(empowerSource, 1, empoweredBonus);
+                this.logCombat(this.state.playerClient, { text: `${attacker.name} is unstoppable — ${fmt(empoweredBonus)} bonus damage!`, kind: 'talent', talentId: empowerSource.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: empoweredBonus });
+                this.state.playerClient.send('trigger_talent', { playerId: attacker.playerId, talentId: empowerSource.talentId });
+            }
         }
 
         return damage;

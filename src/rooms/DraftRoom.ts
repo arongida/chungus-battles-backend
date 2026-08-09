@@ -144,9 +144,15 @@ export class DraftRoom extends Room {
 
         // Misconduct: exactly one free-item claim per shop phase (round) — reset once here
         // (onJoin fires once per DraftRoom join; reconnects within the window resume the same
-        // session via allowReconnection instead of re-running onJoin), unlike Comrade/Gold Genie/
-        // Lucky Find whose claims are meant to refresh on every manual shop refresh too.
+        // session via allowReconnection instead of re-running onJoin), unlike Comrade whose claim
+        // is meant to refresh on every manual shop refresh too.
         this.state.player.misconductClaimUsed = false;
+        // Gold Genie: same per-shop-phase reset reasoning as misconductClaimUsed above — one free
+        // merchant item per round, not one per reroll.
+        this.state.player.goldGenieClaimUsed = false;
+        // Black Market Contact: same per-shop-phase reset reasoning as misconductClaimUsed above —
+        // one free lucky-find item per round, not one per reroll.
+        this.state.player.luckyFindClaimUsed = false;
         // Store Credit (item skill): same per-shop-phase reset reasoning as misconductClaimUsed
         // above — one free claim per round, not one per reroll.
         this.state.player.storeCreditClaimUsed = false;
@@ -243,14 +249,13 @@ export class DraftRoom extends Room {
     }
 
     private async updateShop(newShopSize: number) {
-        // Comrade / Gold Genie / Black Market Contact: each newly built shop grants a fresh
-        // free-item claim.
+        // Comrade: each newly built shop grants a fresh free-item claim — this is the one claim
+        // that deliberately refreshes on every reroll (its reroll cost is inflated by income to
+        // pay for it).
         this.state.player.comradeClaimUsed = false;
-        this.state.player.goldGenieClaimUsed = false;
-        this.state.player.luckyFindClaimUsed = false;
-        // Misconduct's and Store Credit's claims are deliberately NOT reset here — each is one
-        // free item per shop phase (round), not per shop build, so they survive manual refreshes
-        // (see onJoin).
+        // Gold Genie's, Black Market Contact's, Misconduct's and Store Credit's claims are
+        // deliberately NOT reset here — each is one free item per shop phase (round), not per
+        // shop build, so they survive manual refreshes (see onJoin).
         const excludeTypes: string[] = [];
         // Second Thoughts (talent 202): a carried-over item from the shop that was just
         // discarded, stashed by BeforeShopRefreshTriggerCommand. Only injected into a freshly
@@ -431,7 +436,8 @@ export class DraftRoom extends Room {
             return;
         }
         // Free-item claims: make this purchase free regardless of price, then latch the spent
-        // claim (DraftRoom.updateShop resets the latches each shop build). The four sources are
+        // claim (DraftRoom.onJoin resets goldGenie/luckyFind/misconduct/storeCredit once per shop
+        // phase; DraftRoom.updateShop resets comrade on every shop build). The four sources are
         // mutually exclusive in priority order lucky-find > gold genie > comrade > misconduct —
         // matching the client's freeClaimSource() — so one purchase never burns more than one claim.
         const luckyFree = this.state.player.luckyFindFreeClaim && item.luckyFind && !item.sold;
@@ -627,6 +633,8 @@ export class DraftRoom extends Room {
         }
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
+        const equipOptions = Array.from(item.equipOptions as any as Iterable<string>);
+        if (!equipOptions.includes(slot as string)) return;
         this.state.player.setItemEquipped(item, slot as EquipSlot);
     }
 

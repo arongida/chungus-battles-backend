@@ -1,4 +1,4 @@
-export const GAME_VERSION = 22;
+export const GAME_VERSION = 23;
 
 /** Reaching this many wins ends the run as a victory (Season 16 fixed-length runs). */
 export const WINS_TO_WIN = 12;
@@ -21,6 +21,7 @@ export interface IStats {
 	attackSpeed: number;
 	income: number;
 	hpRegen: number;
+	cooldownReduction: number;
 	maxHp?: number;
 	baseAttackSpeed?: number;
 }

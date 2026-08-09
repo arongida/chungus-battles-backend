@@ -9,6 +9,7 @@ export interface StatsSnapshot {
     dodgeRate: number;
     hpRegen: number;
     income: number;
+    cooldownReduction: number;
 }
 
 export function addStats(target: StatsSnapshot, source: AffectedStats): void {
@@ -19,6 +20,7 @@ export function addStats(target: StatsSnapshot, source: AffectedStats): void {
     target.dodgeRate += source.dodgeRate;
     target.hpRegen += source.hpRegen;
     target.income += source.income;
+    target.cooldownReduction += source.cooldownReduction;
 }
 
 /**
@@ -51,6 +53,7 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
         dodgeRate: player.baseStats.dodgeRate,
         hpRegen: player.baseStats.hpRegen,
         income: player.baseStats.income,
+        cooldownReduction: player.baseStats.cooldownReduction,
     };
     let attackSpeedMultiplier = player.baseStats.attackSpeed;
 
@@ -103,6 +106,7 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     player.dodgeRate = player.dodgeDisabled ? 0 : snapshot.dodgeRate;
     player.income = snapshot.income;
     player.hpRegen = snapshot.hpRegen;
+    player.cooldownReduction = snapshot.cooldownReduction;
 
     player.attackSpeedMultiplier = attackSpeedMultiplier;
     player.attackSpeed = player.attackSpeedMultiplier;
@@ -123,6 +127,7 @@ export function buildBaseAndItemsSnapshot(player: Player): StatsSnapshot {
         dodgeRate: player.baseStats.dodgeRate,
         hpRegen: player.baseStats.hpRegen,
         income: player.baseStats.income,
+        cooldownReduction: player.baseStats.cooldownReduction,
     };
     player.equippedItems.forEach((item) => {
         addStats(snapshot, item.affectedStats);

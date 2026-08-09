@@ -29,6 +29,9 @@ export class Item extends Schema {
   @type('number') baseAttackSpeed: number = 0;
   @type('number') strengthScaling: number = 1;
   @type(['string']) triggerTypes: ArraySchema<string> = new ArraySchema<string>();
+  // Activations per second for TriggerType.ACTIVE items (Wand of Fire, Flowering Staff, Magic
+  // Ring) — same meaning/formula as Talent.activationRate. 0 for every non-active item.
+  @type('number') activationRate: number = 0;
   @type(AffectedStats) affectedEnemyStats: AffectedStats;
   // True only for shop slots that upgrade an item the player already owns.
   @type('boolean') upgradePreview: boolean = false;

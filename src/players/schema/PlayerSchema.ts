@@ -59,13 +59,14 @@ export class Player extends Schema implements IStats {
     refreshShopCostBeforeDiscount: number = 0;
     healingEffectiveness: number = 1;
     // Black Market Contact: true once the current shop's free lucky-find claim has been spent
-    // (DraftRoom.buyItem), reset per shop build (DraftRoom.updateShop). Same latch pattern as
-    // comradeClaimUsed.
+    // (DraftRoom.buyItem), reset once per shop phase (DraftRoom.onJoin) — same reset timing as
+    // misconductClaimUsed, not per shop build like comradeClaimUsed.
     luckyFindClaimUsed: boolean = false;
-    // Unstoppable Force (WARRIOR_3): the Talent that charged the owner's next weapon attack, for
-    // one weapon attack after the talent's ACTIVE tick fires. Consumed in FightRoom.tryWeaponAttack
-    // (skips dodge, doubles damage) and used there to credit the bonus damage to its source.
-    empoweredAttackSource: Talent = null;
+    // Unstoppable Force (WARRIOR_3) and Crushing Blow (item skill): the Talent or Item that
+    // charged the owner's next weapon attack, for one weapon attack after the charge fires.
+    // Consumed in FightRoom.tryWeaponAttack (skips dodge, applies the empowered bonus) and used
+    // there to credit the bonus damage to its source — branches on `instanceof Item` there.
+    empoweredAttackSource: Talent | Item = null;
     // Brace (shield skill): the Item that fully blocks the next incoming weapon hit, set during
     // that hit's ON_ATTACKED pass. Consumed in FightRoom.tryWeaponAttack — same one-shot-flag idiom
     // as empoweredAttackSource above, so it can't accumulate the way a duration-based invulnerability
@@ -85,8 +86,8 @@ export class Player extends Schema implements IStats {
     // reset per shop build (DraftRoom.updateShop). Stops the aura from re-granting a fresh claim
     // every tick after one has been used.
     comradeClaimUsed: boolean = false;
-    // Gold Genie: same latch pattern as comradeClaimUsed, but scoped to the first merchant-class
-    // item bought each shop.
+    // Gold Genie: reset once per shop phase (DraftRoom.onJoin) — same reset timing as
+    // misconductClaimUsed, scoped to the first merchant-class item bought each round.
     goldGenieClaimUsed: boolean = false;
     // Misconduct: unlike comradeClaimUsed, reset once per shop phase (DraftRoom.onJoin) rather
     // than per shop build, so the claim doesn't refresh on manual shop refresh. The free item
@@ -95,7 +96,7 @@ export class Player extends Schema implements IStats {
     misconductClaimUsed: boolean = false;
     // Store Credit (item skill): one free item per shop PHASE, not per shop build — same
     // per-phase reset reasoning as hagglerRerollsUsed below (DraftRoom.onJoin), unlike
-    // comradeClaimUsed/goldGenieClaimUsed/luckyFindClaimUsed which refresh on every reroll.
+    // comradeClaimUsed which refreshes on every reroll.
     storeCreditClaimUsed: boolean = false;
     // Haggler (item skill): how many of this shop-phase's free rerolls have already been spent
     // (DraftRoom.refreshShop). Reset once per shop PHASE (DraftRoom.onJoin), not per shop build —
@@ -250,6 +251,12 @@ export class Player extends Schema implements IStats {
     // alongside refreshShopCostMultiplier (see DraftAuraTriggerCommand) so it can't survive
     // dropping/replacing the talent.
     @type('boolean') freeRerolls: boolean = false;
+    // Cooldown reduction: shortens active-skill intervals (see common/cooldown.ts and
+    // commands/triggers/ActiveTriggerCommand.ts). Recomputed from scratch every tick by
+    // statsUtils.recalculatePlayerStats, same as every other synced derived stat. Declared here
+    // (end of the @type block) so existing field indices stay stable — see the comment at the
+    // top of this @type block.
+    @type('number') cooldownReduction: number = 0;
 
     private _poisonStack: number = 0;
 
@@ -430,8 +437,9 @@ export class Player extends Schema implements IStats {
 
     /** Auto-equip a freshly acquired piece of gear into the first EMPTY valid slot.
      *  Skips potions (the 'drink' pseudo-slot), and never displaces an
-     *  already-equipped item. Returns true if it was equipped. */
-    private tryAutoEquipIntoEmptySlot(item: Item): boolean {
+     *  already-equipped item. Returns true if it was equipped. Public so talent behaviors that
+     *  grant items outside the normal buy flow (e.g. Martial Artist's free weapon) can reuse it. */
+    tryAutoEquipIntoEmptySlot(item: Item): boolean {
         if (!item.equipOptions) return false;
         for (const slot of item.equipOptions) {
             if (slot === 'drink') continue;
