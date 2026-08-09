@@ -7,7 +7,7 @@ import type { Item } from '../schema/ItemSchema';
 
 /** Chungi (7): fraction of the wielder's max HP used as max damage. */
 export function chungiHpDamageFraction(rarity: number): number {
-    return 0.05 + 0.05 * rarity;
+    return 0.075 + 0.025 * rarity;
 }
 
 /**

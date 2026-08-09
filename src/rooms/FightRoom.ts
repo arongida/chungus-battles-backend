@@ -24,14 +24,19 @@ import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
 import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
+import { ItemSkillType } from '../items/types/ItemSkillTypes';
+import { ITEM_SKILLS, skillValues } from '../items/behavior/itemSkillBalance';
+import { crushingBlowCounters } from '../items/behavior/itemSkillState';
+import { Talent } from '../talents/schema/TalentSchema';
 import { CombatLogMessage, FightSideStats, FightStatsMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 import { creditDotDamage } from '../common/dotSources';
 
 const ALLOWED_FIGHT_SPEEDS = [0.5, 1, 2];
-// Unstoppable Force (WARRIOR_3) is currently the only source of an empowered attack — bonus
-// damage multiplier applied to the base hit, not a flat double, per the season 22 nerf.
+// Shared by every empowered-attack source (Unstoppable Force / WARRIOR_3, Crushing Blow item
+// skill): bonus damage multiplier applied to the base hit, not a flat double, per the season 22
+// nerf.
 const EMPOWERED_DAMAGE_MULTIPLIER = 1.5;
 
 export class FightRoom extends Room {
@@ -534,11 +539,23 @@ export class FightRoom extends Room {
         const maxDmg = weapon.baseMaxDamage + attacker.strength * strengthMultiplier;
         const attackRoll = Math.random() * (maxDmg - minDmg) + minDmg;
 
-        // Unstoppable Force (WARRIOR_3): consumes the empowered flag for this attack — skips the
-        // dodge roll entirely and doubles the final damage below.
-        const empowerSource = attacker.empoweredAttackSource;
+        // Unstoppable Force (WARRIOR_3): consumes a flag pre-charged on an earlier tick — skips
+        // the dodge roll entirely and boosts the final damage below.
+        let empowerSource: Talent | Item = attacker.empoweredAttackSource;
+        if (empowerSource) attacker.empoweredAttackSource = null;
+
+        // Crushing Blow (item skill): every `every`th attack from this weapon IS the empowered
+        // hit itself, not a charge for the following one — has to be decided here, before the
+        // dodge roll, since the item's own ON_ATTACK trigger only fires after this swing's
+        // damage/dodge are already resolved (too late to retroactively make it unavoidable).
+        if (weapon.skillId === ItemSkillType.CRUSHING_BLOW) {
+            const { every } = skillValues(ITEM_SKILLS[ItemSkillType.CRUSHING_BLOW], weapon.rarity);
+            const count = (crushingBlowCounters.get(weapon) ?? 0) + 1;
+            crushingBlowCounters.set(weapon, count);
+            if (count % every === 0 && !empowerSource) empowerSource = weapon;
+        }
+
         const empowered = !!empowerSource;
-        if (empowered) attacker.empoweredAttackSource = null;
 
         if (!empowered && defender.dodgeRate > 0) {
             const dodgeChance = defender.getDodgeChance(attacker.accuracy);
@@ -613,11 +630,16 @@ export class FightRoom extends Room {
         this.state.playerClient.send('attack', attacker.playerId);
 
         if (empowered) {
-            track(empowerSource, 1, empoweredBonus);
             attacker.fightStats.empoweredAttacks++;
             attacker.fightStats.empoweredDamage += empoweredBonus;
-            this.logCombat(this.state.playerClient, { text: `${attacker.name} is unstoppable — ${fmt(empoweredBonus)} bonus damage!`, kind: 'talent', talentId: empowerSource.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: empoweredBonus });
-            this.state.playerClient.send('trigger_talent', { playerId: attacker.playerId, talentId: empowerSource.talentId });
+            if (empowerSource instanceof Item) {
+                this.logCombat(this.state.playerClient, { text: `${attacker.name}'s ${empowerSource.name} lands a crushing, unavoidable blow for ${fmt(empoweredBonus)} bonus damage!`, kind: 'item', itemId: empowerSource.itemId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: empoweredBonus });
+                this.state.playerClient.send('trigger_item', { playerId: attacker.playerId, itemId: empowerSource.itemId, slot });
+            } else {
+                track(empowerSource, 1, empoweredBonus);
+                this.logCombat(this.state.playerClient, { text: `${attacker.name} is unstoppable — ${fmt(empoweredBonus)} bonus damage!`, kind: 'talent', talentId: empowerSource.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: empoweredBonus });
+                this.state.playerClient.send('trigger_talent', { playerId: attacker.playerId, talentId: empowerSource.talentId });
+            }
         }
 
         return damage;

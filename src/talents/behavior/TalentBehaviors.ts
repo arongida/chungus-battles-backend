@@ -48,6 +48,11 @@ export function track(
 const pickpocketLastProcMs = new WeakMap<Talent, number>();
 const PICKPOCKET_COOLDOWN_MS = 1000;
 
+// Just a Scratch: same last-proc-time WeakMap idiom as ROGUE_1 above, so rapid attack-speed
+// stacking can't fire this every hit.
+const justAScratchLastProcMs = new WeakMap<Talent, number>();
+const JUST_A_SCRATCH_COOLDOWN_MS = 1000;
+
 // Martial Artist: one free weapon per DraftRoom join (= per round). Keyed by Talent instance —
 // Player.ts:137 rebuilds Talent objects on every DB load, so the latch self-clears each round
 // while a mid-round reconnect (allowReconnection resumes the same instance) can't double-grant.
@@ -369,8 +374,9 @@ export const TalentBehaviors = {
     // *after* the floor so the roll isn't wasted climbing through commons. `goldGenieLuckyRolled`
     // latches that one-time roll per shop slot so it doesn't re-roll (and inevitably hit MYTHIC)
     // on every subsequent tick. Also grants a free claim on the first merchant item bought each
-    // shop (goldGenieClaimUsed/-FreeClaim latch, mirrors Comrade; consumed in DraftRoom.buyItem,
-    // reset in DraftRoom.updateShop). `!shop` makes it harmless mid-fight.
+    // shop phase (goldGenieClaimUsed/-FreeClaim latch; consumed in DraftRoom.buyItem, reset once
+    // per shop phase in DraftRoom.onJoin — unlike Comrade, this does NOT refresh on reroll).
+    // `!shop` makes it harmless mid-fight.
     [TalentType.GOLD_GENIE]: (context: TalentBehaviorContext) => {
         const { attacker, client, shop } = context;
         if (!shop) return;
@@ -1328,8 +1334,11 @@ export const TalentBehaviors = {
 
     [TalentType.JUST_A_SCRATCH]:
         (context: TalentBehaviorContext) => {
-            const { defender, client, talent } = context;
+            const { defender, client, talent, clock } = context;
+            const last = justAScratchLastProcMs.get(talent);
+            if (clock && last !== undefined && clock.elapsedTime - last < JUST_A_SCRATCH_COOLDOWN_MS) return;
             if (Math.random() < talent.activationRate) {
+                if (clock) justAScratchLastProcMs.set(talent, clock.elapsedTime);
                 defender.gold += 1;
                 track(talent, 1, 0, 0, 1, 0, { client, playerId: defender.playerId });
                 client.send('combat_log', { text: `${defender.name} profits from pain, gaining 1 gold!`, kind: 'reward', talentId: talent.talentId, attackerId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
@@ -1342,10 +1351,11 @@ export const TalentBehaviors = {
 
     // Black Market Contact — AURA talent (runs every draft tick via DraftAuraTriggerCommand):
     // doubles the hidden lucky-find chance stat, and exposes one free lucky-find claim per shop
-    // (`luckyFindClaimUsed` latched in DraftRoom.buyItem, reset in DraftRoom.updateShop — same
-    // pattern as Comrade above). The actual free purchase is applied in DraftRoom.buyItem so the
-    // player picks which lucky-find item. Guarded on `trigger === AURA` so legacy player copies
-    // still carrying the old `after-refresh` trigger simply no-op instead of throwing.
+    // phase (`luckyFindClaimUsed` latched in DraftRoom.buyItem, reset once per shop phase in
+    // DraftRoom.onJoin — unlike Comrade, this does NOT refresh on reroll). The actual free
+    // purchase is applied in DraftRoom.buyItem so the player picks which lucky-find item. Guarded
+    // on `trigger === AURA` so legacy player copies still carrying the old `after-refresh`
+    // trigger simply no-op instead of throwing.
     [TalentType.BLACK_MARKET_CONTRACT]: (context: TalentBehaviorContext) => {
         const { attacker, shop, trigger } = context;
         if (trigger !== TriggerType.AURA || !attacker || !shop) return;

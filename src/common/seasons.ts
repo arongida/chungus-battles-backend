@@ -18,6 +18,22 @@ export interface SeasonInfo {
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
   {
+    number: 23,
+    name: 'Placeholer',
+    changes: [
+      'Gold Genie fixed: the free merchant item is now once per shop phase, not once per reroll',
+      'Black Market Contact fixed: the free lucky-find item is now once per shop phase, not once per reroll',
+      'Riposte: costs % defense to use',
+      'Brace: hits needed to activate increased by 1',
+      'Aegis: invuln duration slightly increased',
+      'Shield wall: defense granted increased',
+      'Chungi: slightly reduced max hp damage scaling',
+      'Ring of Vigor: increased hp and hp regen',
+      'Mercenary: decreased dmg to gold scaling by 1',
+      'Just a scratch: added a 1 sec cooldown and reduced chance by 5%'
+    ]
+  },
+  {
     number: 22,
     name: 'Slower Better',
     changes: [

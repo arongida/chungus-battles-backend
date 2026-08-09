@@ -236,25 +236,18 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     } as CombatLogMessage);
   },
 
+  // The actual counting + empowerment (every `every`th attack from this weapon IS the shared
+  // empowered hit — same mechanic as Unstoppable Force / WARRIOR_3) happens directly in
+  // FightRoom.tryWeaponAttack, before the dodge roll — see its header comment for why this
+  // ON_ATTACK trigger fires too late to gate the same swing. Only the FIGHT_START reset lives
+  // here; the ON_ATTACK case is a no-op kept so legacy items that already rolled the old
+  // ON_ATTACK triggerType (never pruned, see itemSkillRoller.ts) don't hit a missing case.
   [ItemSkillType.CRUSHING_BLOW]: (context) => {
-    const { attacker, defender, item, client, commandDispatcher, damage, trigger } = context;
+    const { item, trigger } = context;
     if (!item) return;
     if (trigger === TriggerType.FIGHT_START) {
       crushingBlowCounters.set(item, 0);
-      return;
     }
-    if (trigger !== TriggerType.ON_ATTACK || !attacker || !defender || !damage) return;
-    const { every, ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const count = (crushingBlowCounters.get(item) ?? 0) + 1;
-    crushingBlowCounters.set(item, count);
-    if (count % every !== 0) return;
-    const bonus = damage * ratio;
-    commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender, damage: bonus, attacker });
-    defender.takeDamage(bonus, client);
-    client?.send('combat_log', {
-      text: `${attacker.name}'s ${item.name} lands a crushing blow for ${fmt(bonus)} bonus damage!`,
-      kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, itemId: item.itemId, damage: bonus,
-    } as CombatLogMessage);
   },
 
   // ------------------------------------------------------------- MERCHANT ----
@@ -401,10 +394,8 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     const counterDamage = attacker.getDamageAfterDefense(rawCounter);
     commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender: attacker, damage: counterDamage, attacker: defender });
     attacker.takeDamage(counterDamage, client);
-    // Accumulating -= write (unlike every AURA skill's self-clearing =) — the cost persists for
-    // the rest of the fight; FIGHT_END above is the only reset. Clamp against the live defense so
-    // this can't drive the stat negative once other sources also touch it (same idiom as Shadowstep).
-    const consumed = Math.min(defenseCost, Math.max(0, defender.defense));
+    const defCost = defenseCost * defender.defense * 0.01;
+    const consumed = Math.min(defCost, Math.max(0, defender.defense));
     if (consumed > 0) item.skillAffectedStats.defense -= consumed;
     client?.send('combat_log', {
       text: `${defender.name}'s ${item.name} ripostes ${attacker.name} for ${fmt(counterDamage)} damage${consumed > 0 ? ` — ${consumed} defense spent!` : '!'}`,
