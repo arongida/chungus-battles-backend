@@ -6,6 +6,7 @@ import {ArraySchema} from "@colyseus/schema";
 import {rollItemStats} from "../stats/itemStatRoller";
 import {reconcileItemSkill} from "../skills/itemSkillRoller";
 import {ItemType} from "../types/ItemTypes";
+import {migrateLegacyItem} from "../../common/reworkMigrations";
 
 export const ItemSchema = new Schema({
     itemId: Number,
@@ -27,6 +28,8 @@ export const ItemSchema = new Schema({
     baseAttackSpeed: Number,
     strengthScaling: Number,
     triggerTypes: [String],
+    // Activations per second for TriggerType.ACTIVE items — same meaning as Talent.activationRate.
+    activationRate: Number,
     affectedEnemyStats: StatsSchema,
     upgradePreview: Boolean,
     luckyFind: Boolean,
@@ -110,6 +113,8 @@ function getItemSchemaObject(itemFromDb: any): Item {
     // Re-sync skillName/skillDescription/triggerTypes against the current ITEM_SKILLS table —
     // covers shop rolls, quest items, and cloneItem() (dual-wield ghost copies, upgrade previews).
     reconcileItemSkill(newItemSchemaObject);
+    // Cooldown-reduction rework (Season 24): see common/reworkMigrations.ts.
+    migrateLegacyItem(newItemSchemaObject);
 
     return newItemSchemaObject;
 }

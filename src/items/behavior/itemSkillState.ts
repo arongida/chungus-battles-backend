@@ -7,7 +7,7 @@
 import type { Item } from '../schema/ItemSchema';
 
 // Per-fight attack counters, keyed by item instance (rebuilt fresh each fight from DB
-// snapshots — same WeakMap idiom as ItemBehaviors.ts's floweringStaffLastProcMs).
+// snapshots — same WeakMap idiom as ItemBehaviors.ts's secondWindUsed).
 export const coatedEdgeCounters = new WeakMap<Item, number>();
 export const openingActCounters = new WeakMap<Item, number>();
 export const crushingBlowCounters = new WeakMap<Item, number>();

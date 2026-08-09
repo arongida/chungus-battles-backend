@@ -472,20 +472,21 @@ export class FightRoom extends Room {
     }
 
     startRegenTimer(player: Player, opponent?: Player) {
-        if (player.hpRegen) {
-            player.regenTimer = this.clock.setInterval(() => {
-                const healed = player.heal(player.hpRegen);
-                if (healed === 0) return;
-                const isMinusRegen = healed < 0;
-                this.logCombat(this.state.playerClient, { text: `${player.name} regenerates ${fmt(healed)} hp!`, kind: 'regen', attackerId: player.playerId, healing: healed });
-                this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {
-                    playerId: player.playerId,
-                    healing: healed,
-                    damage: healed * -1,
-                    type: 'normal',
-                });
-            }, 1000);
-        }
+        // Always runs, even for a player that starts at 0 hpRegen — Flowering Staff's regen
+        // steal (ItemBehaviors.ts) can push a live hpRegen negative mid-fight, and this timer
+        // must already exist to apply that bleed. player.heal(0) is already a no-op below.
+        player.regenTimer = this.clock.setInterval(() => {
+            const healed = player.heal(player.hpRegen);
+            if (healed === 0) return;
+            const isMinusRegen = healed < 0;
+            this.logCombat(this.state.playerClient, { text: `${player.name} regenerates ${fmt(healed)} hp!`, kind: 'regen', attackerId: player.playerId, healing: healed });
+            this.state.playerClient.send(isMinusRegen ? 'damage' : 'healing', {
+                playerId: player.playerId,
+                healing: healed,
+                damage: healed * -1,
+                type: 'normal',
+            });
+        }, 1000);
     }
 
     checkPoison(attacker: Player, defender: Player) {

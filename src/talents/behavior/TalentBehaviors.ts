@@ -58,6 +58,11 @@ const JUST_A_SCRATCH_COOLDOWN_MS = 1000;
 // while a mid-round reconnect (allowReconnection resumes the same instance) can't double-grant.
 const martialWeaponGranted = new WeakMap<Talent, boolean>();
 
+// Stab (reworked into an ACTIVE talent, Season 24): blood-price fraction of the attacker's OWN
+// current HP paid every activation, on top of the enemy-facing hit. Clamped in the behavior so
+// Stab can never drop its own owner below 1 HP.
+const STAB_SELF_COST_FRACTION = 0.05;
+
 export const TalentBehaviors = {
     [TalentType.RAGE]: (context: TalentBehaviorContext) => {
         const { talent, defender, client } = context;
@@ -72,9 +77,14 @@ export const TalentBehaviors = {
 
     },
 
+    // Stab (reworked into an ACTIVE talent, Season 24): every activation (base 4s, shortened by
+    // cooldownReduction like any other active skill — this talent also grants its own), deal
+    // `base` + `scaling` * the enemy's missing HP, then pay a blood price of the attacker's own
+    // current HP. The self-damage is the required downside (see CLAUDE.md's Talent Design
+    // Guidelines) — clamped so Stab can never kill its own owner.
     [TalentType.STAB]: (context: TalentBehaviorContext) => {
         const { talent, attacker, defender, client, commandDispatcher } = context;
-        const stabDamage = 1 + (defender.maxHp - defender.hp) * talent.activationRate;
+        const stabDamage = defender.maxHp * talent.scaling;
         const calculatedStabDamage = defender.getDamageAfterDefense(stabDamage);
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
             defender: defender,
@@ -82,8 +92,12 @@ export const TalentBehaviors = {
             attacker: attacker,
         });
         defender.takeDamage(calculatedStabDamage, client);
+
+        const selfCost = Math.min(attacker.hp * STAB_SELF_COST_FRACTION, attacker.hp - 1);
+        if (selfCost > 0) attacker.takeDamage(selfCost, client);
+
         track(talent, 1, calculatedStabDamage);
-        client.send('combat_log', { text: `${attacker.name} stabs ${defender.name} for ${fmt(calculatedStabDamage)} damage!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: calculatedStabDamage } as CombatLogMessage);
+        client.send('combat_log', { text: `${attacker.name} stabs ${defender.name} for ${fmt(calculatedStabDamage)} damage, paying ${fmt(selfCost)} hp in blood!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: calculatedStabDamage } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.STAB,

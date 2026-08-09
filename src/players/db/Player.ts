@@ -13,6 +13,7 @@ import {ensureShieldSkill, reconcileItemSkill} from "../../items/skills/itemSkil
 import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 import {recalculatePlayerStats} from "../../common/statsUtils";
+import {migrateLegacyItem, migrateLegacyTalent} from "../../common/reworkMigrations";
 
 
 const PlayerSchema = new Schema({
@@ -112,6 +113,9 @@ function buildItemSchema(itemFromDb: any): Item {
     // this is what makes an already-granted skill (equipped, inventory, locked shop) pick up a
     // rebalance/rename instead of keeping whatever text/triggers were live when it was granted.
     reconcileItemSkill(item);
+    // Cooldown-reduction rework (Season 24): converts an old embedded Wand of Fire/Flowering
+    // Staff/Magic Ring copy to its new active-skill shape — see common/reworkMigrations.ts.
+    migrateLegacyItem(item);
 
     return item;
 }
@@ -137,6 +141,10 @@ function getPlayerSchemaObject(playerFromDb: any): Player {
         const talentSchemaObject = new Talent().assign(talentPrimitives);
         talentSchemaObject.affectedStats = affectedStatsFromRaw(tAs);
         talentSchemaObject.affectedEnemyStats = affectedStatsFromRaw(tAes);
+        // Cooldown-reduction rework (Season 24): converts an old embedded Stab copy (and
+        // backfills cooldownReduction on any other pre-rework active talent) — see
+        // common/reworkMigrations.ts.
+        migrateLegacyTalent(talentSchemaObject);
         newPlayerTalentArraySchema.push(talentSchemaObject);
     });
     newPlayerSchemaObject.talents = newPlayerTalentArraySchema;
@@ -200,6 +208,7 @@ function getNewPlayer(playerId: number,
             dodgeRate: avatarUrl === PlayerAvatar.THIEF ? 10 : 0,
             income: avatarUrl === PlayerAvatar.MERCHANT ? 7 : 4,
             hpRegen: 0,
+            cooldownReduction: 0,
         }
     });
 }
@@ -343,6 +352,7 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         gameVersion: player.gameVersion,
         income: player.income,
         hpRegen: player.hpRegen,
+        cooldownReduction: player.cooldownReduction,
         dodgeRate: player.dodgeRate,
         refreshShopCost: player.refreshShopCost,
         maxHp: player.maxHp,
@@ -391,6 +401,7 @@ export function snapshotPlayer(player: Player): Record<string, any> {
         attackSpeed: player.attackSpeed,
         dodgeRate: player.dodgeRate,
         hpRegen: player.hpRegen,
+        cooldownReduction: player.cooldownReduction,
         income: player.income,
         refreshShopCost: player.refreshShopCost,
         gameVersion: player.gameVersion,

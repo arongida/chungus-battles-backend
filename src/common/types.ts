@@ -21,6 +21,7 @@ export interface IStats {
 	attackSpeed: number;
 	income: number;
 	hpRegen: number;
+	cooldownReduction: number;
 	maxHp?: number;
 	baseAttackSpeed?: number;
 }

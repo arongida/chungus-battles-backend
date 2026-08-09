@@ -5,8 +5,11 @@ import { CombatLogMessage, RewardGainMessage, fmt } from '../../common/MessageTy
 import { grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT } from '../../commands/ShopUpgradeUtils';
 import {
     chungiHpDamageFraction,
-    FLOWERING_STAFF_INVULN_COOLDOWN_MS,
-    floweringStaffInvulnMs,
+    floweringStaffCooldownReduction,
+    floweringStaffRegenSteal,
+    FLOWERING_STAFF_MAX_STEAL,
+    magicRingCooldownReduction,
+    magicWandCooldownReduction,
     rerollMagicRingStats,
     rollMagicRingBonus,
     secondWindHealFraction,
@@ -19,10 +22,6 @@ import {
 import { rollRandomLegendaryItemAtLevel } from './ringOfImmortality';
 import type { Item } from '../schema/ItemSchema';
 
-// Last invulnerability proc per staff instance (clock-elapsed ms). Keyed by
-// item instance so each fight's fresh state starts clean.
-const floweringStaffLastProcMs = new WeakMap<Item, number>();
-
 // Band of Vigor (27): whether this ring instance has already procced Second Wind in the
 // current fight. Keyed by item instance and cleared on FIGHT_START, same pattern as the
 // Flowering Staff's proc-cooldown map above.
@@ -33,9 +32,15 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     // invulnerability was replaced by the shield-skill pool (ItemSkillType.AEGIS et al., see
     // ItemSkillBehaviors.ts and itemSkillBalance.ts's SHIELD_SKILLS), granted per-shield via
     // ensureShieldSkill instead of a blanket type behavior.
-    // Flowering Staff (8) — AURA: takes both hands. ON_ATTACK: brief invulnerability.
-    8: ({ attacker, trigger, clock, client, item }) => {
-        if (!attacker) return;
+    // Flowering Staff (8) — 2-handed caster staff, no attack of its own (wielder fights with
+    // Fists — see FightRoom.startWeaponAttackTimers, which skips baseAttackSpeed <= 0 weapons).
+    // AURA: takes both hands (as before) and stamps its rarity-scaled cooldownReduction.
+    // ACTIVE: steals hpRegen from the enemy every activation (shortened by cooldownReduction like
+    // any other active skill) — wielder gains it, enemy loses it (can go negative and bleed, see
+    // FightRoom.startRegenTimer). Uses the runtime-only skill stat channels (ItemSchema.ts) so the
+    // steal total resets cleanly every fight with no separate per-fight state to track.
+    8: ({ attacker, defender, trigger, item, client }) => {
+        if (!attacker || !item) return;
         if (trigger === TriggerType.AURA) {
             let staffSlot: EquipSlot | null = null;
             attacker.equippedItems.forEach((equippedItem, slot) => {
@@ -47,19 +52,24 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
             const otherSlot = TWO_HANDED_PAIRED_SLOT[staffSlot];
             const otherItem = attacker.equippedItems.get(otherSlot);
             if (otherItem) attacker.setItemUnequipped(otherItem, otherSlot);
-        } else if (trigger === TriggerType.ON_ATTACK) {
-            if (!clock || !item) return;
-            // Internal cooldown: windows must never overlap, or stacked attack
-            // speed would chain shields into permanent invulnerability.
-            const lastProcMs = floweringStaffLastProcMs.get(item);
-            if (lastProcMs !== undefined && clock.elapsedTime - lastProcMs < FLOWERING_STAFF_INVULN_COOLDOWN_MS) return;
-            floweringStaffLastProcMs.set(item, clock.elapsedTime);
-            const durationMs = floweringStaffInvulnMs(item.rarity);
-            attacker.setInvincible(clock, durationMs, client);
+            item.affectedStats.cooldownReduction = floweringStaffCooldownReduction(item.rarity);
+            // Re-set after mutating affectedStats — see CLAUDE.md's MapSchema change-detection
+            // gotcha, same idiom as Magic Ring/Gambler's Dice below.
+            attacker.equippedItems.forEach((equipped, slot) => {
+                if (equipped === item) attacker.equippedItems.set(slot, equipped);
+            });
+        } else if (trigger === TriggerType.ACTIVE) {
+            if (!defender) return;
+            const alreadyStolen = item.skillAffectedStats.hpRegen;
+            const steal = Math.min(floweringStaffRegenSteal(item.rarity), FLOWERING_STAFF_MAX_STEAL - alreadyStolen);
+            if (steal <= 0) return;
+            item.skillAffectedStats.hpRegen += steal;
+            item.skillAffectedEnemyStats.hpRegen -= steal;
             client?.send('combat_log', {
-                text: `${attacker.name}'s ${item.name} blooms: ${(durationMs / 1000).toFixed(1)}s invulnerability!`,
+                text: `${attacker.name}'s ${item.name} drains ${steal.toFixed(2)} hp regen from ${defender.name}!`,
                 kind: 'item',
                 attackerId: attacker.playerId,
+                defenderId: defender.playerId,
                 itemId: item.itemId,
             } as CombatLogMessage);
         }
@@ -71,10 +81,29 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         item.baseMaxDamage = Math.round(attacker.maxHp * chungiHpDamageFraction(item.rarity));
     },
 
-    // Wand of Fire (14) — ON_ATTACK: applies burn stacks (flat DoT, expires fast).
-    14: ({ defender, client, clock, item }) => {
-        if (!defender || !client || !clock || !item) return;
-        defender.addBurnStacks(clock, client, wandOfFireBurnStacks(item.rarity));
+    // Wand of Fire (14) — no attack of its own (baseAttackSpeed 0; can be paired with a real
+    // weapon in the other hand, unlike the 2-handed Flowering Staff). AURA: stamps its
+    // rarity-scaled cooldownReduction. ACTIVE: applies burn stacks (flat DoT, expires fast).
+    14: ({ attacker, defender, trigger, client, clock, item }) => {
+        if (!attacker || !item) return;
+        if (trigger === TriggerType.AURA) {
+            item.affectedStats.cooldownReduction = magicWandCooldownReduction(item.rarity);
+            // Re-set after mutating affectedStats — see CLAUDE.md's MapSchema change-detection
+            // gotcha, same idiom as Magic Ring/Gambler's Dice below.
+            attacker.equippedItems.forEach((equipped, slot) => {
+                if (equipped === item) attacker.equippedItems.set(slot, equipped);
+            });
+        } else if (trigger === TriggerType.ACTIVE) {
+            if (!defender || !client || !clock) return;
+            defender.addBurnStacks(clock, client, wandOfFireBurnStacks(item.rarity));
+            client?.send('combat_log', {
+                text: `${attacker.name}'s ${item.name} ignites ${defender.name}!`,
+                kind: 'item',
+                attackerId: attacker.playerId,
+                defenderId: defender.playerId,
+                itemId: item.itemId,
+            } as CombatLogMessage);
+        }
     },
 
     // Haste of Dagger (19) — ON_DODGE: instantly counter-attack with this dagger.
@@ -128,13 +157,16 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     },
 
     // Magic Ring (702) — not a weapon, doesn't attack. Starts Common with one
-    // rolled stat that permanently stacks once per second (AURA) while in a
-    // fight. LEVEL_UP bumps its rarity and rolls another stat into the mix,
-    // until all 5 are active at Mythic (level 5). Rolled stats live directly
-    // in affectedStats (no separate tracking needed) — see uniqueItemBalance.ts.
+    // rolled stat. LEVEL_UP bumps its rarity and rolls another stat into the mix, until all 6
+    // (including cooldownReduction) are relevant at Mythic (level 5). Rolled stats live directly
+    // in affectedStats (no separate tracking needed) — see uniqueItemBalance.ts. AURA stamps a
+    // flat cooldownReduction (kept OUT of the stacking pool — see MAGIC_RING_STAT_POOL comment —
+    // so it can't compound with itself). ACTIVE stacks one rolled stat permanently, once per
+    // activation (shortened by cooldownReduction like any other active skill, including the CDR
+    // this same ring grants — a real snowball, but bounded by the hyperbolic CDR formula).
     // SHOP_START — while it sits unequipped in inventory, rerolls a fresh set
     // of stats for its current rarity, losing all stacking bonuses.
-    702: ({ attacker, defender, item, trigger, client }) => {
+    702: ({ attacker, item, trigger, client }) => {
         if (!attacker || !item) return;
 
         if (trigger === TriggerType.SHOP_START) {
@@ -157,10 +189,12 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
                 client?.send('draft_log', `Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance from ${item.name} being Mythic!`);
                 client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
             }
-        } else {
-            // AURA fires in the draft/shop too — only stack while actually fighting.
-            if (!defender) return;
+        } else if (trigger === TriggerType.AURA) {
+            item.affectedStats.cooldownReduction = magicRingCooldownReduction(item.rarity);
+        } else if (trigger === TriggerType.ACTIVE) {
             stackMagicRingBonuses(item);
+        } else {
+            return;
         }
 
         attacker.equippedItems.forEach((equipped, slot) => {

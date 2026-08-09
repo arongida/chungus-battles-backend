@@ -251,6 +251,12 @@ export class Player extends Schema implements IStats {
     // alongside refreshShopCostMultiplier (see DraftAuraTriggerCommand) so it can't survive
     // dropping/replacing the talent.
     @type('boolean') freeRerolls: boolean = false;
+    // Cooldown reduction: shortens active-skill intervals (see common/cooldown.ts and
+    // commands/triggers/ActiveTriggerCommand.ts). Recomputed from scratch every tick by
+    // statsUtils.recalculatePlayerStats, same as every other synced derived stat. Declared here
+    // (end of the @type block) so existing field indices stay stable — see the comment at the
+    // top of this @type block.
+    @type('number') cooldownReduction: number = 0;
 
     private _poisonStack: number = 0;
 

@@ -9,8 +9,11 @@ import {
   BURN_DAMAGE_PER_STACK,
   BURN_DURATION_MS,
   chungiHpDamageFraction,
-  FLOWERING_STAFF_INVULN_COOLDOWN_MS,
-  floweringStaffInvulnMs,
+  floweringStaffCooldownReduction,
+  floweringStaffRegenSteal,
+  FLOWERING_STAFF_MAX_STEAL,
+  magicRingCooldownReduction,
+  magicWandCooldownReduction,
   NON_UPGRADEABLE_ITEM_IDS,
   secondWindHealFraction,
   secondWindInvulnMs,
@@ -24,16 +27,20 @@ import {
 // `rarity <= 1` guard means it would never fire; the DB-authored description is always accurate.
 const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Player) => string>> = {
   7: (item) => `Max damage equals ${Math.round(chungiHpDamageFraction(item.rarity) * 100)}% of your max HP.`,
-  8: (item) => `2-handed. Attacks shield you for ${(floweringStaffInvulnMs(item.rarity) / 1000).toFixed(2)}s (once every ${FLOWERING_STAFF_INVULN_COOLDOWN_MS / 1000}s).`,
+  8: (item) => {
+    const steal = floweringStaffRegenSteal(item.rarity).toFixed(2);
+    return `2-handed — Every 2s, steals ${steal} hp regen from the enemy (up to ${FLOWERING_STAFF_MAX_STEAL} total).`;
+  },
   14: (item) => {
     const stacks = wandOfFireBurnStacks(item.rarity);
-    return `Each hit applies ${stacks} burn stack${stacks > 1 ? 's' : ''} (${BURN_DAMAGE_PER_STACK} damage per stack per second, for ${BURN_DURATION_MS / 1000}s).`;
+    return `Every 2s, ignites the enemy with ${stacks} burn stack${stacks > 1 ? 's' : ''} (${BURN_DAMAGE_PER_STACK} damage per stack per second, for ${BURN_DURATION_MS / 1000}s).`;
   },
+  702: (item) => `Every 1s during battle: Gains bonus stats. Evolves on level up.`,
   18: (item) => {
     const stacks = item.rarity;
     return `Applies ${stacks} poison stack${stacks > 1 ? 's' : ''} on hit. Each stack deals 1% max HP over 5s and cuts healing by 1%.`;
   },
-  59: (item) => `Heals for ${item.rarity * 5 + 6}% of damage dealt on hit.`,
+  59: (item) => `Heals for ${item.rarity * 10 + 10}% of damage dealt on hit.`,
   703: (item) => {
     const multiplier = item.rarity / 2;
     return multiplier === 1

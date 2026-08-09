@@ -41,7 +41,7 @@ const MAGIC_RING_STAT_POOL: RollableStat[] = [
 /** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
 const MAGIC_RING_STACK_FRACTION = 0.06;
 
-export const MAGIC_RING_DESCRIPTION = 'Gains bonus stats every second in combat and evolves on level up. Unequip for one fight and stats will be rerolled.';
+export const MAGIC_RING_DESCRIPTION = 'Every 1s during battle: Gains bonus stats. Evolves on level up.';
 
 /**
  * A ring stat's bonus above its neutral baseline. Every stat but attackSpeed
@@ -148,19 +148,28 @@ export const TWO_HANDED_PAIRED_SLOT: Record<EquipSlot, EquipSlot> = {
  */
 export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Flask, Ring of Immortality
 
-/** Flowering Staff (8): invulnerability window granted after each attack. */
-export function floweringStaffInvulnMs(rarity: number): number {
-    return 150 + 60 * rarity;
-}
+/**
+ * Wand of Fire (14) / Flowering Staff (8) / Magic Ring (702): cooldownReduction granted per
+ * rarity step (Common=1 .. Mythic=5). Flat authored values, not part of any rollable pool — see
+ * common/cooldown.ts for how the rating converts into an actual activation-interval speedup.
+ */
+export const magicWandCooldownReduction = (rarity: number) => 30 + 15 * (rarity - 1);       // 30..90
+export const floweringStaffCooldownReduction = (rarity: number) => 40 + 20 * (rarity - 1);  // 40..120
+export const magicRingCooldownReduction = (rarity: number) => 20 + 10 * (rarity - 1);       // 20..60
 
 /**
- * Flowering Staff (8): minimum time between invulnerability procs. Must stay
- * above the longest possible window so shields can never chain into
- * permanent invulnerability, no matter how much attack speed is stacked.
+ * Flowering Staff (8): hpRegen stolen from the enemy per ACTIVE proc (once every
+ * 1/activationRate seconds, shortened by cooldownReduction like any other active skill) —
+ * granted to the wielder, subtracted from the enemy (can push the enemy's regen negative).
  */
-export const FLOWERING_STAFF_INVULN_COOLDOWN_MS = 1000;
+export function floweringStaffRegenSteal(rarity: number): number {
+    return 0.4 + 0.2 * rarity;
+}
 
-/** Wand of Fire (14): burn stacks applied per hit. */
+/** Flowering Staff (8): per-fight cap on the total hpRegen swing stolen (both sides). */
+export const FLOWERING_STAFF_MAX_STEAL = 25;
+
+/** Wand of Fire (14): burn stacks applied per ACTIVE proc. */
 export function wandOfFireBurnStacks(rarity: number): number {
     return rarity;
 }

@@ -19,7 +19,7 @@ export interface SeasonInfo {
 export const SEASONS: SeasonInfo[] = [
   {
     number: 23,
-    name: 'Placeholer',
+    name: 'Cooldown',
     changes: [
       'Gold Genie fixed: the free merchant item is now once per shop phase, not once per reroll',
       'Black Market Contact fixed: the free lucky-find item is now once per shop phase, not once per reroll',
@@ -31,7 +31,13 @@ export const SEASONS: SeasonInfo[] = [
       'Ring of Vigor: increased hp and hp regen',
       'Mercenary: decreased dmg to gold scaling by 1',
       'Just a scratch: added a 1 sec cooldown and reduced chance by 5%',
-      'Martial Artist reworked: you can now equip weapons in all four slots'
+      'Martial Artist reworked: you can now equip weapons in all four slots',
+      'New stat: Cooldown Reduction — shortens active-skill intervals (talents and items that activate periodically). Not rollable on normal gear; granted only by active talents and a few unique items',
+      'Every active talent now grants cooldown reduction (10-25 rating by tier)',
+      'Stab reworked into an active talent: stabs on a cooldown for 1 (+missing HP%) damage, paying a small amount of your own current HP each time',
+      'Wand of Fire reworked: no attack of its own, ignites the enemy on a cooldown, grants cooldown reduction',
+      'Flowering Staff reworked: no attack of its own, steals hp regen from the enemy on a cooldown (can push the enemy into negative regen), grants cooldown reduction and more defensive stats',
+      'Magic Ring reworked: its stat growth now fires on the same active-skill cooldown (faster with cooldown reduction) instead of a fixed once-per-second aura, and it grants cooldown reduction',
     ]
   },
   {

@@ -9,4 +9,5 @@ export const StatsSchema = new Schema({
     dodgeRate: Number,
     income: Number,
     hpRegen: Number,
+    cooldownReduction: Number,
 });

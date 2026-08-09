@@ -1,15 +1,45 @@
 import {Command} from '@colyseus/command';
 import {Talent} from '../../talents/schema/TalentSchema';
+import {Item} from '../../items/schema/ItemSchema';
 import {TalentBehaviorContext} from '../../talents/behavior/TalentBehaviorContext';
 import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
 import {Player} from '../../players/schema/PlayerSchema';
 import {BehaviorContext} from '../../common/BehaviorContext';
+import {applyCooldownReduction} from '../../common/cooldown';
 
 export class ActiveTriggerCommand extends Command<FightRoom> {
     execute() {
         this.startActiveEffectsLoop(this.state.player, this.state.enemy);
         this.startActiveEffectsLoop(this.state.enemy, this.state.player);
+    }
+
+    /**
+     * Schedules one self-rescheduling timer for a single active skill. Unlike a plain
+     * `clock.setInterval` (fixed for the whole fight), this clears and re-creates itself after
+     * every firing — same idiom as FightRoom.startSingleWeaponTimer for attack speed — so a
+     * live change to `player.cooldownReduction` (Flowering Staff/Magic Ring/Wand of Fire
+     * stacking mid-fight) speeds up the NEXT activation instead of only ones picked after a
+     * fresh fight start.
+     */
+    private scheduleActive(player: Player, baseIntervalMs: number, run: () => void) {
+        // Guard against a mis-seeded DB doc (activationRate 0/undefined) creating an
+        // Infinity/NaN-interval timer.
+        if (!baseIntervalMs || !isFinite(baseIntervalMs)) return;
+
+        const start = () => {
+            const timer = this.clock.setInterval(() => {
+                try {
+                    run();
+                } catch (e) {
+                    console.error(e);
+                }
+                timer.clear();
+                start();
+            }, applyCooldownReduction(baseIntervalMs, player.cooldownReduction));
+            this.state.skillsTimers.push(timer);
+        };
+        start();
     }
 
     startActiveEffectsLoop(player: Player, enemy: Player) {
@@ -26,16 +56,10 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
             trigger: TriggerType.ACTIVE
         };
 
-        activeTalents.forEach((talent) => {
-            this.state.skillsTimers.push(
-                this.clock.setInterval(() => {
-                    try {
-                        talent.executeBehavior(activeEffectBehaviorContext);
-                    } catch (e) {
-                        console.error(e);
-                    }
-                }, (1 / talent.activationRate) * 1000)
-            );
+        activeTalents.forEach((talent: Talent) => {
+            this.scheduleActive(player, (1 / talent.activationRate) * 1000, () => {
+                talent.executeBehavior(activeEffectBehaviorContext);
+            });
         });
 
         const activeItemContext: BehaviorContext = {
@@ -47,17 +71,11 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
             trigger: TriggerType.ACTIVE
         };
 
-        player.equippedItems.forEach((item) => {
+        player.equippedItems.forEach((item: Item) => {
             if (item.triggerTypes?.includes(TriggerType.ACTIVE)) {
-                this.state.skillsTimers.push(
-                    this.clock.setInterval(() => {
-                        try {
-                            item.executeBehavior(activeItemContext);
-                        } catch (e) {
-                            console.error(e);
-                        }
-                    }, (1 / (item as any).activationRate) * 1000)
-                );
+                this.scheduleActive(player, (1 / item.activationRate) * 1000, () => {
+                    item.executeBehavior(activeItemContext);
+                });
             }
         });
     }
