@@ -138,11 +138,11 @@ const WARRIOR_WEAPON_RANGES: Record<number, { minDamage: StatRange; maxDamageSpr
  * ROGUE — fast, light hits.
  */
 const ROGUE_WEAPON_RANGES: Record<number, { minDamage: StatRange; maxDamageSpread: StatRange; attackSpeed: StatRange }> = {
-    1: { minDamage: { min: 0, max: 1 }, maxDamageSpread: { min: 1, max: 1 },  attackSpeed: { min: 0.59, max: 0.68, isFloat: true } },
-    2: { minDamage: { min: 1, max: 2 }, maxDamageSpread: { min: 1, max: 2 },  attackSpeed: { min: 0.68, max: 0.77, isFloat: true } },
-    3: { minDamage: { min: 1, max: 3 }, maxDamageSpread: { min: 2, max: 3 },  attackSpeed: { min: 0.77, max: 0.81, isFloat: true } },
-    4: { minDamage: { min: 2, max: 4 }, maxDamageSpread: { min: 2, max: 4 },  attackSpeed: { min: 0.81, max: 0.90, isFloat: true } },
-    5: { minDamage: { min: 3, max: 5 }, maxDamageSpread: { min: 3, max: 5 },  attackSpeed: { min: 0.90, max: 1.08, isFloat: true } },
+    1: { minDamage: { min: 0, max: 1 }, maxDamageSpread: { min: 1, max: 1 },  attackSpeed: { min: 0.65, max: 0.78, isFloat: true } },
+    2: { minDamage: { min: 1, max: 2 }, maxDamageSpread: { min: 1, max: 2 },  attackSpeed: { min: 0.78, max: 0.87, isFloat: true } },
+    3: { minDamage: { min: 1, max: 3 }, maxDamageSpread: { min: 2, max: 3 },  attackSpeed: { min: 0.87, max: 0.91, isFloat: true } },
+    4: { minDamage: { min: 2, max: 4 }, maxDamageSpread: { min: 2, max: 4 },  attackSpeed: { min: 0.91, max: 1.01, isFloat: true } },
+    5: { minDamage: { min: 3, max: 5 }, maxDamageSpread: { min: 3, max: 5 },  attackSpeed: { min: 1.00, max: 1.12, isFloat: true } },
 };
 
 /**
