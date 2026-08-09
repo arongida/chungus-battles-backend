@@ -3,6 +3,7 @@
 // (ShopUpgradeUtils.ts). Keep formulas here so balance changes touch one file.
 
 import { RollableStat, STAT_RANGES } from '../stats/itemStatPool';
+import { EquipSlot } from '../types/ItemTypes';
 import type { Item } from '../schema/ItemSchema';
 
 /** Chungi (7): fraction of the wielder's max HP used as max damage. */
@@ -124,6 +125,19 @@ export function rerollMagicRingStats(item: Item): void {
  * damage at 100% instead of the usual 50%.
  */
 export const TWO_HANDED_WEAPON_IDS = new Set([4]); // Zwei-hander
+
+/**
+ * The slot a "takes both hands"-style item (Zwei-Hander id 4, Flowering Staff id 8 — see
+ * ItemBehaviors.ts) blocks while equipped. mainHand/offHand is the original pairing; a Martial
+ * Artist can now also place these in armor/helmet (TalentBehaviors.ts), so armor/helmet form a
+ * second pair on the same principle — occupying one slot of a pair blocks its partner.
+ */
+export const TWO_HANDED_PAIRED_SLOT: Record<EquipSlot, EquipSlot> = {
+    [EquipSlot.MAIN_HAND]: EquipSlot.OFF_HAND,
+    [EquipSlot.OFF_HAND]: EquipSlot.MAIN_HAND,
+    [EquipSlot.ARMOR]: EquipSlot.HELMET,
+    [EquipSlot.HELMET]: EquipSlot.ARMOR,
+};
 
 /**
  * Items excluded from the shop's owned-item rarity-upgrade path

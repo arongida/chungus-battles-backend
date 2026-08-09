@@ -30,7 +30,8 @@ export const SEASONS: SeasonInfo[] = [
       'Chungi: slightly reduced max hp damage scaling',
       'Ring of Vigor: increased hp and hp regen',
       'Mercenary: decreased dmg to gold scaling by 1',
-      'Just a scratch: added a 1 sec cooldown and reduced chance by 5%'
+      'Just a scratch: added a 1 sec cooldown and reduced chance by 5%',
+      'Martial Artist reworked: you can now equip weapons in all four slots'
     ]
   },
   {

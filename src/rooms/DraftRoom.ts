@@ -633,6 +633,8 @@ export class DraftRoom extends Room {
         }
         const item = this.state.player.inventory.find((item) => item.itemId === itemId);
         if (!item) return;
+        const equipOptions = Array.from(item.equipOptions as any as Iterable<string>);
+        if (!equipOptions.includes(slot as string)) return;
         this.state.player.setItemEquipped(item, slot as EquipSlot);
     }
 

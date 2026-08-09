@@ -15,7 +15,7 @@ import { OnDamageTriggerCommand } from '../commands/triggers/OnDamageTriggerComm
 import { OnAttackedTriggerCommand } from '../commands/triggers/OnAttackedTriggerCommand';
 import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerCommand';
 import { TalentType } from '../talents/types/TalentTypes';
-import { ensureMartialFists } from '../talents/behavior/TalentBehaviors';
+import { migrateLegacyMartialFists } from '../talents/behavior/TalentBehaviors';
 import { cloneItem, getItemById, getQuestItems } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { applyRarityUpgrade, getEquippedUpgradeableItems, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, totalRemainingRaritySteps } from '../commands/ShopUpgradeUtils';
@@ -438,10 +438,11 @@ export class FightRoom extends Room {
     startWeaponAttackTimers(player: Player, enemy: Player) {
         player.clearAllAttackTimers();
 
-        // Opponent snapshots saved before the Martial Artist rework have no fists in their hand
-        // slots; timers are only created once, here, so prime the fists before iterating.
+        // Opponent snapshots saved before the Martial Artist rework may still have synthetic
+        // fists occupying both hands; timers are only created once, here, so migrate them out
+        // before iterating.
         if (player.talents.some((t) => t.talentId === TalentType.MARTIAL_ARTIST)) {
-            ensureMartialFists(player);
+            migrateLegacyMartialFists(player);
         }
 
         player.equippedItems.forEach((item, slot) => {

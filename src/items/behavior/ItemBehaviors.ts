@@ -13,6 +13,7 @@ import {
     secondWindInvulnMs,
     SECOND_WIND_THRESHOLD,
     stackMagicRingBonuses,
+    TWO_HANDED_PAIRED_SLOT,
     wandOfFireBurnStacks,
 } from './uniqueItemBalance';
 import { rollRandomLegendaryItemAtLevel } from './ringOfImmortality';
@@ -41,7 +42,9 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
                 if (equippedItem.itemId === 8) staffSlot = slot as EquipSlot;
             });
             if (!staffSlot) return;
-            const otherSlot = staffSlot === EquipSlot.MAIN_HAND ? EquipSlot.OFF_HAND : EquipSlot.MAIN_HAND;
+            // Takes both slots of its pair — mainHand/offHand as always, or armor/helmet for a
+            // Martial Artist who equipped it there instead (TalentBehaviors.ts).
+            const otherSlot = TWO_HANDED_PAIRED_SLOT[staffSlot];
             const otherItem = attacker.equippedItems.get(otherSlot);
             if (otherItem) attacker.setItemUnequipped(otherItem, otherSlot);
         } else if (trigger === TriggerType.ON_ATTACK) {
@@ -101,7 +104,9 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
             if (equippedItem.itemId === 4) zweiSlot = slot as EquipSlot;
         });
         if (!zweiSlot) return;
-        const otherSlot = zweiSlot === EquipSlot.MAIN_HAND ? EquipSlot.OFF_HAND : EquipSlot.MAIN_HAND;
+        // Takes both slots of its pair — mainHand/offHand as always, or armor/helmet for a
+        // Martial Artist who equipped it there instead (TalentBehaviors.ts).
+        const otherSlot = TWO_HANDED_PAIRED_SLOT[zweiSlot];
         const otherItem = attacker.equippedItems.get(otherSlot);
         if (otherItem) attacker.setItemUnequipped(otherItem, otherSlot);
     },

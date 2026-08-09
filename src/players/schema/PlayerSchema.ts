@@ -431,8 +431,9 @@ export class Player extends Schema implements IStats {
 
     /** Auto-equip a freshly acquired piece of gear into the first EMPTY valid slot.
      *  Skips potions (the 'drink' pseudo-slot), and never displaces an
-     *  already-equipped item. Returns true if it was equipped. */
-    private tryAutoEquipIntoEmptySlot(item: Item): boolean {
+     *  already-equipped item. Returns true if it was equipped. Public so talent behaviors that
+     *  grant items outside the normal buy flow (e.g. Martial Artist's free weapon) can reuse it. */
+    tryAutoEquipIntoEmptySlot(item: Item): boolean {
         if (!item.equipOptions) return false;
         for (const slot of item.equipOptions) {
             if (slot === 'drink') continue;
