@@ -32,9 +32,9 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     // invulnerability was replaced by the shield-skill pool (ItemSkillType.AEGIS et al., see
     // ItemSkillBehaviors.ts and itemSkillBalance.ts's SHIELD_SKILLS), granted per-shield via
     // ensureShieldSkill instead of a blanket type behavior.
-    // Flowering Staff (8) — 2-handed caster staff, no attack of its own (wielder fights with
-    // Fists — see FightRoom.startWeaponAttackTimers, which skips baseAttackSpeed <= 0 weapons).
-    // AURA: takes both hands (as before) and stamps its rarity-scaled cooldownReduction.
+    // Flowering Staff (8) — 2-handed caster staff, attacks very slowly (low DB-authored
+    // baseAttackSpeed) rather than not at all. AURA: takes both hands (as before) and stamps its
+    // rarity-scaled cooldownReduction.
     // ACTIVE: steals hpRegen from the enemy every activation (shortened by cooldownReduction like
     // any other active skill) — wielder gains it, enemy loses it (can go negative and bleed, see
     // FightRoom.startRegenTimer). Uses the runtime-only skill stat channels (ItemSchema.ts) so the
@@ -81,9 +81,9 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         item.baseMaxDamage = Math.round(attacker.maxHp * chungiHpDamageFraction(item.rarity));
     },
 
-    // Wand of Fire (14) — no attack of its own (baseAttackSpeed 0; can be paired with a real
-    // weapon in the other hand, unlike the 2-handed Flowering Staff). AURA: stamps its
-    // rarity-scaled cooldownReduction. ACTIVE: applies burn stacks (flat DoT, expires fast).
+    // Wand of Fire (14) — attacks very slowly (low DB-authored baseAttackSpeed; can be paired
+    // with a real weapon in the other hand, unlike the 2-handed Flowering Staff). AURA: stamps
+    // its rarity-scaled cooldownReduction. ACTIVE: applies burn stacks (flat DoT, expires fast).
     14: ({ attacker, defender, trigger, client, clock, item }) => {
         if (!attacker || !item) return;
         if (trigger === TriggerType.AURA) {

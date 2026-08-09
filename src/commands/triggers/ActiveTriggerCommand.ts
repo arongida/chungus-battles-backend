@@ -71,10 +71,19 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
             trigger: TriggerType.ACTIVE
         };
 
-        player.equippedItems.forEach((item: Item) => {
+        player.equippedItems.forEach((item: Item, slot: string) => {
             if (item.triggerTypes?.includes(TriggerType.ACTIVE)) {
                 this.scheduleActive(player, (1 / item.activationRate) * 1000, () => {
                     item.executeBehavior(activeItemContext);
+                    // Flashes the equip-slot icon (see triggerUtils.ts's triggerEquippedItems,
+                    // whose 'trigger_item' send this mirrors) — every other trigger command routes
+                    // items through that helper, but ACTIVE needs its own per-item reschedule loop
+                    // above, so it isn't wired through there and has to send this itself.
+                    this.state.playerClient.send('trigger_item', {
+                        playerId: player.playerId,
+                        itemId: item.itemId,
+                        slot,
+                    });
                 });
             }
         });

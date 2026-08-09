@@ -46,12 +46,10 @@ const MAGIC_RING_ITEM_ID = 702;
 export function migrateLegacyItem(item: Item): void {
     if (item.itemId === FLOWERING_STAFF_ITEM_ID || item.itemId === WAND_OF_FIRE_ITEM_ID) {
         if (!item.triggerTypes.includes(TriggerType.ACTIVE)) item.triggerTypes.push(TriggerType.ACTIVE);
-        // Pre-rework copies may carry a nonzero base damage/speed baked in directly (from
-        // upgrades merged before the rework) — the item no longer attacks, so always zero these
-        // regardless of how they got here. Idempotent for already-migrated copies.
-        item.baseAttackSpeed = 0;
-        item.baseMinDamage = 0;
-        item.baseMaxDamage = 0;
+        // baseAttackSpeed/baseMinDamage/baseMaxDamage are intentionally NOT touched here — both
+        // items attack (very slowly; see their DB-authored baseAttackSpeed) rather than having no
+        // attack at all. Forcing them to 0 on every load was a bug: it clobbered the DB-authored
+        // values right back to 0 on the very next player load.
         if (!item.activationRate) item.activationRate = 0.5;
         if (!item.affectedStats.cooldownReduction) {
             item.affectedStats.cooldownReduction = item.itemId === FLOWERING_STAFF_ITEM_ID
