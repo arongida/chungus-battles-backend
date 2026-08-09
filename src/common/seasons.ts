@@ -38,6 +38,7 @@ export const SEASONS: SeasonInfo[] = [
       'Wand of Fire reworked: no attack of its own, ignites the enemy on a cooldown, grants cooldown reduction',
       'Flowering Staff reworked: no attack of its own, steals hp regen from the enemy on a cooldown (can push the enemy into negative regen), grants cooldown reduction and more defensive stats',
       'Magic Ring reworked: its stat growth now fires on the same active-skill cooldown (faster with cooldown reduction) instead of a fixed once-per-second aura, and it grants cooldown reduction',
+      'Rogue weapons: increased base attack speed by ~10%' 
     ]
   },
   {
