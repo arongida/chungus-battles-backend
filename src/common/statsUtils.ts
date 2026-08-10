@@ -1,5 +1,6 @@
 import {Player} from '../players/schema/PlayerSchema';
 import {AffectedStats} from './schema/AffectedStatsSchema';
+import {POISON_HEALING_EFFECTIVENESS} from './poisonBalance';
 
 export interface StatsSnapshot {
     strength: number;
@@ -115,7 +116,9 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     // drives FightRoom.startRegenTimer during the player's next fight with no separate field.
     player.hpRegen += player.pendingRegenBuff || 0;
     player.hp = player.maxHp - damageTaken;
-    player.healingEffectiveness = Math.max(0, 1 - player.poisonStack * 0.01);
+    // Flat 50% cut while poisoned at all — does not scale with stack count. Stacking poison
+    // now only increases DoT damage, not the healing penalty (see poisonBalance.ts).
+    player.healingEffectiveness = player.poisonStack > 0 ? POISON_HEALING_EFFECTIVENESS : 1;
 }
 
 export function buildBaseAndItemsSnapshot(player: Player): StatsSnapshot {

@@ -1354,6 +1354,18 @@ export const TalentBehaviors = {
         attacker.luckyFindChance *= 2;
         attacker.luckyFindFreeClaim = !attacker.luckyFindClaimUsed;
     },
+
+    // Festering Wounds — AURA talent. Pure downside/payoff: no activation of its own here, it
+    // only pays a permanent max HP cost (via attackerSnapshot, same pattern as WARRIOR_4/
+    // MERCHANT_5, so it doesn't feed on its own penalty) for the right to double poison's tick
+    // rate once the enemy is stacked past the threshold — see FightRoom.checkPoison /
+    // desiredPoisonTickIntervalMs, which reads TalentType.FESTERING_WOUNDS directly off
+    // attacker.talents. Writes `=` each tick, so it self-corrects with no FIGHT_END reset needed.
+    [TalentType.FESTERING_WOUNDS]: (context: TalentBehaviorContext) => {
+        const { attacker, talent, attackerSnapshot } = context;
+        const base = attackerSnapshot ?? attacker;
+        talent.affectedStats.maxHp = -Math.ceil(base.maxHp * talent.scaling);
+    },
 }
     ;
 

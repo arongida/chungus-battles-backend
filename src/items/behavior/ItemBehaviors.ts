@@ -139,10 +139,10 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         const otherItem = attacker.equippedItems.get(otherSlot);
         if (otherItem) attacker.setItemUnequipped(otherItem, otherSlot);
     },
-    // Dagger of Poison (18) — rarity 2+: applies (rarity-1) poison stacks on hit.
+    // Dagger of Poison (18) — applies (rarity + 1) poison stacks on hit (Common 2 … Mythic 6).
     18: ({ defender, client, clock, item }) => {
         if (!defender || !client || !clock || !item) return;
-        defender.addPoisonStacks(clock, client, item.rarity);
+        defender.addPoisonStacks(clock, client, item.rarity + 1);
     },
 
     // Soulstealer's Scythe (59) — rarity 2+: heals for (rarity*5+5)% of damage dealt + 1 on hit.

@@ -359,10 +359,10 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.FIGHT_START, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.1 },
-      [ItemRarity.MYTHIC]: { ratio: 0.2 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.2 },
+      [ItemRarity.MYTHIC]: { ratio: 0.4 },
     },
-    describe: (r) => `Fight start: reduce enemy strength by ${pct(skillValues(ITEM_SKILLS[ItemSkillType.WARLORDS_ROAR], r).ratio)} of your defense.`,
+    describe: (r) => `Fight start: reduce enemy strength by ${pct(skillValues(ITEM_SKILLS[ItemSkillType.WARLORDS_ROAR], r).ratio)}`,
     status: (ctx) => {
       const { ratio } = skillValues(ITEM_SKILLS[ItemSkillType.WARLORDS_ROAR], ctx.item.rarity);
       if (ctx.inFight) {
