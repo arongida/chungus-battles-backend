@@ -1,6 +1,6 @@
 export interface ReplayEvent {
     t: number;
-    kind: 'broadcast' | 'send';
+    kind: 'broadcast' | 'send' | 'sync';
     type: string;
     payload: any;
 }
@@ -41,7 +41,7 @@ export class ReplayRecorder {
         return this.finalized;
     }
 
-    record(kind: 'broadcast' | 'send', type: string, payload: any): void {
+    record(kind: 'broadcast' | 'send' | 'sync', type: string, payload: any): void {
         if (!this.recording) return;
         if (this.events.length >= ReplayRecorder.MAX_EVENTS) {
             this.truncated = true;

@@ -227,9 +227,9 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     }
     if (trigger !== TriggerType.FIGHT_START || !attacker || !defender) return;
     const { ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const reduction = Math.round(attacker.defense * ratio);
+    const reduction = Math.round(attacker.strength * ratio);
     if (reduction <= 0) return;
-    item.skillAffectedEnemyStats.strength = -reduction;
+    item.skillAffectedEnemyStats.strength -= reduction;
     client?.send('combat_log', {
       text: `${attacker.name}'s ${item.name} lets out a warlord's roar: ${defender.name} loses ${reduction} strength!`,
       kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, itemId: item.itemId,

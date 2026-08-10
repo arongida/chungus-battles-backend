@@ -6,6 +6,7 @@ import { delay } from '../common/utils';
 import { END_BURN_START_MS, FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
 import { Dispatcher } from '@colyseus/command';
 import { ReplayRecorder } from '../replay/ReplayRecorder';
+import { StatsSyncRecorder } from '../replay/StatsSyncRecorder';
 import { saveReplay } from '../replay/db/Replay';
 import { randomUUID } from 'crypto';
 import { ActiveTriggerCommand } from '../commands/triggers/ActiveTriggerCommand';
@@ -32,6 +33,12 @@ import { CombatLogMessage, FightSideStats, FightStatsMessage, GameWinMessage, Lo
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 import { creditDotDamage } from '../common/dotSources';
+import {
+    FESTERING_WOUNDS_INTERVAL_MULTIPLIER,
+    FESTERING_WOUNDS_STACK_THRESHOLD,
+    POISON_DAMAGE_PER_STACK_FRACTION,
+    POISON_TICK_INTERVAL_MS,
+} from '../common/poisonBalance';
 
 const ALLOWED_FIGHT_SPEEDS = [0.5, 1, 2];
 // Shared by every empowered-attack source (Unstoppable Force / WARRIOR_3, Crushing Blow item
@@ -47,6 +54,9 @@ export class FightRoom extends Room {
     // Game-time timestamps (clock.elapsedTime): replays of a sped-up/slowed-down fight
     // still play back at normal 1x pacing.
     private recorder = new ReplayRecorder(() => this.clock.elapsedTime);
+    // Periodically folds recomputed stats/skillStatus into the replay stream — see
+    // StatsSyncRecorder.ts's doc comment for why replay playback needs this at all.
+    private statsSync = new StatsSyncRecorder();
     // Stable id for the fight currently in progress — generated up front (in startBattle)
     // so it can be included in the end_battle broadcast, not just the fire-and-forget
     // replay save that happens afterward. Lets the client deep-link "Watch Replay".
@@ -355,6 +365,13 @@ export class FightRoom extends Room {
             this.dispatcher.dispatch(new UpdateStatsCommand());
         }
 
+        // Replay-only: fold this tick's recomputed stats into the replay stream (throttled/diffed
+        // internally — see StatsSyncRecorder.ts). Emitted before the DoT/end-burn checks below so
+        // a same-tick 'damage' event replays after this sync, matching server ordering.
+        if (this.state.battleStarted) {
+            this.statsSync.maybeRecord(this.recorder, this.clock.elapsedTime, this.state.player, this.state.enemy);
+        }
+
         //check for battle end
         if (this.state.battleStarted) {
             this.checkPoison(this.state.player, this.state.enemy);
@@ -381,11 +398,17 @@ export class FightRoom extends Room {
     // Stops every combat timer and runs the win/lose/draw resolution. Shared by the
     // natural HP<=0 check in update() and the forfeit_fight handler below.
     private concludeBattle() {
+        // Pin an exact final frame before battleStarted flips false below (which gates the
+        // periodic sync in update() and FightEndTriggerCommand's aura-stat resets) — otherwise
+        // the replay's last panel could be up to SYNC_INTERVAL_MS stale.
+        this.statsSync.maybeRecord(this.recorder, this.clock.elapsedTime, this.state.player, this.state.enemy, true);
         this.state.battleStarted = false;
         this.state.player.clearAllAttackTimers();
         this.state.enemy.clearAllAttackTimers();
         this.state.player.poisonTimer?.clear();
         this.state.enemy.poisonTimer?.clear();
+        this.state.player.poisonTickIntervalMs = POISON_TICK_INTERVAL_MS;
+        this.state.enemy.poisonTickIntervalMs = POISON_TICK_INTERVAL_MS;
         this.state.player.burnTimer?.clear();
         this.state.enemy.burnTimer?.clear();
         this.state.endBurnTimer?.clear();
@@ -489,27 +512,67 @@ export class FightRoom extends Room {
         }, 1000);
     }
 
+    // Festering Wounds (FESTERING_WOUNDS): once the attacker owns it and the defender is at/above
+    // the stack threshold, poison ticks twice as fast (damage/tick is unchanged, so this doubles
+    // poison DPS). Read fresh every time a timer is (re)created — never cached — so stacks
+    // crossing the threshold mid-fight take effect on the very next re-rate.
+    private desiredPoisonTickIntervalMs(attacker: Player, defender: Player): number {
+        const hasFesteringWounds = attacker.talents.some((t) => t.talentId === TalentType.FESTERING_WOUNDS);
+        return hasFesteringWounds && defender.poisonStack >= FESTERING_WOUNDS_STACK_THRESHOLD
+            ? POISON_TICK_INTERVAL_MS * FESTERING_WOUNDS_INTERVAL_MULTIPLIER
+            : POISON_TICK_INTERVAL_MS;
+    }
+
     checkPoison(attacker: Player, defender: Player) {
         if (defender.poisonStack <= 0) return;
-
         if (!defender.poisonTimer) {
-            defender.poisonTimer = this.clock.setInterval(() => {
-                const poisonDamage = defender.poisonStack * defender.maxHp * 0.002;
-
-                this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
-                    defender: defender,
-                    damage: poisonDamage,
-                    attacker: attacker,
-                    damageType: 'poison',
-                });
-
-                defender.takeDamage(poisonDamage, this.state.playerClient, 'poison');
-                // Credited to whichever talent(s) actually applied the live stacks (Poison Coating,
-                // Hidden Vials, Corroding Collection, ...), split proportionally — see dotSources.ts.
-                creditDotDamage(defender.poisonSources, defender.poisonStack, poisonDamage);
-                this.logCombat(this.state.playerClient, { text: `${defender.name} takes ${fmt(poisonDamage)} poison damage!`, kind: 'poison_tick', defenderId: defender.playerId, damage: poisonDamage, poisonStacks: defender.poisonStack });
-            }, 1000);
+            this.startPoisonTimer(attacker, defender, this.desiredPoisonTickIntervalMs(attacker, defender));
         }
+    }
+
+    // Interval is chosen at creation and re-evaluated AFTER each tick fires (not from update(),
+    // which runs every 100ms) — re-rating post-tick means stacks oscillating around the Festering
+    // Wounds threshold never lose a tick's worth of progress by having their interval torn down
+    // mid-wait.
+    private startPoisonTimer(attacker: Player, defender: Player, intervalMs: number) {
+        const wasFast = defender.poisonTickIntervalMs < POISON_TICK_INTERVAL_MS;
+        defender.poisonTickIntervalMs = intervalMs;
+
+        const isFast = intervalMs < POISON_TICK_INTERVAL_MS;
+        if (isFast && !wasFast) {
+            const festeringWounds = attacker.talents.find((t) => t.talentId === TalentType.FESTERING_WOUNDS);
+            if (festeringWounds) {
+                track(festeringWounds, 1);
+                this.state.playerClient.send('trigger_talent', {
+                    playerId: attacker.playerId,
+                    talentId: TalentType.FESTERING_WOUNDS,
+                });
+                this.logCombat(this.state.playerClient, { text: `${defender.name}'s wounds start festering — poison accelerates!`, kind: 'talent', talentId: TalentType.FESTERING_WOUNDS, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
+            }
+        }
+
+        defender.poisonTimer = this.clock.setInterval(() => {
+            const poisonDamage = defender.poisonStack * defender.maxHp * POISON_DAMAGE_PER_STACK_FRACTION;
+
+            this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
+                defender: defender,
+                damage: poisonDamage,
+                attacker: attacker,
+                damageType: 'poison',
+            });
+
+            defender.takeDamage(poisonDamage, this.state.playerClient, 'poison');
+            // Credited to whichever talent(s) actually applied the live stacks (Poison Coating,
+            // Hidden Vials, Corroding Collection, ...), split proportionally — see dotSources.ts.
+            creditDotDamage(defender.poisonSources, defender.poisonStack, poisonDamage);
+            this.logCombat(this.state.playerClient, { text: `${defender.name} takes ${fmt(poisonDamage)} poison damage!`, kind: 'poison_tick', defenderId: defender.playerId, damage: poisonDamage, poisonStacks: defender.poisonStack });
+
+            const desired = this.desiredPoisonTickIntervalMs(attacker, defender);
+            if (desired !== intervalMs && defender.poisonStack > 0) {
+                defender.poisonTimer.clear();
+                this.startPoisonTimer(attacker, defender, desired);
+            }
+        }, intervalMs);
     }
 
     checkBurn(attacker: Player, defender: Player) {
@@ -684,6 +747,15 @@ export class FightRoom extends Room {
         this.dispatcher.dispatch(new ActiveTriggerCommand());
         this.dispatcher.dispatch(new FightAuraTriggerCommand());
 
+        // FightStartTriggerCommand/FightAuraTriggerCommand above just wrote fight-start
+        // skillAffectedStats/skillAffectedEnemyStats (e.g. Smoke Bomb, Warlord's Roar, War
+        // Chest), but the last stats recalc predates them — recompute so the replay's t=0 sync
+        // (below) reflects fight-start skills too. reset() first guarantees this sync is a full
+        // snapshot of every tracked field, so playback converges even though recorder.start()
+        // (above) already snapshotted the pre-trigger state into initialState.
+        this.dispatcher.dispatch(new UpdateStatsCommand());
+        this.statsSync.reset();
+        this.statsSync.maybeRecord(this.recorder, this.clock.elapsedTime, this.state.player, this.state.enemy, true);
     }
 
     //get player, enemy and talents from db and map them to the room state

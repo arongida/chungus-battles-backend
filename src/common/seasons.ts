@@ -38,7 +38,12 @@ export const SEASONS: SeasonInfo[] = [
       'Wand of Fire reworked: no attack of its own, ignites the enemy on a cooldown, grants cooldown reduction',
       'Flowering Staff reworked: no attack of its own, steals hp regen from the enemy on a cooldown (can push the enemy into negative regen), grants cooldown reduction and more defensive stats',
       'Magic Ring reworked: its stat growth now fires on the same active-skill cooldown (faster with cooldown reduction) instead of a fixed once-per-second aura, and it grants cooldown reduction',
-      'Rogue weapons: increased base attack speed by ~10%' 
+      'Rogue weapons: increased base attack speed by ~10%',
+      'Warlords Roar: does not scale from defense, simply reduce enemy strength by 20/40%',
+      'Poison rework: healing reduction is now a flat 50% while poisoned at all, instead of scaling (and capping out) with stack count',
+      'New tier 3 rogue talent: Festering Wounds — while the enemy has 10+ poison stacks, your poison ticks twice as fast; costs 15% max HP',
+      'Dagger of Poison: applies one more poison stack per hit (rarity + 1)',
+      'Poison duration standardized to 5s everywhere (Corroding Collection previously said 10s) — each stack deals exactly 1% max HP over its life'
     ]
   },
   {

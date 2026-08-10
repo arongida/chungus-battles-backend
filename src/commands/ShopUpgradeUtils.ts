@@ -21,6 +21,7 @@ import {
   TWO_HANDED_WEAPON_IDS,
   wandOfFireBurnStacks,
 } from '../items/behavior/uniqueItemBalance';
+import { POISON_DAMAGE_PER_STACK_FRACTION, POISON_DURATION_MS } from '../common/poisonBalance';
 
 // Note: Health Flask (6) has no entry here — its rarity is pinned to Common (it's in
 // NON_UPGRADEABLE_ITEM_IDS and excluded from shop lucky-find), so updateRarityDescription's
@@ -37,8 +38,9 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
   },
   702: (item) => `Every 1s during battle: Gains bonus stats. Evolves on level up.`,
   18: (item) => {
-    const stacks = item.rarity;
-    return `Applies ${stacks} poison stack${stacks > 1 ? 's' : ''} on hit. Each stack deals 1% max HP over 5s and cuts healing by 1%.`;
+    const stacks = item.rarity + 1;
+    const totalHpPct = parseFloat((POISON_DAMAGE_PER_STACK_FRACTION * 100 * (POISON_DURATION_MS / 1000)).toFixed(2));
+    return `Applies ${stacks} poison stacks on hit. Each stack deals ${totalHpPct}% max HP over ${POISON_DURATION_MS / 1000}s. Any poison halves healing.`;
   },
   59: (item) => `Heals for ${item.rarity * 10 + 10}% of damage dealt on hit.`,
   703: (item) => {

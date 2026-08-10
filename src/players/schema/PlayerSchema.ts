@@ -8,6 +8,7 @@ import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {BURN_DURATION_MS} from "../../items/behavior/uniqueItemBalance";
+import {POISON_DURATION_MS, POISON_TICK_INTERVAL_MS} from "../../common/poisonBalance";
 import {FightStats} from "./FightStats";
 import {weaponWhispererSnapshots} from "../../talents/behavior/weaponWhispererState";
 import {addDotSource, creditHealingPrevented, DotSourceLedger, removeDotSource} from "../../common/dotSources";
@@ -39,6 +40,10 @@ export class Player extends Schema implements IStats {
     fightStats: FightStats = new FightStats();
     attackTimers: Map<string, Delayed> = new Map();
     poisonTimer: Delayed;
+    // Server-only — how far apart the current poisonTimer's ticks are (Festering Wounds can
+    // halve this once the defender is at/above its stack threshold). Not @type-decorated,
+    // same as poisonTimer/poisonStack.
+    poisonTickIntervalMs: number = POISON_TICK_INTERVAL_MS;
     burnTimer: Delayed;
     // Which Talent applied each currently-live poison/burn stack, and how many — used to split a
     // DoT tick's damage proportionally by source instead of crediting it to a hard-coded talentId.
@@ -389,8 +394,9 @@ export class Player extends Schema implements IStats {
             if (this.poisonStack === 0 && this.poisonTimer) {
                 this.poisonTimer.clear();
                 this.poisonTimer = null;
+                this.poisonTickIntervalMs = POISON_TICK_INTERVAL_MS;
             }
-        }, 6000);
+        }, POISON_DURATION_MS);
     }
 
     addBurnStacks(clock: ClockTimer, playerClient: Client, stack: number = 1, source?: Talent) {
