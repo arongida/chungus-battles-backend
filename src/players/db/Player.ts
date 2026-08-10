@@ -225,7 +225,7 @@ export async function createNewPlayer(
     sessionId: string,
     avatarUrl: string
 ): Promise<Player> {
-    const startingGold = process.env.NODE_ENV === 'production' ? 6 : 1000;
+    const startingGold = process.env.NODE_ENV === 'production' ? 8 : 1000;
     const newPlayer = getNewPlayer(playerId, name, sessionId, avatarUrl, startingGold);
     await newPlayer.save().catch((err) => console.error(err));
     const playerSchema = getPlayerSchemaObject(newPlayer.toObject());

@@ -54,11 +54,6 @@ const PICKPOCKET_COOLDOWN_MS = 1000;
 const justAScratchLastProcMs = new WeakMap<Talent, number>();
 const JUST_A_SCRATCH_COOLDOWN_MS = 1000;
 
-// Martial Artist: one free weapon per DraftRoom join (= per round). Keyed by Talent instance —
-// Player.ts:137 rebuilds Talent objects on every DB load, so the latch self-clears each round
-// while a mid-round reconnect (allowReconnection resumes the same instance) can't double-grant.
-const martialWeaponGranted = new WeakMap<Talent, boolean>();
-
 // Stab (reworked into an ACTIVE talent, Season 24): blood-price fraction of the attacker's OWN
 // current HP paid every activation, on top of the enemy-facing hit. Clamped in the behavior so
 // Stab can never drop its own owner below 1 HP.
@@ -653,12 +648,12 @@ export const TalentBehaviors = {
         }
     },
 
-    // Martial Artist — reworked (Season 23): trained hands mean a weapon fits absolutely
-    // anywhere. Armor, helmets and shields stay normally equippable — this only ADDS weapons as
-    // an option for the armor/helmet slots too, so wearing a weapon there instead of real gear
-    // is a build decision the player makes, not something forced on them. AURA (ticks every ~1s
-    // in the draft room, and also runs in fights via FightAuraTriggerCommand — guarded on `shop`
-    // below for the grant so that half stays draft-only):
+    // Martial Artist — reworked (Season 23, weapon-grant cadence changed Season 24): trained
+    // hands mean a weapon fits absolutely anywhere. Armor, helmets and shields stay normally
+    // equippable — this only ADDS weapons as an option for the armor/helmet slots too, so
+    // wearing a weapon there instead of real gear is a build decision the player makes, not
+    // something forced on them. AURA (ticks every ~1s in the draft room, and also runs in
+    // fights via FightAuraTriggerCommand):
     //  - opens the armor/helmet equipOptions on every weapon-like item this player can see
     //    (inventory, equipped, and the shop preview, same sweep shape as Shady Shields below)
     //    so mainHand/offHand/armor/helmet can all carry a weapon;
@@ -666,22 +661,16 @@ export const TalentBehaviors = {
     // A weapon that "takes both hands" (Zwei-Hander, Flowering Staff — see ItemBehaviors.ts)
     // still blocks a second slot when placed in armor/helmet, via TWO_HANDED_PAIRED_SLOT
     // (uniqueItemBalance.ts) treating armor/helmet as a second pair alongside mainHand/offHand.
-    // SHOP_START / AURA (shared block): grants one free random weapon of the player's tier per
-    // round. If the roll matches a weapon already owned it MERGES into that copy via the same
-    // applyRarityUpgrade/findOwnedUpgradeTarget path the shop uses (this is the fix — the old
-    // version always pushed a fresh Common copy into the inventory, so duplicates piled up
-    // instead of upgrading); otherwise it auto-equips into an empty slot, falling back to the
-    // inventory once all four are full. SHOP_START (500ms after DraftRoom.onJoin, once per
-    // round) is the normal grant path; AURA also checks the latch so picking the talent mid-round
-    // grants immediately instead of waiting for next round's SHOP_START. Latched via
-    // martialWeaponGranted (keyed by Talent instance, rebuilt fresh from the DB on every
-    // DraftRoom join — see Player.ts's talent reconstruction) so exactly one grant happens per
-    // round regardless of which trigger gets there first.
+    // LEVEL_UP: grants one free random weapon of the player's tier — once per level gained,
+    // not once per round. If the roll matches a weapon already owned it MERGES into that copy
+    // via the same applyRarityUpgrade/findOwnedUpgradeTarget path the shop uses; otherwise it
+    // auto-equips into an empty slot, falling back to the inventory once all four are full. No
+    // latch needed: LevelUpTriggerCommand only fires once per actual level gained (DraftRoom's
+    // checkLevelUp while-loop dispatches it once per threshold crossed), so this can't
+    // double-grant the way a repeating ~1s AURA tick could.
     [TalentType.MARTIAL_ARTIST]:
         async (context: TalentBehaviorContext) => {
             const { attacker, client, talent, trigger, shop } = context;
-
-            if (trigger !== TriggerType.AURA && trigger !== TriggerType.SHOP_START) return;
             if (!attacker) return;
 
             if (trigger === TriggerType.AURA) {
@@ -704,63 +693,60 @@ export const TalentBehaviors = {
                 talent.affectedStats.hpRegen = 0;
                 talent.affectedStats.dodgeRate = 0;
                 talent.affectedStats.attackSpeed = 1;
+                return;
             }
 
-            if (shop && !martialWeaponGranted.get(talent)) {
-                // Latched before the DB round-trip below, not after — otherwise the 1s aura
-                // tick could re-enter and grant a second weapon while the first await is
-                // still pending.
-                martialWeaponGranted.set(talent, true);
-                try {
-                    const rolled = (await getRandomWeaponsByTier(clampTier(attacker.level), 1))[0];
-                    if (rolled) {
-                        const owned = findOwnedUpgradeTarget(attacker, rolled.itemId);
-                        let becameMythic: boolean;
-                        if (owned) {
-                            // Merge into the owned copy — same mechanic as a shop upgrade preview.
-                            // findOwnedUpgradeTarget only ever returns sub-MYTHIC items, so a
-                            // MYTHIC result here is always a genuine new forge.
-                            applyRarityUpgrade(owned, rolled, attacker);
-                            applyLuckyShopUpgrades(owned, rolled, attacker);
-                            becameMythic = owned.rarity === ItemRarity.MYTHIC;
-                            // MapSchema change-detection gotcha — re-set if currently equipped.
-                            attacker.equippedItems.forEach((it, slot) => {
-                                if (it === owned) attacker.equippedItems.set(slot, owned);
-                            });
-                            track(talent, 1);
-                            client?.send('trigger_talent', {
-                                playerId: attacker.playerId,
-                                talentId: TalentType.MARTIAL_ARTIST,
-                            });
-                            client?.send('draft_log', `Training pays off — your ${owned.name} grew stronger!`);
-                        } else {
-                            // Rolled like a shop item, Lucky Find included.
-                            const steps = applyLuckyShopUpgrades(rolled, rolled, attacker);
-                            rolled.luckyFind = steps > 0;
-                            rolled.luckyFindSteps = steps;
-                            rolled.sold = true;
-                            rolled.equipped = false;
-                            // Open armor/helmet up front — this item hasn't been through an AURA
-                            // sweep yet, so without this it could only auto-equip into a hand.
-                            openMartialArtistSlots(rolled);
-                            if (!attacker.tryAutoEquipIntoEmptySlot(rolled)) attacker.inventory.push(rolled);
-                            becameMythic = rolled.rarity === ItemRarity.MYTHIC;
-                            track(talent, 1);
-                            client?.send('trigger_talent', {
-                                playerId: attacker.playerId,
-                                talentId: TalentType.MARTIAL_ARTIST,
-                            });
-                            client?.send('draft_log', `Training pays off — found a ${rolled.name}!`);
-                        }
-                        if (becameMythic) {
-                            grantLuckyFindMythicBonus(attacker);
-                            client?.send('draft_log', `Mythic forged! Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`);
-                            client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
-                        }
+            if (trigger !== TriggerType.LEVEL_UP) return;
+
+            try {
+                const rolled = (await getRandomWeaponsByTier(clampTier(attacker.level), 1))[0];
+                if (rolled) {
+                    const owned = findOwnedUpgradeTarget(attacker, rolled.itemId);
+                    let becameMythic: boolean;
+                    if (owned) {
+                        // Merge into the owned copy — same mechanic as a shop upgrade preview.
+                        // findOwnedUpgradeTarget only ever returns sub-MYTHIC items, so a
+                        // MYTHIC result here is always a genuine new forge.
+                        applyRarityUpgrade(owned, rolled, attacker);
+                        applyLuckyShopUpgrades(owned, rolled, attacker);
+                        becameMythic = owned.rarity === ItemRarity.MYTHIC;
+                        // MapSchema change-detection gotcha — re-set if currently equipped.
+                        attacker.equippedItems.forEach((it, slot) => {
+                            if (it === owned) attacker.equippedItems.set(slot, owned);
+                        });
+                        track(talent, 1);
+                        client?.send('trigger_talent', {
+                            playerId: attacker.playerId,
+                            talentId: TalentType.MARTIAL_ARTIST,
+                        });
+                        client?.send('draft_log', `Training pays off — your ${owned.name} grew stronger!`);
+                    } else {
+                        // Rolled like a shop item, Lucky Find included.
+                        const steps = applyLuckyShopUpgrades(rolled, rolled, attacker);
+                        rolled.luckyFind = steps > 0;
+                        rolled.luckyFindSteps = steps;
+                        rolled.sold = true;
+                        rolled.equipped = false;
+                        // Open armor/helmet up front — this item hasn't been through an AURA
+                        // sweep yet, so without this it could only auto-equip into a hand.
+                        openMartialArtistSlots(rolled);
+                        if (!attacker.tryAutoEquipIntoEmptySlot(rolled)) attacker.inventory.push(rolled);
+                        becameMythic = rolled.rarity === ItemRarity.MYTHIC;
+                        track(talent, 1);
+                        client?.send('trigger_talent', {
+                            playerId: attacker.playerId,
+                            talentId: TalentType.MARTIAL_ARTIST,
+                        });
+                        client?.send('draft_log', `Training pays off — found a ${rolled.name}!`);
                     }
-                } catch (e) {
-                    console.error(e);
+                    if (becameMythic) {
+                        grantLuckyFindMythicBonus(attacker);
+                        client?.send('draft_log', `Mythic forged! Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`);
+                        client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+                    }
                 }
+            } catch (e) {
+                console.error(e);
             }
         },
 

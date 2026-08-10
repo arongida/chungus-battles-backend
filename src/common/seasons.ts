@@ -43,7 +43,9 @@ export const SEASONS: SeasonInfo[] = [
       'Poison rework: healing reduction is now a flat 50% while poisoned at all, instead of scaling (and capping out) with stack count',
       'New tier 3 rogue talent: Festering Wounds — grants a free Dagger of Poison; while the enemy has 10+ poison stacks, your poison ticks twice as fast',
       'Dagger of Poison: applies one more poison stack per hit (rarity + 1)',
-      'Poison duration standardized to 5s everywhere (Corroding Collection previously said 10s) — each stack deals exactly 1% max HP over its life'
+      'Poison duration standardized to 5s everywhere (Corroding Collection previously said 10s) — each stack deals exactly 1% max HP over its life',
+      'Martial Artist: free weapon now granted once per level up, not once per shop round',
+      'Starting gold to 8'
     ]
   },
   {
