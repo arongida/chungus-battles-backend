@@ -39,7 +39,7 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
   702: (item) => `Every 1s during battle: Gains bonus stats. Evolves on level up.`,
   18: (item) => {
     const stacks = item.rarity + 1;
-    const totalHpPct = (POISON_DAMAGE_PER_STACK_FRACTION * 100 * (POISON_DURATION_MS / 1000)).toFixed(1);
+    const totalHpPct = parseFloat((POISON_DAMAGE_PER_STACK_FRACTION * 100 * (POISON_DURATION_MS / 1000)).toFixed(2));
     return `Applies ${stacks} poison stacks on hit. Each stack deals ${totalHpPct}% max HP over ${POISON_DURATION_MS / 1000}s. Any poison halves healing.`;
   },
   59: (item) => `Heals for ${item.rarity * 10 + 10}% of damage dealt on hit.`,

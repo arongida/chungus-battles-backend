@@ -4,8 +4,9 @@
 
 /** Fraction of the victim's max HP each poison stack deals per tick. */
 export const POISON_DAMAGE_PER_STACK_FRACTION = 0.002;
-/** How long one application of stacks lives before decaying. */
-export const POISON_DURATION_MS = 6000;
+/** How long one application of stacks lives before decaying. 5 ticks at
+ *  POISON_DAMAGE_PER_STACK_FRACTION = exactly 1% max HP per stack over its life. */
+export const POISON_DURATION_MS = 5000;
 /** Base gap between poison ticks. */
 export const POISON_TICK_INTERVAL_MS = 1000;
 /** Healing multiplier while poisoned — flat, does not scale with stacks. */
