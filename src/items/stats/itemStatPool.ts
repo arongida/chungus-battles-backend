@@ -60,15 +60,15 @@ export const AFFIX_COUNT_BY_TIER: Record<number, number> = {
  */
 export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
     strength: {
-        1: { min: 2,  max: 4  },
-        2: { min: 3,  max: 6  },
+        1: { min: 3,  max: 5  },
+        2: { min: 4,  max: 6  },
         3: { min: 5,  max: 9  },
         4: { min: 10,  max: 18  },
         5: { min: 16,  max: 30 },
     },
     accuracy: {
-        1: { min: 2,  max: 4  },
-        2: { min: 3,  max: 6  },
+        1: { min: 3,  max: 5  },
+        2: { min: 4,  max: 6  },
         3: { min: 5,  max: 9  },
         4: { min: 8,  max: 16  },
         5: { min: 16,  max: 30 },
@@ -76,36 +76,36 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
     // Multiplier: 1.0 = no change. Stored as a float so the roller must use
     // isFloat precision.
     attackSpeed: {
-        1: { min: 1.05, max: 1.10, isFloat: true },
-        2: { min: 1.08, max: 1.16, isFloat: true },
+        1: { min: 1.08, max: 1.12, isFloat: true },
+        2: { min: 1.12, max: 1.16, isFloat: true },
         3: { min: 1.12, max: 1.26, isFloat: true },
         4: { min: 1.25, max: 1.50, isFloat: true },
         5: { min: 1.44, max: 1.80, isFloat: true },
     },
     defense: {
-        1: { min: 10,  max: 20   },
-        2: { min: 15,  max: 30  },
+        1: { min: 14,  max: 24   },
+        2: { min: 18,  max: 30  },
         3: { min: 28, max: 45  },
         4: { min: 48, max: 90  },
         5: { min: 88, max: 140  },
     },
     maxHp: {
-        1: { min: 15, max: 30  },
-        2: { min: 23, max: 45  },
+        1: { min: 20, max: 34  },
+        2: { min: 28, max: 45  },
         3: { min: 45, max: 90  },
         4: { min: 90, max: 180  },
         5: { min: 160, max: 280 },
     },
     income: {
-        1: { min: 1, max: 2  },
-        2: { min: 2, max: 3  },
+        1: { min: 2, max: 2  },
+        2: { min: 3, max: 3  },
         3: { min: 3, max: 5  },
         4: { min: 4, max: 8  },
         5: { min: 8, max: 14 },
     },
     dodgeRate: {
-        1: { min: 8,  max: 16   },
-        2: { min: 12,  max: 24  },
+        1: { min: 10,  max: 18   },
+        2: { min: 14,  max: 24  },
         3: { min: 18, max: 36  },
         4: { min: 30, max: 60  },
         5: { min: 48, max: 86  },
