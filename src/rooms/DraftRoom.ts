@@ -528,9 +528,28 @@ export class DraftRoom extends Room {
         if (goldGained > 0) {
             this.clients[0]?.send('reward_gain', { playerId: this.state.player.playerId, gold: goldGained } as RewardGainMessage);
         }
-        this.soldItemStack.push(item);
-        this.state.canUndoSell = true;
+        const goldBeforeTrigger = this.state.player.gold;
+        const xpBeforeTrigger = this.state.player.xp;
+        const levelBeforeTrigger = this.state.player.level;
         this.dispatcher.dispatch(new OnSellTriggerCommand());
+        // An ON_SELL bonus (e.g. the Cash Back item skill) pays gold/xp on top of the sell
+        // price, but undoSell only ever refunds item.sellPrice. Allowing undo after a bonus
+        // payout would let sell->undo be repeated for infinite gold/xp (and, via xp, infinite
+        // levels/talent points) with the item unchanged. So a sale that paid out any bonus is
+        // not undoable at all. Checks gold, xp AND level: levelUp() resets xp to the leftover
+        // amount, so a bonus that pushes a level-up can leave xp lower than before even though
+        // a bonus was paid. Assumes ON_SELL behaviors are synchronous (true today) — an async
+        // ON_SELL behavior would need this revisited.
+        const bonusPaid =
+            this.state.player.gold > goldBeforeTrigger ||
+            this.state.player.xp > xpBeforeTrigger ||
+            this.state.player.level > levelBeforeTrigger;
+        if (bonusPaid) {
+            this.invalidateUndoSell();
+        } else {
+            this.soldItemStack.push(item);
+            this.state.canUndoSell = true;
+        }
         await this.revalidateUpgradePreviews();
     }
 

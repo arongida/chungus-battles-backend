@@ -253,10 +253,12 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     },
 
     // Band of Vigor (27) — a ring, not a weapon. FIGHT_START: resets its once-per-fight proc.
-    // ON_DAMAGE (fires on the wearer as `defender`, covers weapon hits and poison/burn DoT): the
-    // first time HP drops below SECOND_WIND_THRESHOLD, heal a chunk of max HP and grant a brief
-    // window of invulnerability.
-    27: ({ defender, item, trigger, clock, client }) => {
+    // ON_DAMAGE (fires on the wearer as `defender`, BEFORE the incoming hit's damage is applied to
+    // hp — see FightRoom.tryWeaponAttack): must check hp *after* subtracting the pending `damage`,
+    // not current hp, or a single hit that jumps straight from >=30% to lethal would read as
+    // "still above threshold" and never proc. Priming `invincible` here (before takeDamage runs)
+    // fully negates that same hit, since takeDamage() checks `this.invincible` before applying damage.
+    27: ({ defender, item, trigger, clock, client, damage }) => {
         if (!item) return;
 
         if (trigger === TriggerType.FIGHT_START) {
@@ -267,7 +269,9 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         if (trigger !== TriggerType.ON_DAMAGE) return;
         if (!defender || !clock) return;
         if (secondWindUsed.get(item)) return;
-        if (defender.hp <= 0 || defender.hp / defender.maxHp >= SECOND_WIND_THRESHOLD) return;
+        if (defender.hp <= 0) return;
+        const hpAfterHit = defender.hp - (damage ?? 0);
+        if (hpAfterHit / defender.maxHp >= SECOND_WIND_THRESHOLD) return;
 
         secondWindUsed.set(item, true);
         const healed = defender.heal(Math.round(defender.maxHp * secondWindHealFraction(item.rarity)));

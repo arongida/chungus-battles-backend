@@ -128,6 +128,37 @@ export type FightStatsMessage = {
   enemy: FightSideStats;
 };
 
+// Replay-only pseudo-event (see replay/StatsSyncRecorder.ts). NEVER sent to a live client — live
+// clients get all of this via Colyseus schema sync every tick; replay playback has no schema
+// sync, so the room folds the same information into the recorded event stream instead.
+// Every value is ABSOLUTE (not a delta), but every field is OPTIONAL: only fields that changed
+// since the previously emitted sync are present.
+export type StatsSyncItem = {
+  slot: string;
+  skillStatus: string;
+};
+
+export type StatsSyncSide = {
+  playerId: number;
+  hp?: number;
+  maxHp?: number;
+  strength?: number;
+  accuracy?: number;
+  defense?: number;
+  attackSpeed?: number;
+  dodgeRate?: number;
+  hpRegen?: number;
+  income?: number;
+  cooldownReduction?: number;
+  /** Only equipped items whose live skillStatus line changed. */
+  items?: StatsSyncItem[];
+};
+
+export type StatsSyncMessage = {
+  player?: StatsSyncSide;
+  enemy?: StatsSyncSide;
+};
+
 export function fmt(n: number): string {
   return parseFloat(n.toFixed(2)).toString();
 }

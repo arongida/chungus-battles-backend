@@ -6,6 +6,7 @@ import { delay } from '../common/utils';
 import { END_BURN_START_MS, FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
 import { Dispatcher } from '@colyseus/command';
 import { ReplayRecorder } from '../replay/ReplayRecorder';
+import { StatsSyncRecorder } from '../replay/StatsSyncRecorder';
 import { saveReplay } from '../replay/db/Replay';
 import { randomUUID } from 'crypto';
 import { ActiveTriggerCommand } from '../commands/triggers/ActiveTriggerCommand';
@@ -47,6 +48,9 @@ export class FightRoom extends Room {
     // Game-time timestamps (clock.elapsedTime): replays of a sped-up/slowed-down fight
     // still play back at normal 1x pacing.
     private recorder = new ReplayRecorder(() => this.clock.elapsedTime);
+    // Periodically folds recomputed stats/skillStatus into the replay stream — see
+    // StatsSyncRecorder.ts's doc comment for why replay playback needs this at all.
+    private statsSync = new StatsSyncRecorder();
     // Stable id for the fight currently in progress — generated up front (in startBattle)
     // so it can be included in the end_battle broadcast, not just the fire-and-forget
     // replay save that happens afterward. Lets the client deep-link "Watch Replay".
@@ -355,6 +359,13 @@ export class FightRoom extends Room {
             this.dispatcher.dispatch(new UpdateStatsCommand());
         }
 
+        // Replay-only: fold this tick's recomputed stats into the replay stream (throttled/diffed
+        // internally — see StatsSyncRecorder.ts). Emitted before the DoT/end-burn checks below so
+        // a same-tick 'damage' event replays after this sync, matching server ordering.
+        if (this.state.battleStarted) {
+            this.statsSync.maybeRecord(this.recorder, this.clock.elapsedTime, this.state.player, this.state.enemy);
+        }
+
         //check for battle end
         if (this.state.battleStarted) {
             this.checkPoison(this.state.player, this.state.enemy);
@@ -381,6 +392,10 @@ export class FightRoom extends Room {
     // Stops every combat timer and runs the win/lose/draw resolution. Shared by the
     // natural HP<=0 check in update() and the forfeit_fight handler below.
     private concludeBattle() {
+        // Pin an exact final frame before battleStarted flips false below (which gates the
+        // periodic sync in update() and FightEndTriggerCommand's aura-stat resets) — otherwise
+        // the replay's last panel could be up to SYNC_INTERVAL_MS stale.
+        this.statsSync.maybeRecord(this.recorder, this.clock.elapsedTime, this.state.player, this.state.enemy, true);
         this.state.battleStarted = false;
         this.state.player.clearAllAttackTimers();
         this.state.enemy.clearAllAttackTimers();
@@ -684,6 +699,15 @@ export class FightRoom extends Room {
         this.dispatcher.dispatch(new ActiveTriggerCommand());
         this.dispatcher.dispatch(new FightAuraTriggerCommand());
 
+        // FightStartTriggerCommand/FightAuraTriggerCommand above just wrote fight-start
+        // skillAffectedStats/skillAffectedEnemyStats (e.g. Smoke Bomb, Warlord's Roar, War
+        // Chest), but the last stats recalc predates them — recompute so the replay's t=0 sync
+        // (below) reflects fight-start skills too. reset() first guarantees this sync is a full
+        // snapshot of every tracked field, so playback converges even though recorder.start()
+        // (above) already snapshotted the pre-trigger state into initialState.
+        this.dispatcher.dispatch(new UpdateStatsCommand());
+        this.statsSync.reset();
+        this.statsSync.maybeRecord(this.recorder, this.clock.elapsedTime, this.state.player, this.state.enemy, true);
     }
 
     //get player, enemy and talents from db and map them to the room state
