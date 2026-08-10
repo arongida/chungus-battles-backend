@@ -16,5 +16,5 @@ export const POISON_HEALING_EFFECTIVENESS = 0.5;
 export const FESTERING_WOUNDS_STACK_THRESHOLD = 10;
 /** Multiplier applied to POISON_TICK_INTERVAL_MS while Festering Wounds is live. */
 export const FESTERING_WOUNDS_INTERVAL_MULTIPLIER = 0.5;
-/** Fraction of base+item max HP the owner gives up. */
-export const FESTERING_WOUNDS_MAX_HP_PENALTY = 0.15;
+/** itemId of the weapon Festering Wounds grants once, for free, on pick. */
+export const FESTERING_WOUNDS_GRANT_ITEM_ID = 18; // Dagger of Poison

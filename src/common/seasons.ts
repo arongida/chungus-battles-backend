@@ -41,7 +41,7 @@ export const SEASONS: SeasonInfo[] = [
       'Rogue weapons: increased base attack speed by ~10%',
       'Warlords Roar: does not scale from defense, simply reduce enemy strength by 20/40%',
       'Poison rework: healing reduction is now a flat 50% while poisoned at all, instead of scaling (and capping out) with stack count',
-      'New tier 3 rogue talent: Festering Wounds — while the enemy has 10+ poison stacks, your poison ticks twice as fast; costs 15% max HP',
+      'New tier 3 rogue talent: Festering Wounds — grants a free Dagger of Poison; while the enemy has 10+ poison stacks, your poison ticks twice as fast',
       'Dagger of Poison: applies one more poison stack per hit (rarity + 1)',
       'Poison duration standardized to 5s everywhere (Corroding Collection previously said 10s) — each stack deals exactly 1% max HP over its life'
     ]

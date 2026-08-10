@@ -20,6 +20,7 @@ import { Player } from "../../players/schema/PlayerSchema";
 import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus } from "../../items/behavior/uniqueItemBalance";
 import { weaponWhispererSnapshots, weaponWhispererFinalRolls } from "./weaponWhispererState";
 import { merchantDiscounts } from "./merchantDiscountState";
+import { FESTERING_WOUNDS_GRANT_ITEM_ID } from "../../common/poisonBalance";
 
 /** `reward`, when provided alongside a positive gold/xp amount, sends a `reward_gain` message to
  *  the recipient so the client can pop floating +gold/+xp text over their avatar. */
@@ -1355,17 +1356,29 @@ export const TalentBehaviors = {
         attacker.luckyFindFreeClaim = !attacker.luckyFindClaimUsed;
     },
 
-    // Festering Wounds — AURA talent. Pure downside/payoff: no activation of its own here, it
-    // only pays a permanent max HP cost (via attackerSnapshot, same pattern as WARRIOR_4/
-    // MERCHANT_5, so it doesn't feed on its own penalty) for the right to double poison's tick
-    // rate once the enemy is stacked past the threshold — see FightRoom.checkPoison /
-    // desiredPoisonTickIntervalMs, which reads TalentType.FESTERING_WOUNDS directly off
-    // attacker.talents. Writes `=` each tick, so it self-corrects with no FIGHT_END reset needed.
-    [TalentType.FESTERING_WOUNDS]: (context: TalentBehaviorContext) => {
-        const { attacker, talent, attackerSnapshot } = context;
-        const base = attackerSnapshot ?? attacker;
-        talent.affectedStats.maxHp = -Math.ceil(base.maxHp * talent.scaling);
-    },
+    // Festering Wounds — AURA talent (ticks every ~1s, draft and fight). One-shot grant latched
+    // via talent.tags (same pattern as Shady Shields above): gives a free Dagger of Poison so
+    // poison is reachable straight from the talent pool instead of only via the shop. The tick-
+    // rate double itself needs no code here — FightRoom.desiredPoisonTickIntervalMs reads
+    // TalentType.FESTERING_WOUNDS directly off attacker.talents once the enemy is stacked past
+    // FESTERING_WOUNDS_STACK_THRESHOLD.
+    [TalentType.FESTERING_WOUNDS]:
+        async (context: TalentBehaviorContext) => {
+            const { attacker, talent, client } = context;
+            if (talent.tags?.includes('festering-wounds-granted')) return;
+            talent.tags?.push('festering-wounds-granted');
+
+            const baseDagger = await getItemById(FESTERING_WOUNDS_GRANT_ITEM_ID);
+            if (!baseDagger) return;
+            const dagger = cloneItem(baseDagger);
+            attacker.gold += dagger.price; // refund so getItem nets to free
+            attacker.getItem(dagger);
+            client?.send('draft_log', `${attacker.name} got a free Dagger of Poison from Festering Wounds!`);
+            client?.send('trigger_talent', {
+                playerId: attacker.playerId,
+                talentId: TalentType.FESTERING_WOUNDS,
+            });
+        },
 }
     ;
 
