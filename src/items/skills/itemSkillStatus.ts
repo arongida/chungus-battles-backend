@@ -7,6 +7,7 @@ import { Player } from '../../players/schema/PlayerSchema';
 import { Item } from '../schema/ItemSchema';
 import { ITEM_SKILLS } from '../behavior/itemSkillBalance';
 import { ClockTimer } from '@colyseus/timer';
+import { getSkillSlot2View } from './itemSkillSlot2View';
 
 function statusFor(item: Item, player: Player, enemy: Player | undefined, inFight: boolean, clock: ClockTimer | undefined): string {
   if (!item?.skillId) return '';
@@ -16,6 +17,20 @@ function statusFor(item: Item, player: Player, enemy: Player | undefined, inFigh
     return def.status({ item, player, enemy, clock, inFight });
   } catch (e) {
     console.error(`Failed to compute skill status for item ${item.itemId} (skill ${item.skillId}):`, e);
+    return '';
+  }
+}
+
+/** Slot-2 counterpart of statusFor — same status() functions, run through the slot-2 Proxy view
+ *  (see itemSkillSlot2View.ts) so `def.status({item, ...})` reads skillId2/rarity/etc. */
+function statusFor2(item: Item, player: Player, enemy: Player | undefined, inFight: boolean, clock: ClockTimer | undefined): string {
+  if (!item?.skillId2) return '';
+  const def = ITEM_SKILLS[item.skillId2];
+  if (!def?.status) return '';
+  try {
+    return def.status({ item: getSkillSlot2View(item), player, enemy, clock, inFight });
+  } catch (e) {
+    console.error(`Failed to compute skill status for item ${item.itemId} (skill2 ${item.skillId2}):`, e);
     return '';
   }
 }
@@ -30,8 +45,11 @@ export function refreshItemSkillStatus(player: Player, enemy: Player | undefined
   player.equippedItems.forEach((item) => {
     const text = statusFor(item, player, enemy, inFight, clock);
     if (item.skillStatus !== text) item.skillStatus = text;
+    const text2 = statusFor2(item, player, enemy, inFight, clock);
+    if (item.skillStatus2 !== text2) item.skillStatus2 = text2;
   });
   player.inventory.forEach((item) => {
     if (item.skillStatus !== '') item.skillStatus = '';
+    if (item.skillStatus2 !== '') item.skillStatus2 = '';
   });
 }

@@ -32,12 +32,15 @@ function seededRandom(...parts: number[]): number {
  *  rolled regardless of what the player already owns, with no cap on how many copies they end up
  *  with. Returns null for non-class, non-shield items or an item whose equipOptions don't
  *  overlap any skill's slot list. */
-export function rollItemSkill(item: Item, player: Player): ItemSkillDefinition | null {
+export function rollItemSkill(item: Item, player: Player, options?: { exclude?: number }): ItemSkillDefinition | null {
   const pool = item.type === ItemType.SHIELD ? SHIELD_SKILLS : SKILLS_BY_CLASS[item.class as ItemClass];
   if (!pool || pool.length === 0) return null;
 
   const equipOptions = new Set(Array.from(item.equipOptions as any as Iterable<string>));
-  const slotEligible = pool.filter((def) => def.slots.some((s) => equipOptions.has(s)));
+  let slotEligible = pool.filter((def) => def.slots.some((s) => equipOptions.has(s)));
+  // Weapon Whisperer's second skill slot excludes whatever slot 1 already rolled, so the two
+  // skills on the same weapon are never identical.
+  if (options?.exclude) slotEligible = slotEligible.filter((def) => def.id !== options.exclude);
   if (slotEligible.length === 0) return null;
 
   // Count owned copies of this same itemId that have already rolled a skill, so two copies of
@@ -65,6 +68,18 @@ export function grantItemSkill(item: Item, def: ItemSkillDefinition): void {
   item.skillId = def.id;
   item.skillName = def.name;
   item.skillDescription = def.describe(item.rarity);
+  def.triggerTypes.forEach((t) => {
+    if (!item.triggerTypes.includes(t)) item.triggerTypes.push(t);
+  });
+}
+
+/** Weapon Whisperer's second skill slot (ItemSchema.ts's skillId2/skillName2/skillDescription2)
+ *  — same shape as grantItemSkill above, targeting the "2" fields. The only granter of slot 2;
+ *  normal rarity-upgrade progression (ShopUpgradeUtils.applyRarityUpgrade) never touches it. */
+export function grantItemSkill2(item: Item, def: ItemSkillDefinition): void {
+  item.skillId2 = def.id;
+  item.skillName2 = def.name;
+  item.skillDescription2 = def.describe(item.rarity);
   def.triggerTypes.forEach((t) => {
     if (!item.triggerTypes.includes(t)) item.triggerTypes.push(t);
   });
@@ -105,6 +120,20 @@ export function reconcileItemSkill(item: Item): void {
   if (!def) return;
   item.skillName = def.name;
   item.skillDescription = def.describe(item.rarity);
+  def.triggerTypes.forEach((t) => {
+    if (!item.triggerTypes.includes(t)) item.triggerTypes.push(t);
+  });
+}
+
+/** Slot-2 counterpart of reconcileItemSkill — re-syncs Weapon Whisperer's second granted skill
+ *  against the current ITEM_SKILLS table on every DB->schema load. No-op for the vast majority
+ *  of items, which never had a second skill granted. */
+export function reconcileItemSkill2(item: Item): void {
+  if (!item.skillId2) return;
+  const def = ITEM_SKILLS[item.skillId2];
+  if (!def) return;
+  item.skillName2 = def.name;
+  item.skillDescription2 = def.describe(item.rarity);
   def.triggerTypes.forEach((t) => {
     if (!item.triggerTypes.includes(t)) item.triggerTypes.push(t);
   });

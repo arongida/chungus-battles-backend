@@ -517,6 +517,11 @@ export class Player extends Schema implements IStats {
             item.skillId = snap.skillId;
             item.skillName = snap.skillName;
             item.skillDescription = snap.skillDescription;
+            // Second skill slot — only ever granted by Weapon Whisperer itself, so it reverts
+            // right alongside the Mythic upgrade and slot 1.
+            item.skillId2 = snap.skillId2;
+            item.skillName2 = snap.skillName2;
+            item.skillDescription2 = snap.skillDescription2;
             weaponWhispererSnapshots.delete(item);
         }
         item.equipped = false;
@@ -524,6 +529,7 @@ export class Player extends Schema implements IStats {
         // it immediately so the inventory card doesn't keep showing the last fight's/tick's number
         // until the next UpdateStatsCommand tick catches up.
         item.skillStatus = '';
+        item.skillStatus2 = '';
         this.inventory.push(item);
         this.equippedItems.delete(slot);
     }

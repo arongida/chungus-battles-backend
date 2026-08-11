@@ -4,6 +4,7 @@ import {ItemBehaviors} from '../behavior/ItemBehaviors';
 import {ItemSkillBehaviors} from '../behavior/ItemSkillBehaviors';
 import {BehaviorContext} from '../../common/BehaviorContext';
 import {ItemBehaviorContext} from '../behavior/ItemBehaviorContext';
+import {getSkillSlot2View} from '../skills/itemSkillSlot2View';
 
 
 export class Item extends Schema {
@@ -62,6 +63,16 @@ export class Item extends Schema {
   // NOT persisted to Mongo (items/db/Item.ts has no field for it), same reasoning as
   // skillAffectedStats above: it is recomputed from live state within one tick of any load.
   @type('string') skillStatus: string = '';
+  // Second item skill — only ever granted by Weapon Whisperer (TalentBehaviors.ts). Same shape
+  // and lifecycle as skillId/skillName/skillDescription/skillAffectedStats/skillAffectedEnemyStats/
+  // skillStatus above; 0/empty for every other item. Dispatched via the slot-2 Proxy view (see
+  // items/skills/itemSkillSlot2View.ts) so the same ItemSkillBehaviors run against it unmodified.
+  @type('number') skillId2: number = 0;
+  @type('string') skillName2: string = '';
+  @type('string') skillDescription2: string = '';
+  @type(AffectedStats) skillAffectedStats2: AffectedStats = new AffectedStats();
+  @type(AffectedStats) skillAffectedEnemyStats2: AffectedStats = new AffectedStats();
+  @type('string') skillStatus2: string = '';
   // Server-only, not synced: Gold Genie (TalentBehaviors.ts) rolls its post-Legendary lucky-find
   // chance exactly once per shop slot — this latches that so repeat aura ticks don't re-roll it.
   goldGenieLuckyRolled: boolean = false;
@@ -75,6 +86,9 @@ export class Item extends Schema {
 
     const skillBehavior = this.skillId ? ItemSkillBehaviors[this.skillId] : undefined;
     if (skillBehavior) results.push(skillBehavior(itemContext));
+
+    const skillBehavior2 = this.skillId2 ? ItemSkillBehaviors[this.skillId2] : undefined;
+    if (skillBehavior2) results.push(skillBehavior2({ ...context, item: getSkillSlot2View(this) }));
 
     const pending = results.filter((r) => r instanceof Promise) as Promise<void>[];
     if (pending.length > 0) return Promise.all(pending).then(() => {});

@@ -9,7 +9,7 @@ import {StatsSchema} from "../../common/db/Stats";
 import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollItemStats} from "../../items/stats/itemStatRoller";
-import {ensureShieldSkill, reconcileItemSkill} from "../../items/skills/itemSkillRoller";
+import {ensureShieldSkill, reconcileItemSkill, reconcileItemSkill2} from "../../items/skills/itemSkillRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 import {recalculatePlayerStats} from "../../common/statsUtils";
@@ -83,13 +83,16 @@ function buildItemSchema(itemFromDb: any): Item {
     // getItemSchemaObject: they're pure runtime aura output (ItemSchema.ts), and leaving them in
     // `primitives` would let a stale plain-object snapshot clobber the Item constructor's real
     // AffectedStats instance via .assign().
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillAffectedStats2, skillAffectedEnemyStats2, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
     if (!item.sellPrice) item.sellPrice = Math.floor(item.price * item.rarity * 0.7);
     item.affectedStats = affectedStatsFromRaw(affectedStats);
     item.affectedEnemyStats = affectedStatsFromRaw(affectedEnemyStats);
     item.skillAffectedStats = affectedStatsFromRaw(undefined);
     item.skillAffectedEnemyStats = affectedStatsFromRaw(undefined);
+    // Weapon Whisperer's second skill slot — same treatment as slot 1.
+    item.skillAffectedStats2 = affectedStatsFromRaw(undefined);
+    item.skillAffectedEnemyStats2 = affectedStatsFromRaw(undefined);
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
     item.tags = tagsArr;
@@ -113,6 +116,7 @@ function buildItemSchema(itemFromDb: any): Item {
     // this is what makes an already-granted skill (equipped, inventory, locked shop) pick up a
     // rebalance/rename instead of keeping whatever text/triggers were live when it was granted.
     reconcileItemSkill(item);
+    reconcileItemSkill2(item);
     // Cooldown-reduction rework (Season 24): converts an old embedded Wand of Fire/Flowering
     // Staff/Magic Ring copy to its new active-skill shape — see common/reworkMigrations.ts.
     migrateLegacyItem(item);

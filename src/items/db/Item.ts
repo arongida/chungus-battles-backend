@@ -4,7 +4,7 @@ import {Item} from "../schema/ItemSchema";
 import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {ArraySchema} from "@colyseus/schema";
 import {rollItemStats} from "../stats/itemStatRoller";
-import {reconcileItemSkill} from "../skills/itemSkillRoller";
+import {reconcileItemSkill, reconcileItemSkill2} from "../skills/itemSkillRoller";
 import {ItemType} from "../types/ItemTypes";
 import {migrateLegacyItem} from "../../common/reworkMigrations";
 
@@ -41,6 +41,10 @@ export const ItemSchema = new Schema({
     skillId: Number,
     skillName: String,
     skillDescription: String,
+    // Weapon Whisperer's second skill slot (ItemSchema.ts) — same persistence treatment as slot 1.
+    skillId2: Number,
+    skillName2: String,
+    skillDescription2: String,
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);
@@ -79,7 +83,7 @@ function getItemSchemaObject(itemFromDb: any): Item {
     // schema sync — "AffectedStats was expected, but Object was provided"). skillStatus is
     // excluded for the same "pure runtime output, never worth carrying over" reason — leaving it
     // out of `primitives` lets it fall back to the schema default ('') rather than a stale string.
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, skillAffectedStats2, skillAffectedEnemyStats2, skillStatus2, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
     if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);
@@ -90,6 +94,9 @@ function getItemSchemaObject(itemFromDb: any): Item {
     // even when a toJSON() round-trip did include a (soon stale) snapshot of it.
     newItemSchemaObject.skillAffectedStats = affectedStatsFromRaw(undefined);
     newItemSchemaObject.skillAffectedEnemyStats = affectedStatsFromRaw(undefined);
+    // Same treatment for Weapon Whisperer's second skill slot.
+    newItemSchemaObject.skillAffectedStats2 = affectedStatsFromRaw(undefined);
+    newItemSchemaObject.skillAffectedEnemyStats2 = affectedStatsFromRaw(undefined);
 
     const tagsArr = new ArraySchema<string>();
     if (tags?.length) (tags as string[]).forEach(t => tagsArr.push(t));
@@ -113,6 +120,7 @@ function getItemSchemaObject(itemFromDb: any): Item {
     // Re-sync skillName/skillDescription/triggerTypes against the current ITEM_SKILLS table —
     // covers shop rolls, quest items, and cloneItem() (dual-wield ghost copies, upgrade previews).
     reconcileItemSkill(newItemSchemaObject);
+    reconcileItemSkill2(newItemSchemaObject);
     // Cooldown-reduction rework (Season 24): see common/reworkMigrations.ts.
     migrateLegacyItem(newItemSchemaObject);
 

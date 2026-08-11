@@ -663,6 +663,20 @@ export class DraftRoom extends Room {
         this.state.player.setItemUnequipped(item, slot);
     }
 
+    /** Forces one free shop rebuild, bypassing the gold cost and the free-reroll charge pools
+     *  entirely. Exposed for Grand Robbery (TalentBehaviors.ts) — a talent behavior has no room
+     *  handle of its own, so this is threaded through the aura BehaviorContext instead. Arrow
+     *  property (not a method) so it stays bound when passed through the context. Deliberately
+     *  does NOT increment rerollsThisRound — a forced reroll must not feed Fortune's Fool's
+     *  per-round HP penalty. */
+    public forceFreeReroll = async (): Promise<void> => {
+        this.dispatcher.dispatch(new BeforeShopRefreshTriggerCommand());
+        this.state.player.unlockShop();
+        this.state.shop.clear();
+        this.invalidateUndoSell();
+        await this.updateShop(this.state.shopSize);
+    };
+
     private async refreshShop(client: Client) {
         // Fortune's Fool (aura): rerolls are entirely free, checked before Haggler's per-shop
         // charge pool so it doesn't burn Haggler's limited free rerolls either.
