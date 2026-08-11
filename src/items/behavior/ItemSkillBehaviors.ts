@@ -227,7 +227,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     }
     if (trigger !== TriggerType.FIGHT_START || !attacker || !defender) return;
     const { ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const reduction = Math.round(attacker.strength * ratio);
+    const reduction = Math.round(defender.strength * ratio);
     if (reduction <= 0) return;
     item.skillAffectedEnemyStats.strength -= reduction;
     client?.send('combat_log', {

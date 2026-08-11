@@ -93,6 +93,10 @@ export type CombatLogMessage = {
   // client.send(), which can arrive out of order on the client — seq lets the
   // client reorder them deterministically.
   seq?: number;
+  // Fight-elapsed game time in ms at the moment this entry was emitted (0 before the battle
+  // starts), stamped alongside seq by FightRoom.stampCombatLogMeta. Lets the client show a
+  // timestamp next to each log line.
+  t?: number;
   attackerId?: number;
   defenderId?: number;
   weaponItemId?: number;
