@@ -77,7 +77,7 @@ export class FightRoom extends Room {
         // Wrap broadcast so every outbound event is captured by the recorder.
         const origBroadcast = this.broadcast.bind(this);
         (this as any).broadcast = (type: string, message?: any, options?: any) => {
-            this.stampCombatLogSeq(type, message);
+            this.stampCombatLogMeta(type, message);
             this.recorder.record('broadcast', type, message);
             return origBroadcast(type, message, options);
         };
@@ -272,7 +272,7 @@ export class FightRoom extends Room {
         if ((client.send as any).__replayWrapped) return;
         const origSend = client.send.bind(client);
         (client as any).send = (type: string, message?: any) => {
-            this.stampCombatLogSeq(type, message);
+            this.stampCombatLogMeta(type, message);
             this.recorder.record('send', type, message);
             return origSend(type, message);
         };
@@ -286,10 +286,17 @@ export class FightRoom extends Room {
     // actually emitted in.
     private combatLogSeq = 0;
 
-    private stampCombatLogSeq(type: string, message?: any): void {
-        if (type === 'combat_log' && message && typeof message === 'object') {
-            message.seq = this.combatLogSeq++;
-        }
+    // Stamps seq (ordering) and t (fight-elapsed game time, for display) on every combat_log
+    // message. Single choke point both broadcast() and client.send() pass through, so this
+    // covers every logCombat/client.send('combat_log', ...) call site in the codebase.
+    private stampCombatLogMeta(type: string, message?: any): void {
+        if (type !== 'combat_log' || !message || typeof message !== 'object') return;
+        message.seq = this.combatLogSeq++;
+        // Pre-battle entries (the 3-2-1 countdown) predate battleStartElapsedTime — clamp to 0
+        // rather than reporting room-creation-relative time.
+        message.t = this.state.battleStarted
+            ? Math.max(0, this.clock.elapsedTime - this.battleStartElapsedTime)
+            : 0;
     }
 
     async onLeave(client: Client, code: number) {
@@ -333,7 +340,8 @@ export class FightRoom extends Room {
     private buildFightStatsPayload(): FightStatsMessage {
         const sideFor = (self: Player, opponent: Player): FightSideStats => ({
             damageDealt: {
-                weapon: Math.round(opponent.fightStats.damageTaken.normal),
+                weapon: Math.round(opponent.fightStats.damageTaken.weapon),
+                skill: Math.round(opponent.fightStats.damageTaken.skill),
                 burn: Math.round(opponent.fightStats.damageTaken.burn),
                 poison: Math.round(opponent.fightStats.damageTaken.poison),
             },

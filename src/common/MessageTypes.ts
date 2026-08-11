@@ -1,5 +1,10 @@
 export type DamageType = 'normal' | 'poison' | 'burn';
 
+// Attribution-only axis for FightStats bucketing — never sent on a message or replay event
+// (DamageType still drives all client-facing rendering). 'self' is a talent/item paying its
+// own cost (e.g. Stab) and is deliberately excluded from both sides' damageDealt.
+export type DamageSource = 'weapon' | 'skill' | 'self';
+
 export type DamageMessage = {
   playerId: number;
   damage: number;
@@ -93,6 +98,10 @@ export type CombatLogMessage = {
   // client.send(), which can arrive out of order on the client — seq lets the
   // client reorder them deterministically.
   seq?: number;
+  // Fight-elapsed game time in ms at the moment this entry was emitted (0 before the battle
+  // starts), stamped alongside seq by FightRoom.stampCombatLogMeta. Lets the client show a
+  // timestamp next to each log line.
+  t?: number;
   attackerId?: number;
   defenderId?: number;
   weaponItemId?: number;
@@ -112,7 +121,7 @@ export type CombatLogMessage = {
 };
 
 export type FightSideStats = {
-  damageDealt: { weapon: number; burn: number; poison: number };
+  damageDealt: { weapon: number; skill: number; burn: number; poison: number };
   healingReceived: number;
   damageReducedByDefense: number;
   attacksDodged: number;
@@ -136,6 +145,9 @@ export type FightStatsMessage = {
 export type StatsSyncItem = {
   slot: string;
   skillStatus: string;
+  // Weapon Whisperer's second skill slot (ItemSchema.ts's skillStatus2) — same "resent whenever
+  // either slot's status changed" granularity as skillStatus above, not diffed independently.
+  skillStatus2: string;
 };
 
 export type StatsSyncSide = {

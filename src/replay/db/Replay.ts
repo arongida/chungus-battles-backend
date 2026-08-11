@@ -68,7 +68,7 @@ export interface GameStatsResult {
 }
 
 const ZERO_SIDE: FightSideStats = {
-    damageDealt: { weapon: 0, burn: 0, poison: 0 },
+    damageDealt: { weapon: 0, skill: 0, burn: 0, poison: 0 },
     healingReceived: 0,
     damageReducedByDefense: 0,
     attacksDodged: 0,
@@ -92,6 +92,7 @@ export async function getGameStats(originalPlayerId: number): Promise<GameStatsR
             losses: { $sum: { $cond: [{ $in: ['$result', ['lose', 'loose']] }, 1, 0] } },
             draws: { $sum: { $cond: [{ $eq: ['$result', 'draw'] }, 1, 0] } },
             pWeapon: { $sum: '$stats.player.damageDealt.weapon' },
+            pSkill: { $sum: '$stats.player.damageDealt.skill' },
             pBurn: { $sum: '$stats.player.damageDealt.burn' },
             pPoison: { $sum: '$stats.player.damageDealt.poison' },
             pHeal: { $sum: '$stats.player.healingReceived' },
@@ -103,6 +104,7 @@ export async function getGameStats(originalPlayerId: number): Promise<GameStatsR
             pEmpAtk: { $sum: '$stats.player.empoweredAttacks' },
             pEmpDmg: { $sum: '$stats.player.empoweredDamage' },
             eWeapon: { $sum: '$stats.enemy.damageDealt.weapon' },
+            eSkill: { $sum: '$stats.enemy.damageDealt.skill' },
             eBurn: { $sum: '$stats.enemy.damageDealt.burn' },
             ePoison: { $sum: '$stats.enemy.damageDealt.poison' },
             eHeal: { $sum: '$stats.enemy.healingReceived' },
@@ -127,7 +129,7 @@ export async function getGameStats(originalPlayerId: number): Promise<GameStatsR
         draws: agg.draws ?? 0,
         stats: {
             player: {
-                damageDealt: { weapon: agg.pWeapon ?? 0, burn: agg.pBurn ?? 0, poison: agg.pPoison ?? 0 },
+                damageDealt: { weapon: agg.pWeapon ?? 0, skill: agg.pSkill ?? 0, burn: agg.pBurn ?? 0, poison: agg.pPoison ?? 0 },
                 healingReceived: agg.pHeal ?? 0,
                 damageReducedByDefense: agg.pDef ?? 0,
                 attacksDodged: agg.pDodge ?? 0,
@@ -138,7 +140,7 @@ export async function getGameStats(originalPlayerId: number): Promise<GameStatsR
                 empoweredDamage: agg.pEmpDmg ?? 0,
             },
             enemy: {
-                damageDealt: { weapon: agg.eWeapon ?? 0, burn: agg.eBurn ?? 0, poison: agg.ePoison ?? 0 },
+                damageDealt: { weapon: agg.eWeapon ?? 0, skill: agg.eSkill ?? 0, burn: agg.eBurn ?? 0, poison: agg.ePoison ?? 0 },
                 healingReceived: agg.eHeal ?? 0,
                 damageReducedByDefense: agg.eDef ?? 0,
                 attacksDodged: agg.eDodge ?? 0,

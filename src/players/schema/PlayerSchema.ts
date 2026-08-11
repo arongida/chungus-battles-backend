@@ -3,7 +3,7 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {Item} from '../../items/schema/ItemSchema';
 import {IStats} from '../../common/types';
 import {TalentType} from '../../talents/types/TalentTypes';
-import { CombatLogMessage, DamageMessage, DamageType, InvulnerableMessage, InvulnerableStateMessage } from '../../common/MessageTypes';
+import { CombatLogMessage, DamageMessage, DamageSource, DamageType, InvulnerableMessage, InvulnerableStateMessage } from '../../common/MessageTypes';
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
@@ -347,7 +347,7 @@ export class Player extends Schema implements IStats {
         return gained;
     }
 
-    takeDamage(damage: number, playerClient: Client, damageType: DamageType = 'normal') {
+    takeDamage(damage: number, playerClient: Client, damageType: DamageType = 'normal', source: DamageSource = 'weapon') {
         if (this.hp <= 0) return;
         if (damage <= 0) return;
         if (this.invincible) {
@@ -360,7 +360,10 @@ export class Player extends Schema implements IStats {
             return;
         }
         this.hp -= damage;
-        this.fightStats.damageTaken[damageType] += damage;
+        // damageType drives client-facing rendering; source is attribution-only and only
+        // matters when damageType is 'normal' (poison/burn ticks are never a 'skill'/'self').
+        const bucket = damageType === 'normal' ? source : damageType;
+        this.fightStats.damageTaken[bucket] += damage;
         playerClient.send('damage', {
             playerId: this.playerId,
             damage: damage,
@@ -514,6 +517,11 @@ export class Player extends Schema implements IStats {
             item.skillId = snap.skillId;
             item.skillName = snap.skillName;
             item.skillDescription = snap.skillDescription;
+            // Second skill slot — only ever granted by Weapon Whisperer itself, so it reverts
+            // right alongside the Mythic upgrade and slot 1.
+            item.skillId2 = snap.skillId2;
+            item.skillName2 = snap.skillName2;
+            item.skillDescription2 = snap.skillDescription2;
             weaponWhispererSnapshots.delete(item);
         }
         item.equipped = false;
@@ -521,6 +529,7 @@ export class Player extends Schema implements IStats {
         // it immediately so the inventory card doesn't keep showing the last fight's/tick's number
         // until the next UpdateStatsCommand tick catches up.
         item.skillStatus = '';
+        item.skillStatus2 = '';
         this.inventory.push(item);
         this.equippedItems.delete(slot);
     }

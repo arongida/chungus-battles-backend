@@ -45,7 +45,12 @@ export const SEASONS: SeasonInfo[] = [
       'Dagger of Poison: applies one more poison stack per hit (rarity + 1)',
       'Poison duration standardized to 5s everywhere (Corroding Collection previously said 10s) — each stack deals exactly 1% max HP over its life',
       'Martial Artist: free weapon now granted once per level up, not once per shop round',
-      'Starting gold to 8'
+      'Starting gold to 8',
+      'Pickpocket now grants 15 dodge rating, so it can actually trigger itself',
+      'The Bear reworked and moved to rogue: your attacks apply 2 burn stacks to the enemy and 1 to yourself',
+      'Scam reworked: grants dodge rating, and after you dodge your next scam steals health equal to your dodge rating',
+      'Grand Robbery buffed: now also rerolls the shop for free and robs it a second time, and always upgrades every stolen item by a rarity',
+      'Weapon Whisperer buffed: the Mythic weapon now also learns a second weapon skill'
     ]
   },
   {

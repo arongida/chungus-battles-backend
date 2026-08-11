@@ -16,12 +16,13 @@ interface SideCache {
     hp: number;
     stats: Record<TrackedStat, number>;
     skillStatus: Map<string, string>;
+    skillStatus2: Map<string, string>;
 }
 
 function freshCache(): SideCache {
     const stats = {} as Record<TrackedStat, number>;
     for (const key of TRACKED_STATS) stats[key] = NaN;
-    return { hp: NaN, stats, skillStatus: new Map() };
+    return { hp: NaN, stats, skillStatus: new Map(), skillStatus2: new Map() };
 }
 
 /**
@@ -39,11 +40,16 @@ export class StatsSyncRecorder {
     // allocating a new closure on every scan.
     private scanOut: StatsSyncItem[] | null = null;
     private scanCache: Map<string, string> | null = null;
-    private readonly scanItem = (item: { skillStatus: string }, slot: string): void => {
+    private scanCache2: Map<string, string> | null = null;
+    // Same "per item, not per field" granularity as before: an entry is pushed (carrying BOTH
+    // slots' current status) whenever either slot's status line changed.
+    private readonly scanItem = (item: { skillStatus: string; skillStatus2: string }, slot: string): void => {
         const prev = this.scanCache!.get(slot);
-        if (prev === item.skillStatus) return;
+        const prev2 = this.scanCache2!.get(slot);
+        if (prev === item.skillStatus && prev2 === item.skillStatus2) return;
         this.scanCache!.set(slot, item.skillStatus);
-        (this.scanOut ??= []).push({ slot, skillStatus: item.skillStatus });
+        this.scanCache2!.set(slot, item.skillStatus2);
+        (this.scanOut ??= []).push({ slot, skillStatus: item.skillStatus, skillStatus2: item.skillStatus2 });
     };
 
     /** Re-seeds both caches so the next maybeRecord (typically called with force=true) reports
@@ -86,9 +92,11 @@ export class StatsSyncRecorder {
 
         this.scanOut = null;
         this.scanCache = cache.skillStatus;
+        this.scanCache2 = cache.skillStatus2;
         pl.equippedItems.forEach(this.scanItem);
         if (this.scanOut) (out ??= { playerId: pl.playerId }).items = this.scanOut;
         this.scanCache = null;
+        this.scanCache2 = null;
 
         return out;
     }

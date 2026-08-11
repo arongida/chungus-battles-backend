@@ -55,6 +55,7 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
             questItems: this.state.questItems,
             trigger: TriggerType.AURA,
             attackerSnapshot,
+            forceFreeReroll: this.room.forceFreeReroll,
         };
 
         auraTalents.forEach((talent) => {

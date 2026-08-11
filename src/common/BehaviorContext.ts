@@ -36,4 +36,8 @@ export interface BehaviorContext {
     isCounterAttack?: boolean;
     /** Outcome of the fight — set on FIGHT_END so talents can condition rewards on winning. */
     fightResult?: FightResultType;
+    /** Forces one free, immediate shop rebuild (DraftRoom.forceFreeReroll) — only supplied by
+     *  DraftAuraTriggerCommand, so undefined outside the draft aura pass (e.g. in a fight).
+     *  Exists solely for Grand Robbery (TalentBehaviors.ts), the only caller. */
+    forceFreeReroll?: () => Promise<void>;
 }

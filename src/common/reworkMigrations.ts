@@ -37,6 +37,29 @@ export function migrateLegacyTalent(talent: Talent): void {
         const cdr = ACTIVE_TALENT_CDR_BY_TIER[talent.tier];
         if (cdr) talent.affectedStats.cooldownReduction = cdr;
     }
+
+    // Pickpocket (ROGUE_1, 102): reworked Season 23 to grant its own dodge rating, so it can
+    // actually trigger itself instead of sitting dead on a non-Thief build.
+    if (talent.talentId === TalentType.ROGUE_1 && !talent.affectedStats.dodgeRate) {
+        talent.affectedStats.dodgeRate = 15;
+    }
+
+    // Bear (31): reworked Season 23 from a flat max-HP-scaled hit into a burn applicator.
+    // Pre-rework copies stored a max-HP damage fraction (0.02) in activationRate — any value
+    // below 1 is a legacy copy still on the old shape.
+    if (talent.talentId === TalentType.BEAR && talent.activationRate < 1) {
+        talent.activationRate = 2;
+        talent.base = 1;
+    }
+
+    // Scam (5): reworked Season 23 into a dodge-fuelled active skill. Pre-rework copies fired on
+    // a bare ACTIVE trigger for flat `attacker.level` damage and never listened for ON_DODGE.
+    if (talent.talentId === TalentType.SCAM && !talent.triggerTypes.includes(TriggerType.ON_DODGE)) {
+        talent.triggerTypes.push(TriggerType.ON_DODGE);
+        talent.triggerTypes.push(TriggerType.FIGHT_END);
+        talent.base = 1;
+        if (!talent.affectedStats.dodgeRate) talent.affectedStats.dodgeRate = 10;
+    }
 }
 
 const FLOWERING_STAFF_ITEM_ID = 8;

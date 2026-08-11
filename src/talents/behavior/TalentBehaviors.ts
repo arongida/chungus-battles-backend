@@ -12,7 +12,7 @@ import { cloneItem, getItemById, getRandomWeaponsByTier } from "../../items/db/I
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { clampTier } from "../../items/stats/itemStatPool";
 import { applyRarityUpgrade, applyLuckyShopUpgrades, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER } from "../../commands/ShopUpgradeUtils";
-import { ensureShieldSkill } from "../../items/skills/itemSkillRoller";
+import { ensureShieldSkill, rollItemSkill, grantItemSkill2 } from "../../items/skills/itemSkillRoller";
 import { CombatLogMessage, RewardGainMessage, DamageMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
@@ -59,6 +59,30 @@ const JUST_A_SCRATCH_COOLDOWN_MS = 1000;
 // Stab can never drop its own owner below 1 HP.
 const STAB_SELF_COST_FRACTION = 0.05;
 
+// Scam (reworked Season 23): armed by an ON_DODGE trigger, consumed by the next ACTIVE tick.
+// A WeakSet (not a WeakMap) since it's a pure boolean latch — no value to store alongside it.
+const scamArmed = new WeakSet<Talent>();
+
+// Weapon Whisperer (buffed Season 23): grants the tier-5 payoff on top of Mythic — a second
+// weapon skill, rolled from the weapon's own pool and excluded against whatever slot 1 already
+// has so the two are never identical. Latched on skillId2 (cheap no-op once granted), so this is
+// safe to call from every branch of the WEAPON_WHISPERER behavior below, including on every
+// aura tick for a weapon that's already Mythic. Returns whether a skill was newly granted, so
+// callers can decide their own trigger_talent/log timing around it.
+function grantWeaponWhispererSecondSkill(weapon: Item, attacker: Player, client: Client, defender?: Player): boolean {
+    if (weapon.skillId2) return false;
+    const def = rollItemSkill(weapon, attacker, { exclude: weapon.skillId });
+    if (!def) return false;
+    grantItemSkill2(weapon, def);
+    const text = `${attacker.name}'s ${weapon.name} learns ${def.name}!`;
+    if (defender) {
+        client.send('combat_log', { text, kind: 'talent', talentId: TalentType.WEAPON_WHISPERER, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
+    } else {
+        client.send('draft_log', text);
+    }
+    return true;
+}
+
 export const TalentBehaviors = {
     [TalentType.RAGE]: (context: TalentBehaviorContext) => {
         const { talent, defender, client } = context;
@@ -87,10 +111,10 @@ export const TalentBehaviors = {
             damage: calculatedStabDamage,
             attacker: attacker,
         });
-        defender.takeDamage(calculatedStabDamage, client);
+        defender.takeDamage(calculatedStabDamage, client, 'normal', 'skill');
 
         const selfCost = Math.min(attacker.hp * STAB_SELF_COST_FRACTION, attacker.hp - 1);
-        if (selfCost > 0) attacker.takeDamage(selfCost, client);
+        if (selfCost > 0) attacker.takeDamage(selfCost, client, 'normal', 'self');
 
         track(talent, 1, calculatedStabDamage);
         client.send('combat_log', { text: `${attacker.name} stabs ${defender.name} for ${fmt(calculatedStabDamage)} damage, paying ${fmt(selfCost)} hp in blood!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: calculatedStabDamage } as CombatLogMessage);
@@ -100,18 +124,18 @@ export const TalentBehaviors = {
         });
     },
 
+    // The Bear (reworked Season 23): moved warrior -> rogue and turned into a burn applicator.
+    // Every weapon hit sets the enemy alight for `activationRate` stacks — and singes the bear
+    // for `base` stacks of its own, the required downside. Self-burn scales with attack speed
+    // exactly as the enemy burn does, so stacking haste sharpens both edges. Damage is credited
+    // to this talent through addBurnStacks' source ledger (common/dotSources.ts), so no track()
+    // damage arg here.
     [TalentType.BEAR]: (context: TalentBehaviorContext) => {
-        const { talent, attacker, defender, client, commandDispatcher } = context;
-        const bearDamage = attacker.maxHp * talent.activationRate;
-        const calculatedBearDamage = defender.getDamageAfterDefense(bearDamage);
-        commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-            defender: defender,
-            damage: calculatedBearDamage,
-            attacker: attacker,
-        });
-        defender.takeDamage(calculatedBearDamage, client);
-        track(talent, 1, calculatedBearDamage);
-        client.send('combat_log', { text: `${attacker.name} mauls ${defender.name} for ${fmt(calculatedBearDamage)} damage!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: calculatedBearDamage } as CombatLogMessage);
+        const { talent, attacker, defender, client, clock } = context;
+        defender.addBurnStacks(clock, client, talent.activationRate, talent);
+        attacker.addBurnStacks(clock, client, talent.base, talent);
+        track(talent, 1);
+        client.send('combat_log', { text: `${attacker.name} mauls ${defender.name}, setting them ablaze!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.BEAR,
@@ -232,19 +256,40 @@ export const TalentBehaviors = {
         });
     },
 
+    // Scam (reworked Season 23): a con you can only run on a mark you've already slipped.
+    // ON_DODGE arms the talent; the next ACTIVE tick consumes that charge to steal HP scaled off
+    // your dodge rating. Un-armed ticks are a silent no-op — the downside is that a fight where
+    // you never dodge is a fight where Scam does nothing at all. Grants its own dodge
+    // (affectedStats) so a merchant with no natural dodge can still run it.
     [TalentType.SCAM]: (context: TalentBehaviorContext) => {
-        const { attacker, defender, client, commandDispatcher } = context;
-        const amount = attacker.level;
+        const { attacker, defender, client, talent, commandDispatcher, trigger } = context;
+
+        if (trigger === TriggerType.ON_DODGE) {
+            // ON_DODGE inverts roles: `defender` is the dodger/talent owner (see
+            // OnDodgeTriggerCommand.ts and HIDDEN_VIALS above).
+            scamArmed.add(talent);
+            client.send('trigger_talent', { playerId: defender.playerId, talentId: TalentType.SCAM });
+            return;
+        }
+        if (trigger === TriggerType.FIGHT_END) {
+            scamArmed.delete(talent);
+            return;
+        }
+
+        if (!scamArmed.has(talent)) return;
+        scamArmed.delete(talent);
+
+        const amount = defender.maxHp * talent.base;
         const reducedAmount = defender.getDamageAfterDefense(amount);
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
             defender: defender,
             damage: reducedAmount,
             attacker: attacker,
         });
-        defender.takeDamage(reducedAmount, client);
+        defender.takeDamage(reducedAmount, client, 'normal', 'skill');
         const scamHealed = attacker.heal(reducedAmount);
-        track(context.talent, 1, reducedAmount, scamHealed);
-        client.send('combat_log', { text: `${attacker.name} scams ${fmt(scamHealed)} health from ${defender.name}!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: reducedAmount, healing: scamHealed } as CombatLogMessage);
+        track(talent, 1, reducedAmount, scamHealed);
+        client.send('combat_log', { text: `${attacker.name} cons ${fmt(scamHealed)} health out of ${defender.name}!`, kind: 'leech', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: reducedAmount, healing: scamHealed } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.SCAM,
@@ -279,7 +324,7 @@ export const TalentBehaviors = {
             attacker: attacker,
         });
 
-        defender.takeDamage(damage, client);
+        defender.takeDamage(damage, client, 'normal', 'skill');
         track(context.talent, 1, damage);
         client.send('combat_log', { text: `${attacker.name} throws money for ${fmt(damage)} damage!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage } as CombatLogMessage);
         client.send('trigger_talent', {
@@ -312,13 +357,26 @@ export const TalentBehaviors = {
         const weapon = attacker.equippedItems.get(EquipSlot.MAIN_HAND);
         // Quest weapons (e.g. Magic Ring) have their own rarity progression
         // (level-up rolls) and must not be insta-mythic'd out of it.
-        if (!weapon || weapon.rarity >= ItemRarity.MYTHIC || weapon.tags?.includes('quest')) return;
+        if (!weapon || weapon.tags?.includes('quest')) return;
 
         // Snapshot the weapon's pre-upgrade state exactly once (before this talent ever touches
-        // it), so PlayerSchema.setItemUnequipped can revert it when it leaves MAIN_HAND — closes
-        // the exploit of cycling weapons through main-hand to permanently bank multiple Mythics.
+        // it, at ANY rarity — including a weapon that was already Mythic when this talent was
+        // picked), so PlayerSchema.setItemUnequipped can revert both the Mythic upgrade and the
+        // second skill when it leaves MAIN_HAND — closes the exploit of cycling weapons through
+        // main-hand to permanently bank multiple Mythics or a free extra skill.
         if (!weaponWhispererSnapshots.has(weapon)) {
             weaponWhispererSnapshots.set(weapon, cloneItem(weapon));
+        }
+
+        if (weapon.rarity >= ItemRarity.MYTHIC) {
+            // Already Mythic (a prior tick's upgrade, a cached re-equip, or a weapon that was
+            // simply found Mythic) — the rarity walk below has nothing left to do. The only
+            // remaining job is the second skill; grantWeaponWhispererSecondSkill is a cheap
+            // synchronous no-op once it's granted, so this is safe on every tick after that.
+            if (grantWeaponWhispererSecondSkill(weapon, attacker, client, defender)) {
+                client.send('trigger_talent', { playerId: attacker.playerId, talentId: TalentType.WEAPON_WHISPERER });
+            }
+            return;
         }
 
         // If this exact weapon was rolled Mythic before (and later reverted on unequip), reapply
@@ -331,6 +389,15 @@ export const TalentBehaviors = {
             weapon.baseMaxDamage = cachedResult.baseMaxDamage;
             weapon.baseAttackSpeed = cachedResult.baseAttackSpeed;
             weapon.description = cachedResult.description;
+            // Restore BOTH skill slots — cachedResult is a full cloneItem() snapshot taken right
+            // after the original upgrade, so it already carries whatever slot 1 rolled at
+            // Legendary and whatever slot 2 this talent granted at Mythic.
+            weapon.skillId = cachedResult.skillId;
+            weapon.skillName = cachedResult.skillName;
+            weapon.skillDescription = cachedResult.skillDescription;
+            weapon.skillId2 = cachedResult.skillId2;
+            weapon.skillName2 = cachedResult.skillName2;
+            weapon.skillDescription2 = cachedResult.skillDescription2;
             client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Mythic!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
@@ -356,13 +423,17 @@ export const TalentBehaviors = {
             rollItemStats(rolledSource);
             reachedMythic = applyRarityUpgrade(weapon, rolledSource, attacker, false) || reachedMythic;
         }
-        weaponWhispererFinalRolls.set(weapon, cloneItem(weapon));
 
         client.send('combat_log', { text: `${attacker.name}'s ${weapon.name} becomes Mythic!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, itemId: weapon.itemId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.WEAPON_WHISPERER,
         });
+
+        // Tier-5 payoff on top of Mythic: a second weapon skill. Granted before the cache below
+        // so a later re-equip's cachedResult snapshot already carries it.
+        grantWeaponWhispererSecondSkill(weapon, attacker, client, defender);
+        weaponWhispererFinalRolls.set(weapon, cloneItem(weapon));
 
         // This aura talent ticks in both DraftRoom and FightRoom — `defender` is only ever
         // set in a fight context (see the Magic Ring AURA handler's identical idiom), so it's
@@ -495,7 +566,7 @@ export const TalentBehaviors = {
             attacker: defender,
             isReflectedDamage: true,
         });
-        attacker.takeDamage(reflectDamage, client);
+        attacker.takeDamage(reflectDamage, client, 'normal', 'skill');
         track(talent, 1, reflectDamage);
         client.send('combat_log', { text: `${defender.name} reflects ${fmt(reflectDamage)} damage to ${attacker.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId, defenderId: attacker.playerId, damage: reflectDamage } as CombatLogMessage);
         client.send('trigger_talent', {
@@ -518,7 +589,7 @@ export const TalentBehaviors = {
                 attacker: defender,
                 isReflectedDamage: true,
             });
-            attacker.takeDamage(damage, client);
+            attacker.takeDamage(damage, client, 'normal', 'skill');
             track(talent, 1, damage);
             client.send('combat_log', { text: `${defender.name} reflects ${fmt(damage)} damage to ${attacker.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId, defenderId: attacker.playerId, damage } as CombatLogMessage);
             client.send('trigger_talent', {
@@ -1083,7 +1154,7 @@ export const TalentBehaviors = {
                 damage: damageAfterReduction,
                 attacker: attacker,
             });
-            defender.takeDamage(damageAfterReduction, client);
+            defender.takeDamage(damageAfterReduction, client, 'normal', 'skill');
             track(context.talent, 1, damageAfterReduction);
             client.send('combat_log', { text: `${attacker.name} throws weapons for ${fmt(damageAfterReduction)} damage!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: damageAfterReduction } as CombatLogMessage);
             client.send('trigger_talent', {
@@ -1274,34 +1345,52 @@ export const TalentBehaviors = {
             talent.affectedStats.strength = 100;
         },
 
+    // Grand Robbery (buffed Season 23): still once per run, but now robs TWO shops — the current
+    // one, then a forced free reroll, then the shop that reroll produces — and always upgrades
+    // every stolen item by a rarity step (previously required owning Misconduct). The one-shot
+    // latch is pushed BEFORE the forced reroll's await: DraftAuraTriggerCommand ticks every 1s
+    // without awaiting behaviors, and updateShop() (called by forceFreeReroll) itself re-dispatches
+    // a DraftAuraTriggerCommand — without the pre-await latch, that nested tick would see the
+    // talent as still un-used and rob the second shop a second time.
     [TalentType.GRAND_ROBBERY]:
-        (context: TalentBehaviorContext) => {
-            const { attacker, client, shop, talent } = context;
+        async (context: TalentBehaviorContext) => {
+            const { attacker, client, shop, talent, forceFreeReroll } = context;
             if (!shop) return; // undefined outside draft
             if (talent.tags?.includes('grand-robbery-used')) return; // one-shot latch
-
-            const upgrade = hasMisconductUpgrade(attacker);
-            let stolen = 0;
-            let upgraded = 0;
-            let mythics = 0;
-            let stolenValue = 0;
-            [...shop].forEach((item) => { // copy: getItem mutates sold/shop state as it goes
-                if (item.sold) return;
-                const { steps, becameMythic } = stealShopItem(item, attacker, upgrade, false);
-                stolen++;
-                stolenValue += item.price; // post-steal (post-upgrade) price — what was actually taken
-                if (steps > 0) upgraded++;
-                if (becameMythic) mythics++;
-            });
-
             talent.tags?.push('grand-robbery-used');
+
+            const robShop = () => {
+                let stolen = 0;
+                let mythics = 0;
+                let stolenValue = 0;
+                [...shop].forEach((item) => { // copy: getItem mutates sold/shop state as it goes
+                    if (item.sold) return;
+                    const { becameMythic } = stealShopItem(item, attacker, true, false);
+                    stolen++;
+                    stolenValue += item.price; // post-steal (post-upgrade) price — what was actually taken
+                    if (becameMythic) mythics++;
+                });
+                return { stolen, mythics, stolenValue };
+            };
+
+            const first = robShop();
+            let stolen = first.stolen, mythics = first.mythics, stolenValue = first.stolenValue;
+
+            if (forceFreeReroll) {
+                await forceFreeReroll();
+                const second = robShop();
+                stolen += second.stolen;
+                mythics += second.mythics;
+                stolenValue += second.stolenValue;
+            }
+
             track(talent, stolen, 0, 0, stolenValue, 0);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.GRAND_ROBBERY,
             });
             if (stolen > 0) {
-                client.send('draft_log', `Grand Robbery! Stole ${stolen} item(s) from the shop${upgraded > 0 ? ' (all upgraded!)' : ''}!`);
+                client.send('draft_log', `Grand Robbery! Stole ${stolen} item(s) across two shops (all upgraded)!`);
             }
             if (mythics > 0) {
                 for (let i = 0; i < mythics; i++) grantLuckyFindMythicBonus(attacker);

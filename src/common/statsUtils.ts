@@ -77,6 +77,10 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
         if (value.skillAffectedStats) {
             accumulate(value.skillAffectedStats);
         }
+        // Weapon Whisperer's second skill slot (ItemSchema.ts) — same treatment as slot 1.
+        if (value.skillAffectedStats2) {
+            accumulate(value.skillAffectedStats2);
+        }
     });
     player.talents.forEach((talent) => {
         accumulate(talent.affectedStats);
@@ -91,6 +95,9 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
             }
             if (item.skillAffectedEnemyStats) {
                 accumulate(item.skillAffectedEnemyStats);
+            }
+            if (item.skillAffectedEnemyStats2) {
+                accumulate(item.skillAffectedEnemyStats2);
             }
         });
     }
