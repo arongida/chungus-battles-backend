@@ -87,10 +87,10 @@ export const TalentBehaviors = {
             damage: calculatedStabDamage,
             attacker: attacker,
         });
-        defender.takeDamage(calculatedStabDamage, client);
+        defender.takeDamage(calculatedStabDamage, client, 'normal', 'skill');
 
         const selfCost = Math.min(attacker.hp * STAB_SELF_COST_FRACTION, attacker.hp - 1);
-        if (selfCost > 0) attacker.takeDamage(selfCost, client);
+        if (selfCost > 0) attacker.takeDamage(selfCost, client, 'normal', 'self');
 
         track(talent, 1, calculatedStabDamage);
         client.send('combat_log', { text: `${attacker.name} stabs ${defender.name} for ${fmt(calculatedStabDamage)} damage, paying ${fmt(selfCost)} hp in blood!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: calculatedStabDamage } as CombatLogMessage);
@@ -109,7 +109,7 @@ export const TalentBehaviors = {
             damage: calculatedBearDamage,
             attacker: attacker,
         });
-        defender.takeDamage(calculatedBearDamage, client);
+        defender.takeDamage(calculatedBearDamage, client, 'normal', 'skill');
         track(talent, 1, calculatedBearDamage);
         client.send('combat_log', { text: `${attacker.name} mauls ${defender.name} for ${fmt(calculatedBearDamage)} damage!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: calculatedBearDamage } as CombatLogMessage);
         client.send('trigger_talent', {
@@ -241,7 +241,7 @@ export const TalentBehaviors = {
             damage: reducedAmount,
             attacker: attacker,
         });
-        defender.takeDamage(reducedAmount, client);
+        defender.takeDamage(reducedAmount, client, 'normal', 'skill');
         const scamHealed = attacker.heal(reducedAmount);
         track(context.talent, 1, reducedAmount, scamHealed);
         client.send('combat_log', { text: `${attacker.name} scams ${fmt(scamHealed)} health from ${defender.name}!`, kind: 'leech', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: reducedAmount, healing: scamHealed } as CombatLogMessage);
@@ -279,7 +279,7 @@ export const TalentBehaviors = {
             attacker: attacker,
         });
 
-        defender.takeDamage(damage, client);
+        defender.takeDamage(damage, client, 'normal', 'skill');
         track(context.talent, 1, damage);
         client.send('combat_log', { text: `${attacker.name} throws money for ${fmt(damage)} damage!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage } as CombatLogMessage);
         client.send('trigger_talent', {
@@ -495,7 +495,7 @@ export const TalentBehaviors = {
             attacker: defender,
             isReflectedDamage: true,
         });
-        attacker.takeDamage(reflectDamage, client);
+        attacker.takeDamage(reflectDamage, client, 'normal', 'skill');
         track(talent, 1, reflectDamage);
         client.send('combat_log', { text: `${defender.name} reflects ${fmt(reflectDamage)} damage to ${attacker.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId, defenderId: attacker.playerId, damage: reflectDamage } as CombatLogMessage);
         client.send('trigger_talent', {
@@ -518,7 +518,7 @@ export const TalentBehaviors = {
                 attacker: defender,
                 isReflectedDamage: true,
             });
-            attacker.takeDamage(damage, client);
+            attacker.takeDamage(damage, client, 'normal', 'skill');
             track(talent, 1, damage);
             client.send('combat_log', { text: `${defender.name} reflects ${fmt(damage)} damage to ${attacker.name}!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId, defenderId: attacker.playerId, damage } as CombatLogMessage);
             client.send('trigger_talent', {
@@ -1083,7 +1083,7 @@ export const TalentBehaviors = {
                 damage: damageAfterReduction,
                 attacker: attacker,
             });
-            defender.takeDamage(damageAfterReduction, client);
+            defender.takeDamage(damageAfterReduction, client, 'normal', 'skill');
             track(context.talent, 1, damageAfterReduction);
             client.send('combat_log', { text: `${attacker.name} throws weapons for ${fmt(damageAfterReduction)} damage!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: damageAfterReduction } as CombatLogMessage);
             client.send('trigger_talent', {

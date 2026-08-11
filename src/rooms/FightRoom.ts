@@ -340,7 +340,8 @@ export class FightRoom extends Room {
     private buildFightStatsPayload(): FightStatsMessage {
         const sideFor = (self: Player, opponent: Player): FightSideStats => ({
             damageDealt: {
-                weapon: Math.round(opponent.fightStats.damageTaken.normal),
+                weapon: Math.round(opponent.fightStats.damageTaken.weapon),
+                skill: Math.round(opponent.fightStats.damageTaken.skill),
                 burn: Math.round(opponent.fightStats.damageTaken.burn),
                 poison: Math.round(opponent.fightStats.damageTaken.poison),
             },

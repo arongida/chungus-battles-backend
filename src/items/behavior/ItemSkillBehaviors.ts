@@ -39,7 +39,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     if (bonus <= 0) return;
     const damageAfterDefense = defender.getDamageAfterDefense(bonus);
     commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender, damage: damageAfterDefense, attacker });
-    defender.takeDamage(damageAfterDefense, client);
+    defender.takeDamage(damageAfterDefense, client, 'normal', 'skill');
     client?.send('combat_log', {
       text: `${attacker.name}'s ${item.name} exploits ${defender.name}'s defense for ${fmt(bonus)} bonus damage!`,
       kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, itemId: item.itemId, damage: bonus,
@@ -117,7 +117,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     // `damage` is already the post-defense damage this hit just dealt (ON_ATTACK fires before
     // takeDamage in FightRoom.tryWeaponAttack) — mirroring it as bonus damage doubles the total.
     commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender, damage, attacker });
-    defender.takeDamage(damage, client);
+    defender.takeDamage(damage, client, 'normal', 'skill');
     client?.send('combat_log', {
       text: `${attacker.name}'s ${item.name} opens with a flourish — double damage!`,
       kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, itemId: item.itemId, damage,
@@ -393,7 +393,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     if (rawCounter <= 0) return;
     const counterDamage = attacker.getDamageAfterDefense(rawCounter);
     commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender: attacker, damage: counterDamage, attacker: defender });
-    attacker.takeDamage(counterDamage, client);
+    attacker.takeDamage(counterDamage, client, 'normal', 'skill');
     const defCost = defenseCost * defender.defense * 0.01;
     const consumed = Math.min(defCost, Math.max(0, defender.defense));
     if (consumed > 0) item.skillAffectedStats.defense -= consumed;

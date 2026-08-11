@@ -1,5 +1,10 @@
 export type DamageType = 'normal' | 'poison' | 'burn';
 
+// Attribution-only axis for FightStats bucketing — never sent on a message or replay event
+// (DamageType still drives all client-facing rendering). 'self' is a talent/item paying its
+// own cost (e.g. Stab) and is deliberately excluded from both sides' damageDealt.
+export type DamageSource = 'weapon' | 'skill' | 'self';
+
 export type DamageMessage = {
   playerId: number;
   damage: number;
@@ -116,7 +121,7 @@ export type CombatLogMessage = {
 };
 
 export type FightSideStats = {
-  damageDealt: { weapon: number; burn: number; poison: number };
+  damageDealt: { weapon: number; skill: number; burn: number; poison: number };
   healingReceived: number;
   damageReducedByDefense: number;
   attacksDodged: number;
