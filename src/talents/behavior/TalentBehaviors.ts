@@ -7,7 +7,6 @@ import { EquipSlot, ItemClass, ItemRarity, ItemType } from "../../items/types/It
 import { rollTheDice } from "../../common/utils";
 import { TalentBehaviorContext } from "./TalentBehaviorContext";
 import { ArraySchema } from "@colyseus/schema";
-import { AffectedStats } from "../../common/schema/AffectedStatsSchema";
 import { cloneItem, getItemById, getRandomWeaponsByTier } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { clampTier } from "../../items/stats/itemStatPool";
@@ -1519,36 +1518,17 @@ export function migrateLegacyMartialFists(player: Player): void {
     }
 }
 
+/** Off-hand mirror of a main-hand weapon. Built via cloneItem so it goes through the SAME
+ *  Schema-rebuild path as every other item clone — that path is the only place that knows
+ *  which Item fields must not be .assign()ed from a toJSON() snapshot. Do not re-inline a
+ *  local copy of it: this function has now been broken twice (once per skill slot added to
+ *  Item) by a hand-maintained field list drifting out of sync. */
 function clonedAsGhost(source: Item): Item {
-    const raw = source.toJSON() as any;
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, tags, equipOptions, itemCollections, triggerTypes, ...primitives } = raw;
-
-    const ghost = new Item().assign(primitives);
-    ghost.affectedStats = new AffectedStats().assign(affectedStats || {});
-    ghost.affectedEnemyStats = new AffectedStats().assign(affectedEnemyStats || {});
-    // Skill output is dynamic/self-clearing (see ItemSchema.ts's skillAffectedStats comment) —
-    // start the ghost fresh rather than copying a stale snapshot; its own skillId (carried via
-    // primitives) re-derives this every aura tick same as the source weapon.
-    ghost.skillAffectedStats = new AffectedStats();
-    ghost.skillAffectedEnemyStats = new AffectedStats();
-
-    const equipOptionsArr = new ArraySchema<string>();
-    if (equipOptions?.length) (equipOptions as string[]).forEach((e: string) => equipOptionsArr.push(e));
-    (ghost as any).equipOptions = equipOptionsArr;
-
-    const itemCollectionsArr = new ArraySchema<number>();
-    if (itemCollections?.length) (itemCollections as number[]).forEach((c: number) => itemCollectionsArr.push(c));
-    (ghost as any).itemCollections = itemCollectionsArr;
-
-    const triggerTypesArr = new ArraySchema<string>();
-    if (triggerTypes?.length) (triggerTypes as string[]).forEach((t: string) => triggerTypesArr.push(t));
-    ghost.triggerTypes = triggerTypesArr;
-
+    const ghost = cloneItem(source);
     ghost.price = 0;
     ghost.sellPrice = 0;
     ghost.sold = false;
     ghost.equipped = false;
     ghost.tags = new ArraySchema<string>('dual_wield_copy');
-
     return ghost;
 }
