@@ -463,7 +463,7 @@ export class Player extends Schema implements IStats {
     private findUpgradeTarget(itemId: number): Item | null {
         const candidates: Item[] = [];
         this.equippedItems.forEach((item) => {
-            if (item.itemId === itemId && item.rarity < ItemRarity.MYTHIC) candidates.push(item);
+            if (item.itemId === itemId && item.rarity < ItemRarity.MYTHIC && !item.tags?.includes('dual_wield_copy')) candidates.push(item);
         });
         this.inventory.forEach((item) => {
             if (item.itemId === itemId && item.rarity < ItemRarity.MYTHIC) candidates.push(item);
