@@ -15,7 +15,7 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
 import { TriggerType } from '../../common/types';
 import { ItemSkillType } from '../types/ItemSkillTypes';
-import { ITEM_SKILLS, skillValues } from './itemSkillBalance';
+import { ITEM_SKILLS, skillValues, BULK_DISCOUNT_MAX_DISCOUNT_FRACTION } from './itemSkillBalance';
 import { CombatLogMessage, RewardGainMessage, fmt } from '../../common/MessageTypes';
 import { OnDamageTriggerCommand } from '../../commands/triggers/OnDamageTriggerCommand';
 import { stealShopItem } from '../../commands/ShopUpgradeUtils';
@@ -320,7 +320,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     attacker.luckyFindChance += chance;
   },
 
-  // Only accumulates the rate here — Player.bulkDiscountGoldPerLuckPercent is re-seeded to 0 each
+  // Only accumulates the rate here — Player.bulkDiscountPercentPerLuckPercent is re-seeded to 0 each
   // aura tick (DraftAuraTriggerCommand) before this runs. The actual shop repricing happens in
   // DraftAuraTriggerCommand itself, AFTER luckyFindChanceMultiplier has been applied, so it always
   // reads the tick's final lucky-find value rather than racing Insider Trading's write within the
@@ -328,8 +328,8 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   [ItemSkillType.BULK_DISCOUNT]: (context) => {
     const { attacker, item, trigger } = context;
     if (trigger !== TriggerType.AURA || !attacker || !item) return;
-    const { perLuckPercent } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    attacker.bulkDiscountGoldPerLuckPercent += perLuckPercent;
+    const { percentPerLuckPercent } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    attacker.bulkDiscountPercentPerLuckPercent += percentPerLuckPercent;
   },
 
   [ItemSkillType.PROTECTION_MONEY]: (context) => {
@@ -476,15 +476,19 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   },
 };
 
-/** Applies Bulk Discount's accumulated rate (Player.bulkDiscountGoldPerLuckPercent, written by
- *  the AURA behavior above) to every unsold shop slot. Called from DraftAuraTriggerCommand AFTER
- *  luckyFindChanceMultiplier has been applied for the tick — not from the AURA behavior itself —
- *  because the discount needs to read the player's FINAL lucky-find value for this tick, and
- *  equippedItems iteration order can't guarantee Insider Trading's luckyFindChance write already
- *  happened by the time Bulk Discount's own AURA handler runs. Reuses bulkDiscountBasePrices so
- *  repeatedly subtracting from the live (already-discounted) price can't compound toward 0. */
-export function applyBulkDiscount(player: { luckyFindChance: number; bulkDiscountGoldPerLuckPercent: number }, shop: Iterable<Item>): void {
-  const discount = Math.floor(player.luckyFindChance * 100 * player.bulkDiscountGoldPerLuckPercent);
+/** Applies Bulk Discount's accumulated rate (Player.bulkDiscountPercentPerLuckPercent, written by
+ *  the AURA behavior above) to every unsold shop slot, as a percentage off each item's own base
+ *  price — NOT a flat gold amount, which used to let a single stacked-luck discount zero out
+ *  every cheap item in the shop at once while barely touching expensive ones. Called from
+ *  DraftAuraTriggerCommand AFTER luckyFindChanceMultiplier has been applied for the tick — not
+ *  from the AURA behavior itself — because the discount needs to read the player's FINAL
+ *  lucky-find value for this tick, and equippedItems iteration order can't guarantee Insider
+ *  Trading's luckyFindChance write already happened by the time Bulk Discount's own AURA handler
+ *  runs. Reuses bulkDiscountBasePrices so repeatedly discounting the live (already-discounted)
+ *  price can't compound toward 0. The fraction is capped at BULK_DISCOUNT_MAX_DISCOUNT_FRACTION
+ *  so even extreme stacked luck can't make the shop free. */
+export function applyBulkDiscount(player: { luckyFindChance: number; bulkDiscountPercentPerLuckPercent: number }, shop: Iterable<Item>): void {
+  const discountFraction = Math.min(BULK_DISCOUNT_MAX_DISCOUNT_FRACTION, player.luckyFindChance * 100 * player.bulkDiscountPercentPerLuckPercent);
   for (const shopItem of shop) {
     if (shopItem.sold) continue;
     let base = bulkDiscountBasePrices.get(shopItem);
@@ -492,7 +496,7 @@ export function applyBulkDiscount(player: { luckyFindChance: number; bulkDiscoun
       base = { price: shopItem.price, sellPrice: shopItem.sellPrice };
       bulkDiscountBasePrices.set(shopItem, base);
     }
-    shopItem.price = Math.max(0, base.price - discount);
-    shopItem.sellPrice = Math.max(0, base.sellPrice - discount);
+    shopItem.price = Math.max(1, Math.round(base.price * (1 - discountFraction)));
+    shopItem.sellPrice = Math.max(1, Math.round(base.sellPrice * (1 - discountFraction)));
   }
 }

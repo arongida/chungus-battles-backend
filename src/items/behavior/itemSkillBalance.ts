@@ -65,6 +65,11 @@ function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
+// Bulk Discount (item skill): hard cap on the shop-price discount fraction, regardless of how
+// high stacked lucky-find chance (Insider Trading + VIP Pass + Black Market Contact x2 + Mythic
+// snowball bonus, etc.) climbs. Keeps the shop from ever going literally free.
+export const BULK_DISCOUNT_MAX_DISCOUNT_FRACTION = 0.75;
+
 const RARITY_ORDER = [ItemRarity.COMMON, ItemRarity.RARE, ItemRarity.EPIC, ItemRarity.LEGENDARY, ItemRarity.MYTHIC];
 
 /** Looks up the rarity-appropriate value bracket for a skill. Returns the highest defined
@@ -506,7 +511,10 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
   // Scales off the player's own lucky find chance (Insider Trading, VIP Pass, Black Market
   // Contact, Mythic snowball bonus, etc.) instead of counting equipped merchant items — so it
   // rewards the same economy stat every other merchant piece is already pushing, rather than
-  // sitting in tension with it.
+  // sitting in tension with it. Percentage-off-price (not a flat gold amount) so stacked luck
+  // scales the discount proportionally on every item instead of flattening cheap items to free
+  // while barely denting expensive ones — see BULK_DISCOUNT_MAX_DISCOUNT_FRACTION for the cap
+  // that keeps even very high luck from making the shop literally free.
   [ItemSkillType.BULK_DISCOUNT]: {
     id: ItemSkillType.BULK_DISCOUNT,
     class: ItemClass.MERCHANT,
@@ -514,20 +522,18 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { perLuckPercent: 0.5 },
-      [ItemRarity.MYTHIC]: { perLuckPercent: 1 },
+      [ItemRarity.LEGENDARY]: { percentPerLuckPercent: 0.005 },
+      [ItemRarity.MYTHIC]: { percentPerLuckPercent: 0.01 },
     },
     describe: (r) => {
-      const { perLuckPercent } = skillValues(ITEM_SKILLS[ItemSkillType.BULK_DISCOUNT], r);
-      return perLuckPercent < 1
-        ? `Shop prices drop 1 gold per ${Math.round(1 / perLuckPercent)}% lucky find chance.`
-        : `Shop prices drop ${perLuckPercent} gold per 1% lucky find chance.`;
+      const { percentPerLuckPercent } = skillValues(ITEM_SKILLS[ItemSkillType.BULK_DISCOUNT], r);
+      return `Shop prices drop ${pct(percentPerLuckPercent)} per 1% lucky find chance (max ${pct(BULK_DISCOUNT_MAX_DISCOUNT_FRACTION)} off).`;
     },
     status: (ctx) => {
       if (ctx.inFight) return '';
       const luckPercent = ctx.player.luckyFindChance * 100;
-      const discount = Math.floor(luckPercent * ctx.player.bulkDiscountGoldPerLuckPercent);
-      return `${fmt(luckPercent)}% lucky find - shop prices -${discount} gold`;
+      const discountFraction = Math.min(BULK_DISCOUNT_MAX_DISCOUNT_FRACTION, luckPercent * ctx.player.bulkDiscountPercentPerLuckPercent);
+      return `${fmt(luckPercent)}% lucky find - shop prices -${pct(discountFraction)}`;
     },
   },
 

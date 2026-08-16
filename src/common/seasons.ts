@@ -19,7 +19,7 @@ export interface SeasonInfo {
 export const SEASONS: SeasonInfo[] = [
   {
     number: 24,
-    name: '',
+    name: 'Insider Trading',
     changes: [
       'Soulstealer\'s Scythe reworked: now a two-handed reaper — very slow, hits enormously, and its swings can\'t be dodged, blocked or absorbed. The heal is gone; each hit reaps a soul that permanently grows its damage for the rest of the fight',
       'Increase tier 3 item minimum stat values',
@@ -39,6 +39,7 @@ export const SEASONS: SeasonInfo[] = [
       'Bulk Discount reworked: shop discount now scales off lucky find chance instead of equipped merchant item count',
       'Shield Bash reworked: now a real stun (attack/regen/skill timers paused, dodge disabled) instead of an attack-speed slow',
       'Fixed: item skills are now spread across your owned items instead of being rolled independently per item — no more ending up with three items sharing one skill while another never shows up',
+      'Bulk Discount reworked again: discounts shop prices by a percentage instead of a flat gold amount, capped at 75% off',
     ]
   },
   {

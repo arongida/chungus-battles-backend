@@ -41,7 +41,7 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         player.storeCreditFreeClaimCap = 0;
         // Bulk Discount (item skill): same reasoning — re-seeded before the equipped-item aura
         // pass so the rate can't survive dropping/selling the item.
-        player.bulkDiscountGoldPerLuckPercent = 0;
+        player.bulkDiscountPercentPerLuckPercent = 0;
 
         // Shields roll their skill from Common (no Legendary gate — see ensureShieldSkill), so
         // unlike class-item skills this can't ride on a rarity-upgrade event. Sweep every shield
