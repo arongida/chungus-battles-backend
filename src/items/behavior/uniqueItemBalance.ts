@@ -4,6 +4,7 @@
 
 import { RollableStat, STAT_RANGES } from '../stats/itemStatPool';
 import { EquipSlot } from '../types/ItemTypes';
+import { fmt } from '../../common/MessageTypes';
 import type { Item } from '../schema/ItemSchema';
 
 /** Chungi (7): fraction of the wielder's max HP used as max damage. */
@@ -39,7 +40,7 @@ const MAGIC_RING_STAT_POOL: RollableStat[] = [
 ];
 
 /** Fraction of a stat's tier-max roll added per attack for each active rolled stat. */
-const MAGIC_RING_STACK_FRACTION = 0.06;
+const MAGIC_RING_STACK_FRACTION = 0.05;
 
 export const MAGIC_RING_DESCRIPTION = 'Every 1s during battle: Gains bonus stats. Evolves on level up.';
 
@@ -123,20 +124,57 @@ export function rerollMagicRingStats(item: Item): void {
  * Two-handed weapons that keep their hand-authored base damage profile but
  * roll twice the usual affix count, and whose rarity upgrades merge base max
  * damage at 100% instead of the usual 50%.
+ *
+ * This is purely about affix rolling — NOT the same thing as "blocks its paired slot"
+ * (see TWO_HANDED_PAIRED_SLOT below). Flowering Staff (8) and Soulstealer's Scythe (59) both
+ * block their paired slot but are deliberately left out of this set, staying fully
+ * authored/affix-free (see itemStatRoller.ts's keepsAuthoredStats).
  */
 export const TWO_HANDED_WEAPON_IDS = new Set([4]); // Zwei-hander
 
 /**
- * The slot a "takes both hands"-style item (Zwei-Hander id 4, Flowering Staff id 8 — see
- * ItemBehaviors.ts) blocks while equipped. mainHand/offHand is the original pairing; a Martial
- * Artist can now also place these in armor/helmet (TalentBehaviors.ts), so armor/helmet form a
- * second pair on the same principle — occupying one slot of a pair blocks its partner.
+ * The slot a "takes both hands"-style item (Zwei-Hander id 4, Flowering Staff id 8,
+ * Soulstealer's Scythe id 59 — see ItemBehaviors.ts) blocks while equipped. mainHand/offHand is
+ * the original pairing; a Martial Artist can now also place these in armor/helmet
+ * (TalentBehaviors.ts), so armor/helmet form a second pair on the same principle — occupying one
+ * slot of a pair blocks its partner.
  */
 export const TWO_HANDED_PAIRED_SLOT: Record<EquipSlot, EquipSlot> = {
     [EquipSlot.MAIN_HAND]: EquipSlot.OFF_HAND,
     [EquipSlot.OFF_HAND]: EquipSlot.MAIN_HAND,
     [EquipSlot.ARMOR]: EquipSlot.HELMET,
     [EquipSlot.HELMET]: EquipSlot.ARMOR,
+};
+
+/** Soulstealer's Scythe (59). */
+export const SOULSTEALER_SCYTHE_ITEM_ID = 59;
+
+/**
+ * Weapons whose swings bypass dodge, Brace's one-shot block, and invulnerability entirely (see
+ * FightRoom.tryWeaponAttack) — defense still mitigates. Distinct from TWO_HANDED_WEAPON_IDS
+ * above, which is only about affix rolling.
+ */
+export const UNAVOIDABLE_WEAPON_IDS = new Set([SOULSTEALER_SCYTHE_ITEM_ID]);
+
+/** Soulstealer's Scythe: max damage permanently added per soul reaped (one per hit landed). */
+export function scytheSoulValue(rarity: number): number {
+    return 2 + 1.5 * rarity; // Common 3.5 .. Mythic 9.5
+}
+
+/** Soulstealer's Scythe: souls reaped so far this fight, keyed by item instance. Uncapped —
+ *  FightRoom builds fresh Item instances every fight, so this needs no explicit FIGHT_START
+ *  reset. */
+export const scytheSouls = new WeakMap<Item, number>();
+
+/** Live status line shown under an equipped item's description (mirrors ITEM_SKILLS' status()
+ *  functions in itemSkillBalance.ts, but for uniques that carry no skillId — see
+ *  itemSkillStatus.ts's fallback). Empty until the item has actually procced. */
+export const UNIQUE_ITEM_STATUS: Partial<Record<number, (item: Item) => string>> = {
+    [SOULSTEALER_SCYTHE_ITEM_ID]: (item) => {
+        const souls = scytheSouls.get(item) ?? 0;
+        if (souls <= 0) return '';
+        return `${souls} soul${souls === 1 ? '' : 's'} reaped (+${fmt(item.bonusMaxDamage)} max damage)`;
+    },
 };
 
 /**
@@ -155,7 +193,7 @@ export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Flask, Ring 
  */
 export const magicWandCooldownReduction = (rarity: number) => 30 + 15 * (rarity - 1);       // 30..90
 export const floweringStaffCooldownReduction = (rarity: number) => 40 + 20 * (rarity - 1);  // 40..120
-export const magicRingCooldownReduction = (rarity: number) => 20 + 10 * (rarity - 1);       // 20..60
+export const magicRingCooldownReduction = (rarity: number) => 10 + 10 * (rarity - 1);       // 20..60
 
 /**
  * Flowering Staff (8): hpRegen stolen from the enemy per ACTIVE proc (once every
@@ -163,7 +201,7 @@ export const magicRingCooldownReduction = (rarity: number) => 20 + 10 * (rarity 
  * granted to the wielder, subtracted from the enemy (can push the enemy's regen negative).
  */
 export function floweringStaffRegenSteal(rarity: number): number {
-    return 0.4 + 0.2 * rarity;
+    return 0.5 + 0.3 * rarity;
 }
 
 /** Flowering Staff (8): per-fight cap on the total hpRegen swing stolen (both sides). */
@@ -171,7 +209,7 @@ export const FLOWERING_STAFF_MAX_STEAL = 25;
 
 /** Wand of Fire (14): burn stacks applied per ACTIVE proc. */
 export function wandOfFireBurnStacks(rarity: number): number {
-    return rarity;
+    return 3 + rarity;
 }
 
 /** Burn DoT: flat damage dealt per stack each second. */
@@ -179,6 +217,14 @@ export const BURN_DAMAGE_PER_STACK = 2;
 
 /** Burn DoT: how long an application's stacks last. */
 export const BURN_DURATION_MS = 3000;
+
+/** Burn is double-edged: applying it to the enemy singes the applier for a third as many
+ *  stacks (rounded up). Applied via Player.igniteEnemy — Hidden Vials (24) is the one
+ *  exception and bypasses it. */
+export const selfBurnStacks = (applied: number) => Math.ceil(applied / 3);
+
+/** Fire with Fire (31): max burn stacks consumed from each player per proc. */
+export const FIRE_WITH_FIRE_MAX_STACKS = 10;
 
 /**
  * Health Flask (6): flat price, flat effect — drinking it banks an hpRegen bonus

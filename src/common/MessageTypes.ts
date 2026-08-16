@@ -21,6 +21,13 @@ export type InvulnerableStateMessage = {
   invincible: boolean;
 };
 
+// Shield Bash (item skill): mirrors InvulnerableStateMessage above — sent alongside the synced
+// Player.stunned flag so the replay player (no schema sync) can drive the same client-side aura.
+export type StunnedStateMessage = {
+  playerId: number;
+  stunned: boolean;
+};
+
 export type HealingMessage = {
   playerId: number;
   healing: number;
@@ -78,6 +85,17 @@ export type GameWinMessage = {
   wins: number;
   losses: number;
   season: number;
+  replayId?: string;
+  stats?: FightStatsMessage;
+};
+
+/** Run truly over (lives exhausted). Object payload so the client can offer the same
+ *  Stats/Watch Replay actions it gets on a normal end_battle — older clients/replays may
+ *  still see the plain string this replaced. */
+export type GameOverMessage = {
+  message: string;
+  replayId?: string;
+  stats?: FightStatsMessage;
 };
 
 export type CombatLogKind =
@@ -87,7 +105,7 @@ export type CombatLogKind =
   | 'burn_apply' | 'burn_tick'
   | 'heal' | 'leech'
   | 'talent' | 'item'
-  | 'invulnerable'
+  | 'invulnerable' | 'stun'
   | 'reward' | 'xp' | 'result';
 
 export type CombatLogMessage = {

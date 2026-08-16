@@ -1,4 +1,4 @@
-export const GAME_VERSION = 23;
+export const GAME_VERSION = 24;
 
 /** Reaching this many wins ends the run as a victory (Season 16 fixed-length runs). */
 export const WINS_TO_WIN = 12;
@@ -36,7 +36,6 @@ export enum TriggerType {
 	ON_ATTACKED = 'on-attacked',
 	ON_ATTACK = 'on-attack',
 	ON_DAMAGE = 'on-damage',
-	BEFORE_REFRESH = 'before-refresh',
 	AFTER_REFRESH = 'after-refresh',
 	AURA = 'aura',
 	ON_DODGE = 'on-dodge',

@@ -10,13 +10,13 @@ import { ArraySchema } from "@colyseus/schema";
 import { cloneItem, getItemById, getRandomWeaponsByTier } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { clampTier } from "../../items/stats/itemStatPool";
-import { applyRarityUpgrade, applyLuckyShopUpgrades, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER } from "../../commands/ShopUpgradeUtils";
+import { applyRarityUpgrade, applyLuckyShopUpgrades, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER, VIP_PASS_REROLL_SURCHARGE } from "../../commands/ShopUpgradeUtils";
 import { ensureShieldSkill, rollItemSkill, grantItemSkill2 } from "../../items/skills/itemSkillRoller";
 import { CombatLogMessage, RewardGainMessage, DamageMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
 import { Player } from "../../players/schema/PlayerSchema";
-import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus } from "../../items/behavior/uniqueItemBalance";
+import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus, FIRE_WITH_FIRE_MAX_STACKS } from "../../items/behavior/uniqueItemBalance";
 import { weaponWhispererSnapshots, weaponWhispererFinalRolls } from "./weaponWhispererState";
 import { merchantDiscounts } from "./merchantDiscountState";
 import { FESTERING_WOUNDS_GRANT_ITEM_ID } from "../../common/poisonBalance";
@@ -57,10 +57,6 @@ const JUST_A_SCRATCH_COOLDOWN_MS = 1000;
 // current HP paid every activation, on top of the enemy-facing hit. Clamped in the behavior so
 // Stab can never drop its own owner below 1 HP.
 const STAB_SELF_COST_FRACTION = 0.05;
-
-// Scam (reworked Season 23): armed by an ON_DODGE trigger, consumed by the next ACTIVE tick.
-// A WeakSet (not a WeakMap) since it's a pure boolean latch — no value to store alongside it.
-const scamArmed = new WeakSet<Talent>();
 
 // Weapon Whisperer (buffed Season 23): grants the tier-5 payoff on top of Mythic — a second
 // weapon skill, rolled from the weapon's own pool and excluded against whatever slot 1 already
@@ -123,22 +119,28 @@ export const TalentBehaviors = {
         });
     },
 
-    // The Bear (reworked Season 23): moved warrior -> rogue and turned into a burn applicator.
-    // Every weapon hit sets the enemy alight for `activationRate` stacks — and singes the bear
-    // for `base` stacks of its own, the required downside. Self-burn scales with attack speed
-    // exactly as the enemy burn does, so stacking haste sharpens both edges. Damage is credited
-    // to this talent through addBurnStacks' source ledger (common/dotSources.ts), so no track()
-    // damage arg here.
-    [TalentType.BEAR]: (context: TalentBehaviorContext) => {
-        const { talent, attacker, defender, client, clock } = context;
-        defender.addBurnStacks(clock, client, talent.activationRate, talent);
-        attacker.addBurnStacks(clock, client, talent.base, talent);
-        track(talent, 1);
-        client.send('combat_log', { text: `${attacker.name} mauls ${defender.name}, setting them ablaze!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId } as CombatLogMessage);
+    // Fire with Fire (reworked Season 24, formerly The Bear): the burn line's payoff. Every
+    // burn source now singes its own user too (Player.igniteEnemy — the line's downside), and
+    // this ACTIVE skill turns that accumulated fire, on both sides of the fight, into health.
+    // Consuming the enemy's burn is a real cost to them: it cancels their remaining DoT ticks.
+    [TalentType.FIRE_WITH_FIRE]: (context: TalentBehaviorContext) => {
+        const { talent, attacker, defender, client } = context;
+        const consumed = attacker.consumeBurnStacks(FIRE_WITH_FIRE_MAX_STACKS)
+            + defender.consumeBurnStacks(FIRE_WITH_FIRE_MAX_STACKS);
+        if (consumed <= 0) return; // no burn anywhere: no proc, no track()
+        const healed = attacker.heal(attacker.maxHp * (talent.base / 100) * consumed);
+        track(talent, 1, 0, healed);
+        client.send('combat_log', { text: `${attacker.name} devours ${consumed} burn stacks, healing ${fmt(healed)}!`, kind: 'leech', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, healing: healed } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
-            talentId: TalentType.BEAR,
+            talentId: TalentType.FIRE_WITH_FIRE,
         });
+        if (healed > 0) {
+            client.send('healing', {
+                playerId: attacker.playerId,
+                healing: healed,
+            });
+        }
     },
 
     [TalentType.ASSASSIN_AMUSEMENT]: (context: TalentBehaviorContext) => {
@@ -255,56 +257,39 @@ export const TalentBehaviors = {
         });
     },
 
-    // Scam (reworked Season 23): a con you can only run on a mark you've already slipped.
-    // ON_DODGE arms the talent; the next ACTIVE tick consumes that charge to steal HP scaled off
-    // your dodge rating. Un-armed ticks are a silent no-op — the downside is that a fight where
-    // you never dodge is a fight where Scam does nothing at all. Grants its own dodge
-    // (affectedStats) so a merchant with no natural dodge can still run it.
+    // Scam (reworked Season 24): the merchant/fence economy active. Every activation cons
+    // `talent.base` gold out of the mark — but the mark wises up, and `talent.scaling` strength is
+    // handed to the enemy for the rest of the fight, stacking with every scam. That escalating
+    // buff is the required downside (see CLAUDE.md's Talent Design Guidelines): a long fight pays
+    // well AND arms the person trying to kill you. Mirrors SNITCH, which does the same thing in
+    // reverse via affectedEnemyStats.
     [TalentType.SCAM]: (context: TalentBehaviorContext) => {
-        const { attacker, defender, client, talent, commandDispatcher, trigger } = context;
+        const { attacker, defender, client, talent, trigger } = context;
 
-        if (trigger === TriggerType.ON_DODGE) {
-            // ON_DODGE inverts roles: `defender` is the dodger/talent owner (see
-            // OnDodgeTriggerCommand.ts and HIDDEN_VIALS above).
-            scamArmed.add(talent);
-            client.send('trigger_talent', { playerId: defender.playerId, talentId: TalentType.SCAM });
-            return;
-        }
         if (trigger === TriggerType.FIGHT_END) {
-            scamArmed.delete(talent);
+            talent.affectedEnemyStats.strength = 0;
             return;
         }
 
-        if (!scamArmed.has(talent)) return;
-        scamArmed.delete(talent);
+        const gold = talent.base;
+        attacker.gold += gold;
+        if (defender.gold > 0) defender.gold -= Math.min(gold, defender.gold);
+        talent.affectedEnemyStats.strength += talent.scaling;
 
-        const amount = defender.maxHp * talent.base;
-        const reducedAmount = defender.getDamageAfterDefense(amount);
-        commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-            defender: defender,
-            damage: reducedAmount,
-            attacker: attacker,
-        });
-        defender.takeDamage(reducedAmount, client, 'normal', 'skill');
-        const scamHealed = attacker.heal(reducedAmount);
-        track(talent, 1, reducedAmount, scamHealed);
-        client.send('combat_log', { text: `${attacker.name} cons ${fmt(scamHealed)} health out of ${defender.name}!`, kind: 'leech', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: reducedAmount, healing: scamHealed } as CombatLogMessage);
+        track(talent, 1, 0, 0, gold, 0, { client, playerId: attacker.playerId });
+        client.send('combat_log', { text: `${attacker.name} scams ${gold} gold out of ${defender.name}, who wises up (+${talent.scaling} strength)!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, goldDelta: gold } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.SCAM,
         });
-        if (scamHealed > 0) {
-            client.send('healing', {
-                playerId: attacker.playerId,
-                healing: scamHealed,
-            });
-        }
     },
 
     [TalentType.BURNING_BLOOD]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, clock, talent } = context;
         const stacks = Math.max(1, Math.floor(1 + attacker.hpRegen));
-        defender.addBurnStacks(clock, client, stacks, talent);
+        // Routed through igniteEnemy: also singes the attacker for a third as many stacks
+        // (rounded up) — see uniqueItemBalance.selfBurnStacks.
+        attacker.igniteEnemy(clock, client, defender, stacks, talent);
         track(talent, 1);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
@@ -543,7 +528,9 @@ export const TalentBehaviors = {
     },
 
     // Hidden Vials — ON_DODGE trigger. `defender` is the dodger (talent owner); the enemy who
-    // missed is `attacker`. Applies the DoT stacks to the enemy.
+    // missed is `attacker`. Applies the DoT stacks to the enemy. Deliberately calls
+    // addBurnStacks directly (not igniteEnemy) — this is the one exception to the burn line's
+    // self-burn tax, the payoff for reaching tier 5.
     [TalentType.HIDDEN_VIALS]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, clock, talent } = context;
         attacker.addBurnStacks(clock, client, talent.activationRate, talent);
@@ -1162,46 +1149,23 @@ export const TalentBehaviors = {
             });
         },
 
-    // Second Thoughts (reworked from Quickness, Season 21): BEFORE_REFRESH trigger — fires from
-    // BeforeShopRefreshTriggerCommand while the outgoing shop is still intact, so it can carry
-    // the priciest unsold item into the new shop at half price instead of losing it. The carry
-    // is tagged so it's excluded from being picked again next reroll — if it isn't bought, it's
-    // discarded when the shop rebuilds (it "survives only one reroll"). Actual injection into
-    // the new shop happens in DraftRoom.updateShop, which rolls one fewer fresh item whenever
-    // player.carriedShopItem is set — that lost slot is the drawback for not buying it.
-    [TalentType.SECOND_THOUGHTS]:
+    // VIP Pass (reworked from Second Thoughts, Season 24, moved to merchant): AURA trigger —
+    // contributes a flat lucky-find bonus and a reroll-cost surcharge every tick, same idiom as
+    // Comrade/Bargain Hunter. The lucky-find bonus is read straight off talent.affectedStats.
+    // luckyFindChance (DB-authored) rather than a code constant, so the number displayed on the
+    // talent card (AffectedStatsSchema.ts) can never drift from the number actually applied. The
+    // actual guaranteed-owned-item shop slot lives in DraftRoom.updateShop (the aura only sees an
+    // already-built shop, so it can't influence what gets rolled) — this behavior only carries the
+    // two passive numbers. Silent (no trigger_talent flash) since an aura re-fires every second;
+    // the flash for the guaranteed pick itself fires from updateShop when it actually spends a
+    // slot. `if (!shop) return` scopes this to the draft room only — it's a no-op mid-fight, same
+    // guard Gold Genie uses.
+    [TalentType.VIP_PASS]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent, shop, trigger } = context;
-            if (trigger === TriggerType.AFTER_REFRESH) {
-                // Back-compat: in-progress runs may carry an embedded copy from before this
-                // rework (Quickness's after-refresh trigger). Repoint to before-refresh and
-                // bail — same migration idiom as Misconduct/Penny Stocks above.
-                talent.triggerTypes.clear();
-                talent.triggerTypes.push(TriggerType.BEFORE_REFRESH);
-                return;
-            }
+            const { attacker, shop, talent } = context;
             if (!shop) return;
-            const candidates = shop.filter((item) => !item.sold);
-            if (candidates.length === 0) return;
-            const priciest = candidates.reduce((best, item) => item.price > best.price ? item : best, candidates[0]);
-
-            const carried = cloneItem(priciest);
-            carried.price = Math.max(0, Math.floor(carried.price / 2));
-            carried.sellPrice = Math.max(0, Math.floor(carried.sellPrice / 2));
-            carried.sold = false;
-            carried.equipped = false;
-            carried.upgradePreview = false;
-            carried.luckyFind = false;
-            carried.luckyFindSteps = 0;
-            carried.tags.push('second-thoughts-carried');
-            attacker.carriedShopItem = carried;
-
-            track(talent, 1);
-            client.send('draft_log', `Second thoughts — kept ${carried.name} at half price!`);
-            client.send('trigger_talent', {
-                playerId: attacker.playerId,
-                talentId: TalentType.SECOND_THOUGHTS,
-            });
+            attacker.luckyFindChance += talent.affectedStats.luckyFindChance;
+            attacker.refreshShopCost += VIP_PASS_REROLL_SURCHARGE;
         },
 
     // Bargain Hunter — AURA trigger; contributes a reroll-cost multiplier rather than mutating
@@ -1421,12 +1385,14 @@ export const TalentBehaviors = {
     // DraftRoom.onJoin — unlike Comrade, this does NOT refresh on reroll). The actual free
     // purchase is applied in DraftRoom.buyItem so the player picks which lucky-find item. Guarded
     // on `trigger === AURA` so legacy player copies still carrying the old `after-refresh`
-    // trigger simply no-op instead of throwing.
+    // trigger simply no-op instead of throwing. Contributes to luckyFindChanceMultiplier rather
+    // than mutating luckyFindChance directly, so the x2 composes order-independently with VIP
+    // Pass's flat +10% (see DraftAuraTriggerCommand's post-pass) regardless of pick order.
     [TalentType.BLACK_MARKET_CONTRACT]: (context: TalentBehaviorContext) => {
         const { attacker, shop, trigger } = context;
         if (trigger !== TriggerType.AURA || !attacker || !shop) return;
 
-        attacker.luckyFindChance *= 2;
+        attacker.luckyFindChanceMultiplier *= 2;
         attacker.luckyFindFreeClaim = !attacker.luckyFindClaimUsed;
     },
 

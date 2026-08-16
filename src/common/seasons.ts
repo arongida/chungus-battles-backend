@@ -18,6 +18,30 @@ export interface SeasonInfo {
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
   {
+    number: 24,
+    name: '',
+    changes: [
+      'Soulstealer\'s Scythe reworked: now a two-handed reaper — very slow, hits enormously, and its swings can\'t be dodged, blocked or absorbed. The heal is gone; each hit reaps a soul that permanently grows its damage for the rest of the fight',
+      'Increase tier 3 item minimum stat values',
+      'Accuracy no longer decreases enemy dodge rating',
+      'Burn is now double-edged: every source that ignites the enemy also burns you for 1/3 as many stacks (rounded up) — Hidden Vials is the exception',
+      'The Bear reworked into Fire with Fire and moved to tier 4: every 4s, consumes up to 10 burn stacks on each player and heals 1% max HP per stack consumed',
+      'Wand of Fire and Burning Blood now apply burn to you as well as the enemy',
+      'Scam reworked into an economy talent: no longer tied to dodging — every activation cons 1 gold out of the enemy, but the mark wises up and permanently gains 1 strength for the rest of the fight',
+      'Second Thoughts replaced by VIP Pass and moved to merchant: every shop is guaranteed to stock an item you already own, and you gain +10% lucky find — but rerolls cost 1 more gold',
+      'Class item skills now show a preview of which Legendary skill they will roll from the moment they\'re owned, instead of staying hidden until Legendary',
+      'Opening Act reworked: the first few attacks each fight are now unavoidable, empowered hits instead of a mirrored double-damage hit',
+      'Smoke Bomb reworked: no longer an unconditional fight-start blind — now vanishes (heavy dodge boost, but your own attacks deal no damage) the first time you drop below 50% HP, with duration scaling by rarity',
+      'Light Fingers reworked: the cheapest shop item(s) are now stolen straight into your inventory for free instead of just being priced at 0 — triggers once per shop phase',
+      'Fluid Motion reworked: converts dodge rate into attack speed instead of accuracy',
+      'Battle Focus reworked: converts strength into accuracy instead of defense',
+      'Market Manipulation replaced by Insider Trading: grants lucky find chance directly instead of upgrading random shop items',
+      'Bulk Discount reworked: shop discount now scales off lucky find chance instead of equipped merchant item count',
+      'Shield Bash reworked: now a real stun (attack/regen/skill timers paused, dodge disabled) instead of an attack-speed slow',
+      'Fixed: item skills are now spread across your owned items instead of being rolled independently per item — no more ending up with three items sharing one skill while another never shows up',
+    ]
+  },
+  {
     number: 23,
     name: 'Cooldown',
     changes: [
@@ -50,7 +74,7 @@ export const SEASONS: SeasonInfo[] = [
       'The Bear reworked and moved to rogue: your attacks apply 2 burn stacks to the enemy and 1 to yourself',
       'Scam reworked: grants dodge rating, and after you dodge your next scam steals health equal to your dodge rating',
       'Grand Robbery buffed: now also rerolls the shop for free and robs it a second time, and always upgrades every stolen item by a rarity',
-      'Weapon Whisperer buffed: the Mythic weapon now also learns a second weapon skill'
+      'Weapon Whisperer buffed: the Mythic weapon now also learns a second weapon skill',
     ]
   },
   {

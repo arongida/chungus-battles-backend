@@ -9,7 +9,7 @@ import {StatsSchema} from "../../common/db/Stats";
 import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollItemStats} from "../../items/stats/itemStatRoller";
-import {ensureShieldSkill, reconcileItemSkill, reconcileItemSkill2} from "../../items/skills/itemSkillRoller";
+import {ensureShieldSkill, reconcileItemSkill, reconcileItemSkill2, refreshFutureItemSkill} from "../../items/skills/itemSkillRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 import {recalculatePlayerStats} from "../../common/statsUtils";
@@ -83,7 +83,9 @@ function buildItemSchema(itemFromDb: any): Item {
     // getItemSchemaObject: they're pure runtime aura output (ItemSchema.ts), and leaving them in
     // `primitives` would let a stale plain-object snapshot clobber the Item constructor's real
     // AffectedStats instance via .assign().
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillAffectedStats2, skillAffectedEnemyStats2, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    // futureSkillId/Name/Description excluded too — same "pure runtime output, recomputed every
+    // load" reasoning, so a stale preview never survives a round-trip through toJSON().
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillAffectedStats2, skillAffectedEnemyStats2, futureSkillId, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
     if (!item.sellPrice) item.sellPrice = Math.floor(item.price * item.rarity * 0.7);
     item.affectedStats = affectedStatsFromRaw(affectedStats);
@@ -172,6 +174,11 @@ function getPlayerSchemaObject(playerFromDb: any): Player {
     newPlayerSchemaObject.equippedItems.forEach((item) => ensureShieldSkill(item, newPlayerSchemaObject));
     newPlayerSchemaObject.inventory.forEach((item) => ensureShieldSkill(item, newPlayerSchemaObject));
     newPlayerSchemaObject.lockedShop.forEach((item) => ensureShieldSkill(item, newPlayerSchemaObject));
+
+    // Legendary skill preview (item.futureSkill*) — same load-time sweep as ensureShieldSkill above.
+    newPlayerSchemaObject.equippedItems.forEach((item) => refreshFutureItemSkill(item, newPlayerSchemaObject));
+    newPlayerSchemaObject.inventory.forEach((item) => refreshFutureItemSkill(item, newPlayerSchemaObject));
+    newPlayerSchemaObject.lockedShop.forEach((item) => refreshFutureItemSkill(item, newPlayerSchemaObject));
 
     return newPlayerSchemaObject;
 }

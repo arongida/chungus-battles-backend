@@ -27,7 +27,7 @@ export enum TalentType {
 	ZEALOT = 28,
 	STAB = 29,
 	TRICKSTER = 30,
-	BEAR = 31,
+	FIRE_WITH_FIRE = 31,
 	FUTURE_NOW = 32,
 	SNITCH = 33,
 	ROBBERY = 34,
@@ -46,8 +46,9 @@ export enum TalentType {
 	ROGUE_1 = 102,
 	MERCHANT_1 = 103,
 	WARRIOR_2 = 201,
-	// Was QUICKNESS (+attack speed on refresh) — reworked into Second Thoughts, Season 21.
-	SECOND_THOUGHTS = 202,
+	// Was QUICKNESS (+attack speed on refresh) — reworked into Second Thoughts, Season 21, then
+	// into VIP Pass (guaranteed owned-item shop slot + lucky find, merchant class), Season 24.
+	VIP_PASS = 202,
 	BARGAIN_HUNTER = 203,
 	WARRIOR_3 = 301,
 	POISON_2 = 302,

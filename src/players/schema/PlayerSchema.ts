@@ -3,11 +3,11 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {Item} from '../../items/schema/ItemSchema';
 import {IStats} from '../../common/types';
 import {TalentType} from '../../talents/types/TalentTypes';
-import { CombatLogMessage, DamageMessage, DamageSource, DamageType, InvulnerableMessage, InvulnerableStateMessage } from '../../common/MessageTypes';
+import { CombatLogMessage, DamageMessage, DamageSource, DamageType, InvulnerableMessage, InvulnerableStateMessage, StunnedStateMessage } from '../../common/MessageTypes';
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
-import {BURN_DURATION_MS} from "../../items/behavior/uniqueItemBalance";
+import {BURN_DURATION_MS, selfBurnStacks} from "../../items/behavior/uniqueItemBalance";
 import {POISON_DURATION_MS, POISON_TICK_INTERVAL_MS} from "../../common/poisonBalance";
 import {FightStats} from "./FightStats";
 import {weaponWhispererSnapshots} from "../../talents/behavior/weaponWhispererState";
@@ -39,6 +39,13 @@ export class Player extends Schema implements IStats {
     damage: number = 0;
     fightStats: FightStats = new FightStats();
     attackTimers: Map<string, Delayed> = new Map();
+    // Shield Bash (item skill): every currently-scheduled ACTIVE-trigger timer for this player
+    // (talents and items alike), populated/rotated by ActiveTriggerCommand.scheduleActive as each
+    // one reschedules itself. Kept per-player (not just the shared FightState.skillsTimers list,
+    // which mixes both players and is only ever used for a blanket fight-end clear) so setStunned
+    // can pause/resume exactly this player's active skills without touching the enemy's.
+    activeSkillTimers: Set<Delayed> = new Set();
+    stunTimer: Delayed;
     poisonTimer: Delayed;
     // Server-only — how far apart the current poisonTimer's ticks are (Festering Wounds can
     // halve this once the defender is at/above its stack threshold). Not @type-decorated,
@@ -58,6 +65,19 @@ export class Player extends Schema implements IStats {
     // refreshShopCost after ALL aura talents have run (see DraftAuraTriggerCommand), so halving
     // composes with Comrade's +income regardless of talent pick order. Re-seeded to 1 each tick.
     refreshShopCostMultiplier: number = 1;
+    // VIP Pass (talent 202): reroll-cost surcharge accumulates directly into refreshShopCost
+    // (like Comrade's +income), but the lucky-find bonus needs its own multiplier slot — mirrors
+    // refreshShopCostMultiplier so Black Market Contact's x2 composes on top of VIP Pass's flat
+    // +10% the same order-independent way Bargain Hunter composes with Comrade. Re-seeded to 1
+    // and applied last (after the flat bonus) each draft aura tick — DraftAuraTriggerCommand only;
+    // both talents guard on `shop` being present, so neither ever runs during FightAuraTriggerCommand.
+    luckyFindChanceMultiplier: number = 1;
+    // Bulk Discount (item skill): gold-off-per-percent-lucky-find rate, accumulated by the item's
+    // AURA behavior (ItemSkillBehaviors.ts) during the same equipped-item pass that Insider
+    // Trading writes luckyFindChance — equippedItems iteration order is arbitrary, so the actual
+    // shop repricing can't happen inline in that same behavior. DraftAuraTriggerCommand applies it
+    // afterward, once luckyFindChance has its final value for the tick. Re-seeded to 0 each tick.
+    bulkDiscountGoldPerLuckPercent: number = 0;
     // Bargain Hunter: the reroll cost before its multiplier was applied, snapshotted each aura
     // tick by DraftAuraTriggerCommand. Read by DraftRoom.refreshShop to credit the talent with the
     // gold actually saved on a paid reroll.
@@ -82,11 +102,11 @@ export class Player extends Schema implements IStats {
     // recalculatePlayerStats (statsUtils.ts), which zeroes dodgeRate after computing it whenever
     // this is set — after every equipped item/talent has already contributed to the snapshot.
     dodgeDisabled: boolean = false;
-    // Second Thoughts (talent 202): item carried over from the shop that was just discarded by
-    // a reroll (set in BeforeShopRefreshTriggerCommand), injected into the freshly rolled shop
-    // by DraftRoom.updateShop and cleared there. Server-only — never synced, only ever lives on
-    // the player between BEFORE_REFRESH and the following updateShop call.
-    carriedShopItem: Item = null;
+    // Smoke Bomb (item skill): while true, this player's own attacks deal no damage (see
+    // FightRoom.tryWeaponAttack). Not synced — the effect is visible through the paired dodgeRate
+    // spike (item.skillAffectedStats) and combat log lines instead.
+    damageDisabled: boolean = false;
+    vanishTimer: Delayed;
     // Comrade: true once the current shop's free-item claim has been spent (DraftRoom.buyItem),
     // reset per shop build (DraftRoom.updateShop). Stops the aura from re-granting a fresh claim
     // every tick after one has been used.
@@ -262,6 +282,10 @@ export class Player extends Schema implements IStats {
     // (end of the @type block) so existing field indices stay stable — see the comment at the
     // top of this @type block.
     @type('number') cooldownReduction: number = 0;
+    // Shield Bash (item skill): true while stunned — see setStunned. Synced so the client can
+    // render a stun aura (mirrors `invincible` above). Declared here (end of the @type block) so
+    // existing field indices stay stable.
+    @type('boolean') stunned: boolean = false;
 
     private _poisonStack: number = 0;
 
@@ -318,6 +342,66 @@ export class Player extends Schema implements IStats {
             return;
         }
         this.invincibleTimer = clock.setTimeout(endInvincibility, invincibleLenghtMS);
+    }
+
+    /** Soulstealer's Scythe: shatters an active invulnerability window outright (however it was
+     *  raised — Aegis, Band of Vigor, Guardian Angel, ...) instead of letting takeDamage's
+     *  `this.invincible` check silently absorb the hit. No-op when not currently invincible. */
+    breakInvincibility(playerClient?: Client) {
+        if (!this.invincible) return;
+        this.invincible = false;
+        this.invincibleTimer?.clear();
+        this.invincibleTimer = null;
+        playerClient?.send('invulnerable_state', { playerId: this.playerId, invincible: false } as InvulnerableStateMessage);
+    }
+
+    /** Smoke Bomb (item skill): mirrors setInvincible above — re-calling extends the window
+     *  rather than stacking, so two Smoke Bomb sources (e.g. rolled on both armor and helmet)
+     *  triggering in the same aura tick don't fight over which one clears damageDisabled first. */
+    setVanished(clock: ClockTimer, durationMs: number) {
+        this.damageDisabled = true;
+        const endVanish = () => {
+            this.damageDisabled = false;
+            this.vanishTimer = null;
+        };
+        if (this.vanishTimer) {
+            const timeLeft = this.vanishTimer.time - this.vanishTimer.elapsedTime;
+            this.vanishTimer.clear();
+            this.vanishTimer = clock.setTimeout(endVanish, timeLeft + durationMs);
+            return;
+        }
+        this.vanishTimer = clock.setTimeout(endVanish, durationMs);
+    }
+
+    /** Shield Bash (item skill): pauses this player's attack timers, regen timer, and active-skill
+     *  timers, and forces dodgeRate to 0 (see statsUtils.recalculatePlayerStats) for the duration.
+     *  A paused weapon-attack timer never fires and never reschedules — FightRoom.startSingleWeaponTimer
+     *  clears+recreates its timer after every swing, so pausing simply holds the countdown in place
+     *  rather than losing progress toward the next swing. Mirrors setInvincible: re-calling extends
+     *  the window rather than restacking a fresh pause on top of an already-paused timer. */
+    setStunned(clock: ClockTimer, durationMs: number, playerClient?: Client) {
+        if (!this.stunned) {
+            this.attackTimers.forEach((timer) => timer.pause());
+            this.regenTimer?.pause();
+            this.activeSkillTimers.forEach((timer) => timer.pause());
+            playerClient?.send('stunned_state', { playerId: this.playerId, stunned: true } as StunnedStateMessage);
+        }
+        this.stunned = true;
+        const endStun = () => {
+            this.stunned = false;
+            this.stunTimer = null;
+            this.attackTimers.forEach((timer) => timer.resume());
+            this.regenTimer?.resume();
+            this.activeSkillTimers.forEach((timer) => timer.resume());
+            playerClient?.send('stunned_state', { playerId: this.playerId, stunned: false } as StunnedStateMessage);
+        };
+        if (this.stunTimer) {
+            const timeLeft = this.stunTimer.time - this.stunTimer.elapsedTime;
+            this.stunTimer.clear();
+            this.stunTimer = clock.setTimeout(endStun, timeLeft + durationMs);
+            return;
+        }
+        this.stunTimer = clock.setTimeout(endStun, durationMs);
     }
 
     /** Consumes and returns the pending Brace block, if any. One-shot: the weapon swing that reads
@@ -379,11 +463,9 @@ export class Player extends Schema implements IStats {
         return afterPct > 0 ? afterPct : 0;
     }
 
-    /** Chance this player dodges an incoming weapon attack. Attacker accuracy cancels
-     *  dodge rating point-for-point, so enough accuracy removes dodge entirely. */
-    getDodgeChance(attackerAccuracy: number): number {
-        const effectiveDodgeRate = Math.max(0, this.dodgeRate - attackerAccuracy);
-        return 1 - 100 / (100 + effectiveDodgeRate);
+    /** Chance this player dodges an incoming weapon attack. */
+    getDodgeChance(): number {
+        return 1 - 100 / (100 + this.dodgeRate);
     }
 
     addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1, source?: Talent) {
@@ -408,13 +490,60 @@ export class Player extends Schema implements IStats {
         playerClient.send('combat_log', { text: `${this.name} is burning! ${this.burnStack} stacks!`, kind: 'burn_apply', defenderId: this.playerId, burnStacks: this.burnStack } as CombatLogMessage);
 
         clock.setTimeout(() => {
-            this.burnStack -= stack;
+            // Fire with Fire (31) may have already consumed some of this fight's burn stacks
+            // via consumeBurnStacks() before this timeout fires. burnConsumedDebt tracks how
+            // many stacks were consumed "early" so this removal absorbs from that debt first,
+            // instead of decrementing stacks that were applied (and are still owed their full
+            // duration) after the consume happened.
+            const absorbed = Math.min(this.burnConsumedDebt, stack);
+            this.burnConsumedDebt -= absorbed;
+            this.burnStack -= (stack - absorbed);
             removeDotSource(this.burnSources, source, stack);
             if (this.burnStack === 0 && this.burnTimer) {
                 this.burnTimer.clear();
                 this.burnTimer = null;
             }
         }, BURN_DURATION_MS);
+    }
+
+    /** Stacks already removed by consumeBurnStacks() whose originating addBurnStacks() expiry
+     *  timeout is still pending. See addBurnStacks' timeout body for how it's absorbed. */
+    private burnConsumedDebt: number = 0;
+
+    /** Applies burn to `target` and singes the applier (`this`) for the systemic self-burn tax
+     *  (selfBurnStacks, a third as many rounded up) — the burn line's downside. Every burn source should go through here;
+     *  the sole exception is Hidden Vials (24), the tier-5 dodge payoff, which calls
+     *  addBurnStacks directly and stays clean. Self-burn is applied with no source Talent: it
+     *  must not be credited to the applier's own statDamageDealt (that stat means damage dealt
+     *  to the enemy), so it goes uncredited via the dotSources ledger by design. */
+    igniteEnemy(clock: ClockTimer, playerClient: Client, target: Player, stacks: number, source?: Talent) {
+        if (stacks <= 0) return;
+        target.addBurnStacks(clock, playerClient, stacks, source);
+        this.addBurnStacks(clock, playerClient, selfBurnStacks(stacks));
+    }
+
+    /** Removes up to `max` live burn stacks and returns how many were actually removed.
+     *  Used by Fire with Fire (31) to convert accumulated burn into healing. See
+     *  burnConsumedDebt for how this interacts with the pending expiry timeouts. */
+    consumeBurnStacks(max: number): number {
+        const consumed = Math.min(max, this.burnStack);
+        if (consumed <= 0) return 0;
+        this.burnStack -= consumed;
+        this.burnConsumedDebt += consumed;
+        // burnSources is deliberately NOT reduced here: the pending timeouts still remove
+        // exactly what they added, keeping the ledger self-consistent. dotSources.denom()
+        // already tolerates a ledger total exceeding the live stack count.
+        if (this.burnStack === 0) {
+            this.burnTimer?.clear();
+            this.burnTimer = null;
+        }
+        return consumed;
+    }
+
+    /** Resets the consumption-debt counter between fights (see burnConsumedDebt above). Call
+     *  alongside the other burn/poison per-fight resets in FightRoom. */
+    resetBurnConsumedDebt() {
+        this.burnConsumedDebt = 0;
     }
 
     getItem(item: Item) {

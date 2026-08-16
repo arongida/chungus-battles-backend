@@ -6,11 +6,24 @@
 import { Player } from '../../players/schema/PlayerSchema';
 import { Item } from '../schema/ItemSchema';
 import { ITEM_SKILLS } from '../behavior/itemSkillBalance';
+import { UNIQUE_ITEM_STATUS } from '../behavior/uniqueItemBalance';
 import { ClockTimer } from '@colyseus/timer';
 import { getSkillSlot2View } from './itemSkillSlot2View';
 
 function statusFor(item: Item, player: Player, enemy: Player | undefined, inFight: boolean, clock: ClockTimer | undefined): string {
-  if (!item?.skillId) return '';
+  if (!item) return '';
+  // Uniques that carry no rolled skillId (Soulstealer's Scythe) get their live line from a
+  // separate itemId-keyed map instead of ITEM_SKILLS below — see uniqueItemBalance.ts.
+  if (!item.skillId) {
+    const uniqueStatus = UNIQUE_ITEM_STATUS[item.itemId];
+    if (!uniqueStatus) return '';
+    try {
+      return uniqueStatus(item);
+    } catch (e) {
+      console.error(`Failed to compute unique item status for item ${item.itemId}:`, e);
+      return '';
+    }
+  }
   const def = ITEM_SKILLS[item.skillId];
   if (!def?.status) return '';
   try {

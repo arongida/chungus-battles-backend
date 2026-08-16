@@ -24,3 +24,7 @@ export const braceCounters = new WeakMap<Item, number>();
 // new Item object (rebuildShopSlot/revalidateUpgradePreviews) is a fresh WeakMap key, so it
 // re-captures a correct undiscounted base automatically.
 export const bulkDiscountBasePrices = new WeakMap<Item, { price: number; sellPrice: number }>();
+// Smoke Bomb: latches true the first time this item's vanish triggers in the current fight (it's
+// a once-per-fight conditional, not a repeating proc), reset on FIGHT_END — same per-fight-scoped
+// idiom as coatedEdgeCounters above.
+export const smokeBombUsed = new WeakMap<Item, boolean>();
