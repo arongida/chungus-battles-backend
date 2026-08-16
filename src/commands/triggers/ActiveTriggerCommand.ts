@@ -35,9 +35,13 @@ export class ActiveTriggerCommand extends Command<FightRoom> {
                     console.error(e);
                 }
                 timer.clear();
+                player.activeSkillTimers.delete(timer);
                 start();
             }, applyCooldownReduction(baseIntervalMs, player.cooldownReduction));
             this.state.skillsTimers.push(timer);
+            // Shield Bash (item skill): lets Player.setStunned pause/resume exactly this player's
+            // active-skill timers without touching the enemy's — see activeSkillTimers' comment.
+            player.activeSkillTimers.add(timer);
         };
         start();
     }

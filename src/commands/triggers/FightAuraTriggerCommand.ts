@@ -23,6 +23,7 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
             client: this.state.playerClient,
             attacker: player,
             defender: enemy,
+            clock: this.clock,
             questItems: this.state.questItems,
             commandDispatcher: this.room.dispatcher,
             trigger: TriggerType.AURA,

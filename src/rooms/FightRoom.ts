@@ -27,11 +27,11 @@ import { Item } from '../items/schema/ItemSchema';
 import { ItemType } from '../items/types/ItemTypes';
 import { ItemSkillType } from '../items/types/ItemSkillTypes';
 import { ITEM_SKILLS, skillValues } from '../items/behavior/itemSkillBalance';
-import { crushingBlowCounters } from '../items/behavior/itemSkillState';
+import { crushingBlowCounters, openingActCounters } from '../items/behavior/itemSkillState';
 import { Talent } from '../talents/schema/TalentSchema';
 import { CombatLogMessage, FightSideStats, FightStatsMessage, GameOverMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
-import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
+import { BURN_DAMAGE_PER_STACK, UNAVOIDABLE_WEAPON_IDS } from '../items/behavior/uniqueItemBalance';
 import { creditDotDamage } from '../common/dotSources';
 import {
     FESTERING_WOUNDS_INTERVAL_MULTIPLIER,
@@ -437,6 +437,20 @@ export class FightRoom extends Room {
         this.state.enemy.regenTimer?.clear();
         this.state.player.empoweredAttackSource = null;
         this.state.enemy.empoweredAttackSource = null;
+        // Shield Bash (item skill): clear (not pause) at fight end — the room's about to tear
+        // down, and clearAllAttackTimers/skillsTimers above already cleared the timers a lingering
+        // stun would otherwise try to resume.
+        this.state.player.stunTimer?.clear();
+        this.state.enemy.stunTimer?.clear();
+        this.state.player.stunned = false;
+        this.state.enemy.stunned = false;
+        this.state.player.activeSkillTimers.clear();
+        this.state.enemy.activeSkillTimers.clear();
+        // Smoke Bomb (item skill): same reasoning as the stun cleanup above.
+        this.state.player.vanishTimer?.clear();
+        this.state.enemy.vanishTimer?.clear();
+        this.state.player.damageDisabled = false;
+        this.state.enemy.damageDisabled = false;
         this.logCombat('broadcast', { text: 'The battle has ended!', kind: 'fight_end' });
         this.handleFightEnd();
     }
@@ -624,10 +638,24 @@ export class FightRoom extends Room {
     /** Returns the damage actually dealt to defender (0 on a dodge or a fully-mitigated hit), so
      *  callers that trigger extra attacks (Martial Artist, Dual Wield) can credit it. */
     tryWeaponAttack(attacker: Player, defender: Player, weapon: Item, slot: string, isCounter = false): number {
+        // Smoke Bomb (item skill): while vanished, the swing still happens (animation + log) but
+        // deals no damage and doesn't run any on-hit trigger — the whole point is a safe window
+        // to reposition, not a free damage source.
+        if (attacker.damageDisabled) {
+            this.logCombat(this.state.playerClient, { text: `${attacker.name}'s ${weapon.name} passes harmlessly through the smoke!`, kind: 'attack', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId, slot, damage: 0 });
+            this.state.playerClient.send('attack', attacker.playerId);
+            return 0;
+        }
+
         const minDmg = weapon.baseMinDamage + attacker.accuracy;
         const strengthMultiplier = weapon.strengthScaling;
-        const maxDmg = weapon.baseMaxDamage + attacker.strength * strengthMultiplier;
+        const maxDmg = weapon.baseMaxDamage + weapon.bonusMaxDamage + attacker.strength * strengthMultiplier;
         const attackRoll = Math.random() * (maxDmg - minDmg) + minDmg;
+
+        // Soulstealer's Scythe (see uniqueItemBalance.ts): its swings cannot be dodged, cannot be
+        // blocked by Brace, and shatter invulnerability outright — deliberately NOT the same thing
+        // as `empowered` below (Unstoppable Force/Crushing Blow/Opening Act only ever bypass dodge).
+        const unavoidable = UNAVOIDABLE_WEAPON_IDS.has(weapon.itemId);
 
         // Unstoppable Force (WARRIOR_3): consumes a flag pre-charged on an earlier tick — skips
         // the dodge roll entirely and boosts the final damage below.
@@ -645,20 +673,39 @@ export class FightRoom extends Room {
             if (count % every === 0 && !empowerSource) empowerSource = weapon;
         }
 
+        // Opening Act (item skill): the first `count` attacks from this weapon each fight are
+        // themselves empowered hits (unavoidable, +50% bonus damage) rather than a mirrored
+        // double-damage hit — decided here, before the dodge roll, for the same reason as
+        // Crushing Blow above (ON_ATTACK fires too late to retroactively make a swing unavoidable).
+        if (weapon.skillId === ItemSkillType.OPENING_ACT) {
+            const { count } = skillValues(ITEM_SKILLS[ItemSkillType.OPENING_ACT], weapon.rarity);
+            const used = openingActCounters.get(weapon) ?? 0;
+            if (used < count && !empowerSource) {
+                openingActCounters.set(weapon, used + 1);
+                empowerSource = weapon;
+            }
+        }
+
         const empowered = !!empowerSource;
 
         if (!empowered && defender.dodgeRate > 0) {
             const dodgeChance = defender.getDodgeChance();
 
             if (Math.random() < dodgeChance) {
-                defender.fightStats.attacksDodged++;
-                this.logCombat(this.state.playerClient, { text: `${defender.name} dodged ${attacker.name}'s ${weapon.name}!`, kind: 'dodge', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId });
-                this.dispatcher.dispatch(new OnDodgeTriggerCommand(), {
-                    attacker: attacker,
-                    defender: defender,
-                    isCounter: isCounter,
-                });
-                return 0;
+                if (unavoidable) {
+                    // Still rolls the dice (so the log only fires when it actually mattered), but
+                    // a would-be dodge doesn't stop the swing — no attacksDodged credit, no ON_DODGE.
+                    this.logCombat(this.state.playerClient, { text: `${defender.name} tries to dodge — ${attacker.name}'s ${weapon.name} reaps through it anyway!`, kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId });
+                } else {
+                    defender.fightStats.attacksDodged++;
+                    this.logCombat(this.state.playerClient, { text: `${defender.name} dodged ${attacker.name}'s ${weapon.name}!`, kind: 'dodge', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId });
+                    this.dispatcher.dispatch(new OnDodgeTriggerCommand(), {
+                        attacker: attacker,
+                        defender: defender,
+                        isCounter: isCounter,
+                    });
+                    return 0;
+                }
             }
         }
 
@@ -683,15 +730,25 @@ export class FightRoom extends Room {
         // invulnerability window did at high attack speed.
         const blockSource = defender.consumePendingBlock();
         if (blockSource) {
-            defender.fightStats.attacksBlocked++;
-            defender.fightStats.damageBlocked += damage;
-            this.logCombat(this.state.playerClient, {
-                text: `${defender.name}'s ${blockSource.name} braces and blocks ${attacker.name}'s ${weapon.name} entirely!`,
-                kind: 'block', attackerId: attacker.playerId, defenderId: defender.playerId,
-                weaponItemId: weapon.itemId, itemId: blockSource.itemId, slot, damage,
-            });
-            this.state.playerClient.send('attack', attacker.playerId);
-            return 0;
+            if (unavoidable) {
+                // Brace is still consumed (consumePendingBlock already cleared it above) — an
+                // unavoidable weapon just has no future swing left for it to have saved.
+                this.logCombat(this.state.playerClient, {
+                    text: `${attacker.name}'s ${weapon.name} cleaves straight through ${defender.name}'s ${blockSource.name}!`,
+                    kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId,
+                    weaponItemId: weapon.itemId, itemId: blockSource.itemId, slot, damage,
+                });
+            } else {
+                defender.fightStats.attacksBlocked++;
+                defender.fightStats.damageBlocked += damage;
+                this.logCombat(this.state.playerClient, {
+                    text: `${defender.name}'s ${blockSource.name} braces and blocks ${attacker.name}'s ${weapon.name} entirely!`,
+                    kind: 'block', attackerId: attacker.playerId, defenderId: defender.playerId,
+                    weaponItemId: weapon.itemId, itemId: blockSource.itemId, slot, damage,
+                });
+                this.state.playerClient.send('attack', attacker.playerId);
+                return 0;
+            }
         }
 
         this.dispatcher.dispatch(new OnAttackTriggerCommand(), {
@@ -705,6 +762,17 @@ export class FightRoom extends Room {
             damage: damage,
             attacker: attacker
         });
+
+        // Shatters invulnerability outright rather than silently ignoring it — including a guard
+        // just raised by this very hit's ON_DAMAGE dispatch above (Band of Vigor / Guardian
+        // Angel), so a last-second save doesn't quietly no-op the scythe's swing.
+        if (unavoidable && defender.invincible) {
+            defender.breakInvincibility(this.state.playerClient);
+            this.logCombat(this.state.playerClient, {
+                text: `${attacker.name}'s ${weapon.name} shatters ${defender.name}'s guard!`,
+                kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId,
+            });
+        }
 
         defender.takeDamage(damage, this.state.playerClient);
 
@@ -723,7 +791,13 @@ export class FightRoom extends Room {
             attacker.fightStats.empoweredAttacks++;
             attacker.fightStats.empoweredDamage += empoweredBonus;
             if (empowerSource instanceof Item) {
-                this.logCombat(this.state.playerClient, { text: `${attacker.name}'s ${empowerSource.name} lands a crushing, unavoidable blow for ${fmt(empoweredBonus)} bonus damage!`, kind: 'item', itemId: empowerSource.itemId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: empoweredBonus });
+                // Flavor text keyed by which item skill actually empowered this swing — Crushing
+                // Blow and Opening Act both funnel through this same empowered-hit path (see the
+                // empowerSource assignments above) but read very differently in the log.
+                const flavor = empowerSource.skillId === ItemSkillType.OPENING_ACT
+                    ? `${attacker.name}'s ${empowerSource.name} opens with a flourish — an unavoidable blow for ${fmt(empoweredBonus)} bonus damage!`
+                    : `${attacker.name}'s ${empowerSource.name} lands a crushing, unavoidable blow for ${fmt(empoweredBonus)} bonus damage!`;
+                this.logCombat(this.state.playerClient, { text: flavor, kind: 'item', itemId: empowerSource.itemId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: empoweredBonus });
                 this.state.playerClient.send('trigger_item', { playerId: attacker.playerId, itemId: empowerSource.itemId, slot });
             } else {
                 track(empowerSource, 1, empoweredBonus);

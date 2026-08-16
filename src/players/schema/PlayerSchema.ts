@@ -3,7 +3,7 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {Item} from '../../items/schema/ItemSchema';
 import {IStats} from '../../common/types';
 import {TalentType} from '../../talents/types/TalentTypes';
-import { CombatLogMessage, DamageMessage, DamageSource, DamageType, InvulnerableMessage, InvulnerableStateMessage } from '../../common/MessageTypes';
+import { CombatLogMessage, DamageMessage, DamageSource, DamageType, InvulnerableMessage, InvulnerableStateMessage, StunnedStateMessage } from '../../common/MessageTypes';
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
@@ -39,6 +39,13 @@ export class Player extends Schema implements IStats {
     damage: number = 0;
     fightStats: FightStats = new FightStats();
     attackTimers: Map<string, Delayed> = new Map();
+    // Shield Bash (item skill): every currently-scheduled ACTIVE-trigger timer for this player
+    // (talents and items alike), populated/rotated by ActiveTriggerCommand.scheduleActive as each
+    // one reschedules itself. Kept per-player (not just the shared FightState.skillsTimers list,
+    // which mixes both players and is only ever used for a blanket fight-end clear) so setStunned
+    // can pause/resume exactly this player's active skills without touching the enemy's.
+    activeSkillTimers: Set<Delayed> = new Set();
+    stunTimer: Delayed;
     poisonTimer: Delayed;
     // Server-only — how far apart the current poisonTimer's ticks are (Festering Wounds can
     // halve this once the defender is at/above its stack threshold). Not @type-decorated,
@@ -65,6 +72,12 @@ export class Player extends Schema implements IStats {
     // and applied last (after the flat bonus) each draft aura tick — DraftAuraTriggerCommand only;
     // both talents guard on `shop` being present, so neither ever runs during FightAuraTriggerCommand.
     luckyFindChanceMultiplier: number = 1;
+    // Bulk Discount (item skill): gold-off-per-percent-lucky-find rate, accumulated by the item's
+    // AURA behavior (ItemSkillBehaviors.ts) during the same equipped-item pass that Insider
+    // Trading writes luckyFindChance — equippedItems iteration order is arbitrary, so the actual
+    // shop repricing can't happen inline in that same behavior. DraftAuraTriggerCommand applies it
+    // afterward, once luckyFindChance has its final value for the tick. Re-seeded to 0 each tick.
+    bulkDiscountGoldPerLuckPercent: number = 0;
     // Bargain Hunter: the reroll cost before its multiplier was applied, snapshotted each aura
     // tick by DraftAuraTriggerCommand. Read by DraftRoom.refreshShop to credit the talent with the
     // gold actually saved on a paid reroll.
@@ -89,6 +102,11 @@ export class Player extends Schema implements IStats {
     // recalculatePlayerStats (statsUtils.ts), which zeroes dodgeRate after computing it whenever
     // this is set — after every equipped item/talent has already contributed to the snapshot.
     dodgeDisabled: boolean = false;
+    // Smoke Bomb (item skill): while true, this player's own attacks deal no damage (see
+    // FightRoom.tryWeaponAttack). Not synced — the effect is visible through the paired dodgeRate
+    // spike (item.skillAffectedStats) and combat log lines instead.
+    damageDisabled: boolean = false;
+    vanishTimer: Delayed;
     // Comrade: true once the current shop's free-item claim has been spent (DraftRoom.buyItem),
     // reset per shop build (DraftRoom.updateShop). Stops the aura from re-granting a fresh claim
     // every tick after one has been used.
@@ -264,6 +282,10 @@ export class Player extends Schema implements IStats {
     // (end of the @type block) so existing field indices stay stable — see the comment at the
     // top of this @type block.
     @type('number') cooldownReduction: number = 0;
+    // Shield Bash (item skill): true while stunned — see setStunned. Synced so the client can
+    // render a stun aura (mirrors `invincible` above). Declared here (end of the @type block) so
+    // existing field indices stay stable.
+    @type('boolean') stunned: boolean = false;
 
     private _poisonStack: number = 0;
 
@@ -320,6 +342,66 @@ export class Player extends Schema implements IStats {
             return;
         }
         this.invincibleTimer = clock.setTimeout(endInvincibility, invincibleLenghtMS);
+    }
+
+    /** Soulstealer's Scythe: shatters an active invulnerability window outright (however it was
+     *  raised — Aegis, Band of Vigor, Guardian Angel, ...) instead of letting takeDamage's
+     *  `this.invincible` check silently absorb the hit. No-op when not currently invincible. */
+    breakInvincibility(playerClient?: Client) {
+        if (!this.invincible) return;
+        this.invincible = false;
+        this.invincibleTimer?.clear();
+        this.invincibleTimer = null;
+        playerClient?.send('invulnerable_state', { playerId: this.playerId, invincible: false } as InvulnerableStateMessage);
+    }
+
+    /** Smoke Bomb (item skill): mirrors setInvincible above — re-calling extends the window
+     *  rather than stacking, so two Smoke Bomb sources (e.g. rolled on both armor and helmet)
+     *  triggering in the same aura tick don't fight over which one clears damageDisabled first. */
+    setVanished(clock: ClockTimer, durationMs: number) {
+        this.damageDisabled = true;
+        const endVanish = () => {
+            this.damageDisabled = false;
+            this.vanishTimer = null;
+        };
+        if (this.vanishTimer) {
+            const timeLeft = this.vanishTimer.time - this.vanishTimer.elapsedTime;
+            this.vanishTimer.clear();
+            this.vanishTimer = clock.setTimeout(endVanish, timeLeft + durationMs);
+            return;
+        }
+        this.vanishTimer = clock.setTimeout(endVanish, durationMs);
+    }
+
+    /** Shield Bash (item skill): pauses this player's attack timers, regen timer, and active-skill
+     *  timers, and forces dodgeRate to 0 (see statsUtils.recalculatePlayerStats) for the duration.
+     *  A paused weapon-attack timer never fires and never reschedules — FightRoom.startSingleWeaponTimer
+     *  clears+recreates its timer after every swing, so pausing simply holds the countdown in place
+     *  rather than losing progress toward the next swing. Mirrors setInvincible: re-calling extends
+     *  the window rather than restacking a fresh pause on top of an already-paused timer. */
+    setStunned(clock: ClockTimer, durationMs: number, playerClient?: Client) {
+        if (!this.stunned) {
+            this.attackTimers.forEach((timer) => timer.pause());
+            this.regenTimer?.pause();
+            this.activeSkillTimers.forEach((timer) => timer.pause());
+            playerClient?.send('stunned_state', { playerId: this.playerId, stunned: true } as StunnedStateMessage);
+        }
+        this.stunned = true;
+        const endStun = () => {
+            this.stunned = false;
+            this.stunTimer = null;
+            this.attackTimers.forEach((timer) => timer.resume());
+            this.regenTimer?.resume();
+            this.activeSkillTimers.forEach((timer) => timer.resume());
+            playerClient?.send('stunned_state', { playerId: this.playerId, stunned: false } as StunnedStateMessage);
+        };
+        if (this.stunTimer) {
+            const timeLeft = this.stunTimer.time - this.stunTimer.elapsedTime;
+            this.stunTimer.clear();
+            this.stunTimer = clock.setTimeout(endStun, timeLeft + durationMs);
+            return;
+        }
+        this.stunTimer = clock.setTimeout(endStun, durationMs);
     }
 
     /** Consumes and returns the pending Brace block, if any. One-shot: the weapon swing that reads

@@ -84,7 +84,9 @@ export const server = defineServer({
                 ...item.toJSON(),
                 // Shields (like class items) roll their skill per-player-owned instance, not on
                 // the raw DB template this endpoint reads — skillName/skillDescription are blank
-                // here by design, same as an un-upgraded class item's catalog entry.
+                // here by design, same as an un-upgraded class item's catalog entry. The shop/draft
+                // item card shows the actual (per-player, spread-coordinated) skill preview before
+                // Legendary instead — see ItemSchema.futureSkill* / itemSkillRoller.refreshFutureItemSkill.
                 rollPreview: getItemRollPreview(item),
             })));
         });

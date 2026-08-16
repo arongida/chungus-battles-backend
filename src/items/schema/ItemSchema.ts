@@ -73,6 +73,21 @@ export class Item extends Schema {
   @type(AffectedStats) skillAffectedStats2: AffectedStats = new AffectedStats();
   @type(AffectedStats) skillAffectedEnemyStats2: AffectedStats = new AffectedStats();
   @type('string') skillStatus2: string = '';
+  // The skill this class item WILL roll once it reaches Legendary — precomputed from the same
+  // deterministic seed rollItemSkill uses (see items/skills/itemSkillRoller.ts's
+  // refreshFutureItemSkill), so it's a promise, not a guess. 0/empty once a real skillId is
+  // granted (the real skill supersedes the preview), for shields (which already roll from
+  // Common), and for non-class items. Deliberately NOT persisted to Mongo (items/db/Item.ts has
+  // no field for these) — recomputed every load/aura tick, same reasoning as skillAffectedStats.
+  // Declared at the end of the @type block so existing field indices stay stable.
+  @type('number') futureSkillId: number = 0;
+  @type('string') futureSkillName: string = '';
+  @type('string') futureSkillDescription: string = '';
+  // Runtime-only max-damage bonus accumulated during a fight (Soulstealer's Scythe souls — see
+  // ItemBehaviors.ts). Deliberately NOT persisted to Mongo (items/db/Item.ts has no field for it)
+  // — same reasoning as skillAffectedStats above: FightRoom builds fresh Item instances every
+  // fight, so a 0 default is always immediately correct and needs no explicit reset.
+  @type('number') bonusMaxDamage: number = 0;
   // Server-only, not synced: Gold Genie (TalentBehaviors.ts) rolls its post-Legendary lucky-find
   // chance exactly once per shop slot — this latches that so repeat aura ticks don't re-roll it.
   goldGenieLuckyRolled: boolean = false;

@@ -83,7 +83,11 @@ function getItemSchemaObject(itemFromDb: any): Item {
     // schema sync — "AffectedStats was expected, but Object was provided"). skillStatus is
     // excluded for the same "pure runtime output, never worth carrying over" reason — leaving it
     // out of `primitives` lets it fall back to the schema default ('') rather than a stale string.
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, skillAffectedStats2, skillAffectedEnemyStats2, skillStatus2, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    // futureSkillId/futureSkillName/futureSkillDescription are excluded for the same "pure
+    // runtime output, never worth carrying over" reason as skillStatus above — a stale preview
+    // from a cloneItem() round-trip falls back to the schema default (0/'') instead, and gets
+    // recomputed fresh on the next aura tick by refreshFutureItemSkill.
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, skillAffectedStats2, skillAffectedEnemyStats2, skillStatus2, futureSkillId, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
     if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);

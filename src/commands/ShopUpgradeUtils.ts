@@ -4,7 +4,7 @@ import { ItemRarity, ItemType } from '../items/types/ItemTypes';
 import { cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { TalentType } from '../talents/types/TalentTypes';
-import { ensureShieldSkill, grantItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
+import { ensureShieldSkill, grantItemSkill, refreshFutureItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
 import {
   BURN_DAMAGE_PER_STACK,
   BURN_DURATION_MS,
@@ -15,6 +15,7 @@ import {
   magicRingCooldownReduction,
   magicWandCooldownReduction,
   NON_UPGRADEABLE_ITEM_IDS,
+  scytheSoulValue,
   secondWindHealFraction,
   secondWindInvulnMs,
   SECOND_WIND_THRESHOLD,
@@ -44,7 +45,7 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
     const totalHpPct = parseFloat((POISON_DAMAGE_PER_STACK_FRACTION * 100 * (POISON_DURATION_MS / 1000)).toFixed(2));
     return `Applies ${stacks} poison stacks on hit. Each stack deals ${totalHpPct}% max HP over ${POISON_DURATION_MS / 1000}s. Any poison halves healing.`;
   },
-  59: (item) => `Heals for ${item.rarity * 10 + 10}% of damage dealt on hit.`,
+  59: (item) => `2-handed — Cannot be dodged, blocked or absorbed. Each hit reaps a soul: +${scytheSoulValue(item.rarity)} max damage for the rest of the fight.`,
   703: (item) => {
     const multiplier = item.rarity / 2;
     return multiplier === 1
@@ -103,6 +104,11 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
       refreshItemSkillDescription(target);
     }
   }
+  // Legendary skill preview (item.futureSkill*): re-synced on every upgrade step, not just the
+  // Legendary one — it needs to clear the moment a real skillId lands, and it's a no-op below
+  // Legendary anyway (refreshFutureItemSkill's own eligibility check), so one unconditional call
+  // covers both without duplicating the branching above.
+  refreshFutureItemSkill(target, player);
 
   return !wasMythic && target.rarity >= ItemRarity.MYTHIC;
 }

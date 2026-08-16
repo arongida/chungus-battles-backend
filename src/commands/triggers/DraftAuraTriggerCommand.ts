@@ -6,7 +6,8 @@ import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContex
 import {triggerEquippedItems} from '../../common/triggerUtils';
 import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
 import {baseLuckyFindChance, BASE_REFRESH_SHOP_COST, applyRefreshCostMultiplier} from '../ShopUpgradeUtils';
-import {ensureShieldSkill} from '../../items/skills/itemSkillRoller';
+import {ensureShieldSkill, refreshFutureItemSkill} from '../../items/skills/itemSkillRoller';
+import {applyBulkDiscount} from '../../items/behavior/ItemSkillBehaviors';
 
 export class DraftAuraTriggerCommand extends Command<DraftRoom> {
     execute() {
@@ -38,6 +39,9 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         player.hagglerFreeRerolls = 0;
         player.storeCreditFreeClaim = false;
         player.storeCreditFreeClaimCap = 0;
+        // Bulk Discount (item skill): same reasoning — re-seeded before the equipped-item aura
+        // pass so the rate can't survive dropping/selling the item.
+        player.bulkDiscountGoldPerLuckPercent = 0;
 
         // Shields roll their skill from Common (no Legendary gate — see ensureShieldSkill), so
         // unlike class-item skills this can't ride on a rarity-upgrade event. Sweep every shield
@@ -48,6 +52,13 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         player.equippedItems.forEach((item) => ensureShieldSkill(item, player));
         player.inventory.forEach((item) => ensureShieldSkill(item, player));
         this.state.shop.forEach((item) => ensureShieldSkill(item, player));
+
+        // Legendary skill preview (item.futureSkill*) — same "every item the player can currently
+        // see" sweep as ensureShieldSkill above, so a Common/Rare/Epic class item always shows
+        // which skill it's heading toward.
+        player.equippedItems.forEach((item) => refreshFutureItemSkill(item, player));
+        player.inventory.forEach((item) => refreshFutureItemSkill(item, player));
+        this.state.shop.forEach((item) => refreshFutureItemSkill(item, player));
 
         const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes?.includes(TriggerType.AURA));
 
@@ -77,6 +88,12 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         // multiplier below — Black Market Contact's x2 always lands on VIP Pass's fully-adjusted
         // flat bonus, not a partial one.
         player.luckyFindChance *= player.luckyFindChanceMultiplier;
+
+        // Bulk Discount's actual shop repricing — deliberately not inside the item's own AURA
+        // behavior (see ItemSkillBehaviors.applyBulkDiscount's comment): it needs to read
+        // luckyFindChance's FINAL value for this tick, which isn't guaranteed yet mid equipped-
+        // item iteration if Insider Trading hasn't run first.
+        applyBulkDiscount(player, this.state.shop);
 
         // Snapshot the pre-discount cost so DraftRoom.refreshShop can credit Bargain Hunter with
         // the gold actually saved by the halving below.

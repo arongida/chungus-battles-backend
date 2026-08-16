@@ -9,7 +9,7 @@ import { ItemSkillType } from '../types/ItemSkillTypes';
 import { fmt } from '../../common/MessageTypes';
 import {
   coatedEdgeCounters, openingActCounters, crushingBlowCounters, protectionMoneyLastProcMs,
-  shieldBashLastProcMs, braceCounters,
+  shieldBashLastProcMs, braceCounters, smokeBombUsed,
 } from './itemSkillState';
 // Type-only — see itemSkillState.ts's header comment on why this doesn't create a runtime cycle
 // with ItemSchema.ts (which imports ItemSkillBehaviors.ts, which imports this file).
@@ -51,7 +51,7 @@ export interface ItemSkillDefinition {
   describe(rarity: ItemRarity): string;
   /** Live one-line state for an EQUIPPED item (e.g. "+42 / +100 defense"), or '' to render no
    *  status line at all — see itemSkillStatus.ts. Omitted entirely for skills with no
-   *  meaningful moment-to-moment state (Aegis, Light Fingers, Market Manipulation, Cash Back). */
+   *  meaningful moment-to-moment state (Aegis, Cash Back). */
   status?(ctx: ItemSkillStatusContext): string;
 }
 
@@ -119,11 +119,14 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.15 },
-      [ItemRarity.MYTHIC]: { ratio: 0.3 },
+      [ItemRarity.LEGENDARY]: { perDodgeRate: 10 },
+      [ItemRarity.MYTHIC]: { perDodgeRate: 5 },
     },
-    describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.FLUID_MOTION], r).ratio)} of your dodge rate.`,
-    status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.accuracy)} accuracy`,
+    describe: (r) => `Gain 1% attack speed per ${skillValues(ITEM_SKILLS[ItemSkillType.FLUID_MOTION], r).perDodgeRate} dodge rate.`,
+    status: (ctx) => {
+      const as = ctx.item.skillAffectedStats.attackSpeed;
+      return as === 1 ? '' : `+${pct(as - 1)} attack speed`;
+    },
   },
 
   [ItemSkillType.PLAGUE_BEARER]: {
@@ -195,17 +198,20 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.ROGUE,
     name: 'Opening Act',
     slots: WEAPON_SLOTS,
-    triggerTypes: [TriggerType.ON_ATTACK, TriggerType.FIGHT_START],
+    // ON_ATTACK is deliberately absent — the empowerment check runs directly in
+    // FightRoom.tryWeaponAttack (before the dodge roll), not through the trigger system. See
+    // ItemSkillBehaviors.ts's OPENING_ACT entry for why (same reasoning as Crushing Blow).
+    triggerTypes: [TriggerType.FIGHT_START],
     values: {
       [ItemRarity.LEGENDARY]: { count: 3 },
       [ItemRarity.MYTHIC]: { count: 5 },
     },
-    describe: (r) => `Your first ${skillValues(ITEM_SKILLS[ItemSkillType.OPENING_ACT], r).count} attacks each fight deal double damage.`,
+    describe: (r) => `Your first ${skillValues(ITEM_SKILLS[ItemSkillType.OPENING_ACT], r).count} attacks each fight are empowered: unavoidable, +50% bonus damage.`,
     status: (ctx) => {
       if (!ctx.inFight) return '';
       const { count } = skillValues(ITEM_SKILLS[ItemSkillType.OPENING_ACT], ctx.item.rarity);
       const remaining = Math.max(0, count - (openingActCounters.get(ctx.item) ?? 0));
-      return remaining > 0 ? `${remaining} double-damage attack${remaining > 1 ? 's' : ''} left` : 'used up';
+      return remaining > 0 ? `${remaining} empowered attack${remaining > 1 ? 's' : ''} left` : 'used up';
     },
   },
 
@@ -214,19 +220,22 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.ROGUE,
     name: 'Smoke Bomb',
     slots: GEAR_SLOTS,
-    triggerTypes: [TriggerType.FIGHT_START, TriggerType.FIGHT_END],
+    // AURA checks the HP threshold every ~1s and fires the (once-per-fight) vanish; FIGHT_END
+    // resets the latch and any lingering stat output.
+    triggerTypes: [TriggerType.AURA, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.3, durationMs: 10000 },
-      [ItemRarity.MYTHIC]: { ratio: 0.6, durationMs: 20000 },
+      [ItemRarity.LEGENDARY]: { hpThreshold: 0.5, durationMs: 3000, dodgeRate: 1000 },
+      [ItemRarity.MYTHIC]: { hpThreshold: 0.5, durationMs: 5000, dodgeRate: 1000 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SMOKE_BOMB], r);
-      return `Fight start: enemy loses ${pct(v.ratio)} accuracy for ${v.durationMs / 1000}s.`;
+      return `The first time you fall below ${pct(v.hpThreshold)} HP, vanish for ${v.durationMs / 1000}s: `
+        + `+${v.dodgeRate} dodge rate, but your attacks deal no damage while vanished.`;
     },
     status: (ctx) => {
       if (!ctx.inFight) return '';
-      const debuff = -ctx.item.skillAffectedEnemyStats.accuracy;
-      return debuff > 0 ? `enemy -${fmt(debuff)} accuracy (active)` : 'expired';
+      if (ctx.player.damageDisabled) return 'vanished — attacks deal no damage';
+      return smokeBombUsed.get(ctx.item) ? 'used' : 'ready — triggers below 50% HP';
     },
   },
 
@@ -235,6 +244,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.ROGUE,
     name: 'Light Fingers',
     slots: ANY_SLOT,
+    // Once per shop phase only — deliberately NOT AFTER_REFRESH, so rerolling doesn't let this
+    // proc again.
     triggerTypes: [TriggerType.SHOP_START],
     values: {
       [ItemRarity.LEGENDARY]: { count: 1 },
@@ -242,8 +253,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.LIGHT_FINGERS], r);
-      return v.count > 1 ? 'Shop start: the cheapest two shop items are free.' : 'Shop start: the cheapest shop item is free.';
+      return v.count > 1
+        ? 'Shop start: steal the cheapest two shop items — free, straight into your inventory.'
+        : 'Shop start: steal the cheapest shop item — free, straight into your inventory.';
     },
+    status: (ctx) => (ctx.inFight ? '' : 'triggers once per shop phase'),
   },
 
   // -------------------------------------------------------------- WARRIOR ----
@@ -258,7 +272,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       [ItemRarity.LEGENDARY]: { ratio: 0.15 },
       [ItemRarity.MYTHIC]: { ratio: 0.3 },
     },
-    describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], r).ratio)} of your defense.`,
+    describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], r).ratio)} of your strength.`,
     status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.accuracy)} accuracy`,
   },
 
@@ -472,22 +486,27 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.income)} income`,
   },
 
+  // Renamed from Market Manipulation (was: shop-start, upgrade N random shop items one rarity).
+  // Kept the same id (305) — items already carrying this skill pick up the rename/rework
+  // automatically via reconcileItemSkill on their next DB->schema load.
   [ItemSkillType.MARKET_MANIPULATION]: {
     id: ItemSkillType.MARKET_MANIPULATION,
     class: ItemClass.MERCHANT,
-    name: 'Market Manipulation',
+    name: 'Insider Trading',
     slots: ANY_SLOT,
-    triggerTypes: [TriggerType.SHOP_START, TriggerType.AFTER_REFRESH],
+    triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { count: 1 },
-      [ItemRarity.MYTHIC]: { count: 2 },
+      [ItemRarity.LEGENDARY]: { chance: 0.10 },
+      [ItemRarity.MYTHIC]: { chance: 0.20 },
     },
-    describe: (r) => {
-      const v = skillValues(ITEM_SKILLS[ItemSkillType.MARKET_MANIPULATION], r);
-      return v.count > 1 ? 'Shop start: two random shop items are upgraded one rarity.' : 'Shop start: a random shop item is upgraded one rarity.';
-    },
+    describe: (r) => `+${pct(skillValues(ITEM_SKILLS[ItemSkillType.MARKET_MANIPULATION], r).chance)} lucky find chance.`,
+    status: (ctx) => (ctx.inFight ? '' : `+${pct(skillValues(ITEM_SKILLS[ItemSkillType.MARKET_MANIPULATION], ctx.item.rarity).chance)} lucky find`),
   },
 
+  // Scales off the player's own lucky find chance (Insider Trading, VIP Pass, Black Market
+  // Contact, Mythic snowball bonus, etc.) instead of counting equipped merchant items — so it
+  // rewards the same economy stat every other merchant piece is already pushing, rather than
+  // sitting in tension with it.
   [ItemSkillType.BULK_DISCOUNT]: {
     id: ItemSkillType.BULK_DISCOUNT,
     class: ItemClass.MERCHANT,
@@ -495,16 +514,20 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { perItem: 1 },
-      [ItemRarity.MYTHIC]: { perItem: 2 },
+      [ItemRarity.LEGENDARY]: { perLuckPercent: 0.5 },
+      [ItemRarity.MYTHIC]: { perLuckPercent: 1 },
     },
-    describe: (r) => `Shop prices drop ${skillValues(ITEM_SKILLS[ItemSkillType.BULK_DISCOUNT], r).perItem} gold per merchant item equipped.`,
+    describe: (r) => {
+      const { perLuckPercent } = skillValues(ITEM_SKILLS[ItemSkillType.BULK_DISCOUNT], r);
+      return perLuckPercent < 1
+        ? `Shop prices drop 1 gold per ${Math.round(1 / perLuckPercent)}% lucky find chance.`
+        : `Shop prices drop ${perLuckPercent} gold per 1% lucky find chance.`;
+    },
     status: (ctx) => {
       if (ctx.inFight) return '';
-      const { perItem } = skillValues(ITEM_SKILLS[ItemSkillType.BULK_DISCOUNT], ctx.item.rarity);
-      let merchantCount = 0;
-      ctx.player.equippedItems.forEach((i) => { if (i.class === ItemClass.MERCHANT) merchantCount++; });
-      return `${merchantCount} merchant item${merchantCount === 1 ? '' : 's'} equipped - shop prices -${merchantCount * perItem} gold`;
+      const luckPercent = ctx.player.luckyFindChance * 100;
+      const discount = Math.floor(luckPercent * ctx.player.bulkDiscountGoldPerLuckPercent);
+      return `${fmt(luckPercent)}% lucky find - shop prices -${discount} gold`;
     },
   },
 
@@ -644,18 +667,20 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: 'shield',
     name: 'Shield Bash',
     slots: SHIELD_SLOTS,
-    // FIGHT_START resets the proc cooldown; ON_ATTACKED procs the slow (on cooldown).
+    // FIGHT_START resets the proc cooldown; ON_ATTACKED procs the stun (on cooldown).
     triggerTypes: [TriggerType.FIGHT_START, TriggerType.ON_ATTACKED],
+    // A real stun (Player.setStunned) is strictly stronger than the old attack-speed slow it
+    // replaces, so the cooldown is longer across the board — see PlayerSchema.setStunned.
     values: {
-      [ItemRarity.COMMON]: { slowRatio: 0.20, slowMs: 3000, cooldownMs: 4000 },
-      [ItemRarity.RARE]: { slowRatio: 0.25, slowMs: 3000, cooldownMs: 4000 },
-      [ItemRarity.EPIC]: { slowRatio: 0.30, slowMs: 3000, cooldownMs: 4000 },
-      [ItemRarity.LEGENDARY]: { slowRatio: 0.35, slowMs: 3000, cooldownMs: 4000 },
-      [ItemRarity.MYTHIC]: { slowRatio: 0.40, slowMs: 3000, cooldownMs: 4000 },
+      [ItemRarity.COMMON]: { stunMs: 700, cooldownMs: 5000 },
+      [ItemRarity.RARE]: { stunMs: 900, cooldownMs: 5000 },
+      [ItemRarity.EPIC]: { stunMs: 1100, cooldownMs: 5000 },
+      [ItemRarity.LEGENDARY]: { stunMs: 1300, cooldownMs: 5000 },
+      [ItemRarity.MYTHIC]: { stunMs: 1600, cooldownMs: 5000 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_BASH], r);
-      return `On being attacked (max once every ${v.cooldownMs / 1000}s): slow the enemy by ${pct(v.slowRatio)} attack speed for ${v.slowMs / 1000}s.`;
+      return `On being attacked (max once every ${v.cooldownMs / 1000}s): stun the enemy for ${(v.stunMs / 1000).toFixed(1)}s — they cannot attack, regenerate, use skills, or dodge.`;
     },
     status: (ctx) => {
       if (!ctx.inFight || !ctx.clock) return '';

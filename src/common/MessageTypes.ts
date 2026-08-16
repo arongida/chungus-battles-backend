@@ -21,6 +21,13 @@ export type InvulnerableStateMessage = {
   invincible: boolean;
 };
 
+// Shield Bash (item skill): mirrors InvulnerableStateMessage above — sent alongside the synced
+// Player.stunned flag so the replay player (no schema sync) can drive the same client-side aura.
+export type StunnedStateMessage = {
+  playerId: number;
+  stunned: boolean;
+};
+
 export type HealingMessage = {
   playerId: number;
   healing: number;
@@ -98,7 +105,7 @@ export type CombatLogKind =
   | 'burn_apply' | 'burn_tick'
   | 'heal' | 'leech'
   | 'talent' | 'item'
-  | 'invulnerable'
+  | 'invulnerable' | 'stun'
   | 'reward' | 'xp' | 'result';
 
 export type CombatLogMessage = {

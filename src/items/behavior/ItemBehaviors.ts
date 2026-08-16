@@ -12,6 +12,8 @@ import {
     magicWandCooldownReduction,
     rerollMagicRingStats,
     rollMagicRingBonus,
+    scytheSouls,
+    scytheSoulValue,
     secondWindHealFraction,
     secondWindInvulnMs,
     SECOND_WIND_THRESHOLD,
@@ -21,11 +23,29 @@ import {
 } from './uniqueItemBalance';
 import { rollRandomLegendaryItemAtLevel } from './ringOfImmortality';
 import type { Item } from '../schema/ItemSchema';
+import type { Player } from '../../players/schema/PlayerSchema';
 
 // Band of Vigor (27): whether this ring instance has already procced Second Wind in the
 // current fight. Keyed by item instance and cleared on FIGHT_START, same pattern as the
 // Flowering Staff's proc-cooldown map above.
 const secondWindUsed = new WeakMap<Item, boolean>();
+
+/** Two-handed items (Zwei-Hander 4, Flowering Staff 8, Soulstealer's Scythe 59) occupy both
+ *  slots of their pair — mainHand/offHand normally, or armor/helmet for a Martial Artist who
+ *  equipped them there instead (TalentBehaviors.ts). Retroactive by design: called from AURA, so
+ *  the ~1s aura tick kicks the partner back to inventory rather than the equip itself being
+ *  blocked. Locates the slot by instance identity, not itemId, so it still targets the right
+ *  copy when a player owns two of the same two-hander. */
+function blockPairedSlot(attacker: Player, item: Item): void {
+    let itemSlot: EquipSlot | null = null;
+    attacker.equippedItems.forEach((equipped, slot) => {
+        if (equipped === item) itemSlot = slot as EquipSlot;
+    });
+    if (!itemSlot) return;
+    const otherSlot = TWO_HANDED_PAIRED_SLOT[itemSlot];
+    const otherItem = attacker.equippedItems.get(otherSlot);
+    if (otherItem) attacker.setItemUnequipped(otherItem, otherSlot);
+}
 
 export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContext) => void | Promise<void>> = {
     // Shields no longer have a type-keyed behavior here — the old flat fight-start
@@ -42,16 +62,7 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     8: ({ attacker, defender, trigger, item, client }) => {
         if (!attacker || !item) return;
         if (trigger === TriggerType.AURA) {
-            let staffSlot: EquipSlot | null = null;
-            attacker.equippedItems.forEach((equippedItem, slot) => {
-                if (equippedItem.itemId === 8) staffSlot = slot as EquipSlot;
-            });
-            if (!staffSlot) return;
-            // Takes both slots of its pair — mainHand/offHand as always, or armor/helmet for a
-            // Martial Artist who equipped it there instead (TalentBehaviors.ts).
-            const otherSlot = TWO_HANDED_PAIRED_SLOT[staffSlot];
-            const otherItem = attacker.equippedItems.get(otherSlot);
-            if (otherItem) attacker.setItemUnequipped(otherItem, otherSlot);
+            blockPairedSlot(attacker, item);
             item.affectedStats.cooldownReduction = floweringStaffCooldownReduction(item.rarity);
             // Re-set after mutating affectedStats — see CLAUDE.md's MapSchema change-detection
             // gotcha, same idiom as Magic Ring/Gambler's Dice below.
@@ -128,18 +139,9 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     },
 
     // Zwei-Hander (4) — AURA: unequips any item in the other hand slot while equipped.
-    4: ({ attacker, trigger }) => {
-        if (trigger !== TriggerType.AURA || !attacker) return;
-        let zweiSlot: EquipSlot | null = null;
-        attacker.equippedItems.forEach((equippedItem, slot) => {
-            if (equippedItem.itemId === 4) zweiSlot = slot as EquipSlot;
-        });
-        if (!zweiSlot) return;
-        // Takes both slots of its pair — mainHand/offHand as always, or armor/helmet for a
-        // Martial Artist who equipped it there instead (TalentBehaviors.ts).
-        const otherSlot = TWO_HANDED_PAIRED_SLOT[zweiSlot];
-        const otherItem = attacker.equippedItems.get(otherSlot);
-        if (otherItem) attacker.setItemUnequipped(otherItem, otherSlot);
+    4: ({ attacker, trigger, item }) => {
+        if (trigger !== TriggerType.AURA || !attacker || !item) return;
+        blockPairedSlot(attacker, item);
     },
     // Dagger of Poison (18) — applies (rarity + 1) poison stacks on hit (Common 2 … Mythic 6).
     18: ({ defender, client, clock, item }) => {
@@ -147,15 +149,28 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         defender.addPoisonStacks(clock, client, item.rarity + 1);
     },
 
-    // Soulstealer's Scythe (59) — rarity 2+: heals for (rarity*5+5)% of damage dealt + 1 on hit.
-    59: ({ attacker, defender, damage, client, item }) => {
-        if (!attacker || !damage || !item) return;
-        const heal = Math.floor(damage * (item.rarity * 5 + 5) / 100) + 1;
-        const scytheHealed = attacker.heal(heal);
-        if (scytheHealed > 0) {
-            client?.send('healing', { playerId: attacker.playerId, healing: scytheHealed });
-            client?.send('combat_log', { text: `${attacker.name}'s ${item.name} leeches ${fmt(scytheHealed)} health!`, kind: 'leech', attackerId: attacker.playerId, itemId: item.itemId, healing: scytheHealed } as CombatLogMessage)
+    // Soulstealer's Scythe (59) — 2-handed reaper. AURA: takes both hands (see blockPairedSlot).
+    // ON_ATTACK: every landed swing reaps a soul, uncapped, permanently adding
+    // scytheSoulValue(rarity) max damage for the rest of the fight — see FightRoom.tryWeaponAttack
+    // for how it also bypasses dodge, Brace's block, and invulnerability entirely.
+    59: ({ attacker, defender, trigger, client, item }) => {
+        if (!attacker || !item) return;
+        if (trigger === TriggerType.AURA) {
+            blockPairedSlot(attacker, item);
+            return;
         }
+        if (trigger !== TriggerType.ON_ATTACK) return;
+        const souls = scytheSouls.get(item) ?? 0;
+        const nextSouls = souls + 1;
+        scytheSouls.set(item, nextSouls);
+        item.bonusMaxDamage = nextSouls * scytheSoulValue(item.rarity);
+        client?.send('combat_log', {
+            text: `${attacker.name}'s ${item.name} reaps a soul! (${nextSouls} soul${nextSouls === 1 ? '' : 's'})`,
+            kind: 'item',
+            attackerId: attacker.playerId,
+            defenderId: defender?.playerId,
+            itemId: item.itemId,
+        } as CombatLogMessage);
     },
 
     // Magic Ring (702) — not a weapon, doesn't attack. Starts Common with one

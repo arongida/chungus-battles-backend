@@ -28,27 +28,46 @@ function seededRandom(...parts: number[]): number {
 /** Rolls a skill for `item` from its pool — the shield-only pool for any ItemType.SHIELD
  *  (regardless of `class`, which shields leave empty), otherwise its `class`'s pool — filtered
  *  to slots the item can actually be equipped in (an ON_ATTACK skill on a helmet would never
- *  fire — see itemSkillBalance.ts). Duplicates are allowed by design — the same skill can be
- *  rolled regardless of what the player already owns, with no cap on how many copies they end up
- *  with. Returns null for non-class, non-shield items or an item whose equipOptions don't
- *  overlap any skill's slot list. */
+ *  fire — see itemSkillBalance.ts). Returns null for non-class, non-shield items or an item whose
+ *  equipOptions don't overlap any skill's slot list.
+ *
+ *  Spread fix: narrows the eligible pool to whichever skill(s) this player has used the LEAST
+ *  among their other owned items before doing the seeded pick (falling back to an even seeded
+ *  pick only among ties), instead of sampling uniformly across the whole pool every time. Sampling
+ *  independently per item let several items land on the same popular skill while another skill
+ *  never showed up on anything the player owned. Only counts items that have ALREADY been
+ *  granted a real skillId/skillId2 (not other items' unrolled previews), so the result is stable
+ *  across repeated preview calls in the same tick and only shifts when a new item genuinely rolls
+ *  a real skill. */
 export function rollItemSkill(item: Item, player: Player, options?: { exclude?: number }): ItemSkillDefinition | null {
   const pool = item.type === ItemType.SHIELD ? SHIELD_SKILLS : SKILLS_BY_CLASS[item.class as ItemClass];
   if (!pool || pool.length === 0) return null;
 
-  const equipOptions = new Set(Array.from(item.equipOptions as any as Iterable<string>));
+  const equipOptions = new Set(Array.from(item.equipOptions));
   let slotEligible = pool.filter((def) => def.slots.some((s) => equipOptions.has(s)));
   // Weapon Whisperer's second skill slot excludes whatever slot 1 already rolled, so the two
   // skills on the same weapon are never identical.
   if (options?.exclude) slotEligible = slotEligible.filter((def) => def.id !== options.exclude);
   if (slotEligible.length === 0) return null;
 
+  const usage = new Map<number, number>(slotEligible.map((def) => [def.id, 0]));
+  const countUsage = (i: Item) => {
+    if (i === item) return;
+    if (i.skillId && usage.has(i.skillId)) usage.set(i.skillId, usage.get(i.skillId)! + 1);
+    if (i.skillId2 && usage.has(i.skillId2)) usage.set(i.skillId2, usage.get(i.skillId2)! + 1);
+  };
+  player.equippedItems.forEach(countUsage);
+  player.inventory.forEach(countUsage);
+  const minUsage = Math.min(...slotEligible.map((def) => usage.get(def.id)!));
+  const leastUsed = slotEligible.filter((def) => usage.get(def.id) === minUsage);
+
   // Count owned copies of this same itemId that have already rolled a skill, so two copies of
-  // one item don't always land on the identical skill (the seed below is otherwise a pure
-  // function of playerId+itemId). Stable across the 1s aura-tick preview rebuilds — a granted
-  // skillId is latched (see applyRarityUpgrade's `if (!target.skillId)` guard) and persisted, so
-  // this never flickers the shop the way an inventory-index discriminator would. Excludes
-  // dual-wield ghost copies, which clone skillId from the real weapon rather than rolling.
+  // one item don't always land on the identical skill among the tied candidates above (the seed
+  // below is otherwise a pure function of playerId+itemId). Stable across the 1s aura-tick
+  // preview rebuilds — a granted skillId is latched (see applyRarityUpgrade's `if
+  // (!target.skillId)` guard) and persisted, so this never flickers the shop the way an
+  // inventory-index discriminator would. Excludes dual-wield ghost copies, which clone skillId
+  // from the real weapon rather than rolling.
   let copyIndex = 0;
   const countCopy = (i: Item) => {
     if (i !== item && i.itemId === item.itemId && i.skillId && !i.tags?.includes('dual_wield_copy')) copyIndex++;
@@ -57,8 +76,8 @@ export function rollItemSkill(item: Item, player: Player, options?: { exclude?: 
   player.inventory.forEach(countCopy);
 
   const seed = seededRandom(player.playerId, item.itemId, ItemRarity.LEGENDARY, copyIndex);
-  const index = Math.min(Math.floor(seed * slotEligible.length), slotEligible.length - 1);
-  return slotEligible[index];
+  const index = Math.min(Math.floor(seed * leastUsed.length), leastUsed.length - 1);
+  return leastUsed[index];
 }
 
 /** Locks in a rolled skill on `item`: sets the display fields and unions the skill's trigger
@@ -137,4 +156,38 @@ export function reconcileItemSkill2(item: Item): void {
   def.triggerTypes.forEach((t) => {
     if (!item.triggerTypes.includes(t)) item.triggerTypes.push(t);
   });
+}
+
+/** Fills item.futureSkill*(Id/Name/Description) with the skill this class item WOULD roll right
+ *  now if it reached Legendary — reuses rollItemSkill, so it reflects the same coordinated spread
+ *  against the player's other owned items (see rollItemSkill's doc comment). This means the
+ *  preview can shift as the player's other items develop, not just once picked at random and
+ *  fixed forever — an honest "current best guess" rather than a promise fixed the moment the item
+ *  is acquired. Clears the fields once they're no longer meaningful: shields (which already roll
+ *  from Common — no "future" state for them), a non-class item, or an item that already has a
+ *  real skillId (the real skill supersedes the preview) or has already reached Legendary. Cheap
+ *  and idempotent — safe to call every aura tick, same contract as ensureShieldSkill; called from
+ *  exactly the same sweep sites. */
+export function refreshFutureItemSkill(item: Item, player: Player): void {
+  const eligible = item.type !== ItemType.SHIELD && !!item.class && !item.skillId && item.rarity < ItemRarity.LEGENDARY;
+  if (!eligible) {
+    if (item.futureSkillId) {
+      item.futureSkillId = 0;
+      item.futureSkillName = '';
+      item.futureSkillDescription = '';
+    }
+    return;
+  }
+  const def = rollItemSkill(item, player);
+  if (!def) {
+    if (item.futureSkillId) {
+      item.futureSkillId = 0;
+      item.futureSkillName = '';
+      item.futureSkillDescription = '';
+    }
+    return;
+  }
+  item.futureSkillId = def.id;
+  item.futureSkillName = def.name;
+  item.futureSkillDescription = def.describe(ItemRarity.LEGENDARY);
 }
