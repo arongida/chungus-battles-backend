@@ -62,14 +62,14 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
     strength: {
         1: { min: 3,  max: 5  },
         2: { min: 4,  max: 6  },
-        3: { min: 5,  max: 9  },
+        3: { min: 6,  max: 9  },
         4: { min: 10,  max: 18  },
         5: { min: 16,  max: 30 },
     },
     accuracy: {
         1: { min: 3,  max: 5  },
         2: { min: 4,  max: 6  },
-        3: { min: 5,  max: 9  },
+        3: { min: 6,  max: 9  },
         4: { min: 8,  max: 16  },
         5: { min: 16,  max: 30 },
     },
@@ -78,7 +78,7 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
     attackSpeed: {
         1: { min: 1.08, max: 1.12, isFloat: true },
         2: { min: 1.12, max: 1.16, isFloat: true },
-        3: { min: 1.12, max: 1.26, isFloat: true },
+        3: { min: 1.16, max: 1.26, isFloat: true },
         4: { min: 1.25, max: 1.50, isFloat: true },
         5: { min: 1.44, max: 1.80, isFloat: true },
     },
@@ -99,14 +99,14 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
     income: {
         1: { min: 2, max: 2  },
         2: { min: 3, max: 3  },
-        3: { min: 3, max: 5  },
-        4: { min: 4, max: 8  },
+        3: { min: 4, max: 5  },
+        4: { min: 5, max: 8  },
         5: { min: 8, max: 14 },
     },
     dodgeRate: {
         1: { min: 10,  max: 18   },
         2: { min: 14,  max: 24  },
-        3: { min: 18, max: 36  },
+        3: { min: 20, max: 36  },
         4: { min: 30, max: 60  },
         5: { min: 48, max: 86  },
     },
