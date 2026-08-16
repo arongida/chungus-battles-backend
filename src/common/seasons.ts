@@ -18,6 +18,19 @@ export interface SeasonInfo {
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
   {
+    number: 24,
+    name: 'Placeholder',
+    changes: [
+      'Increase tier 3 item minimum stat values',
+      'Accuracy no longer decreases enemy dodge rating',
+      'Burn is now double-edged: every source that ignites the enemy also burns you for 1/3 as many stacks (rounded up) — Hidden Vials is the exception',
+      'The Bear reworked into Fire with Fire and moved to tier 4: every 4s, consumes up to 10 burn stacks on each player and heals 1% max HP per stack consumed',
+      'Wand of Fire and Burning Blood now apply burn to you as well as the enemy',
+      'Scam reworked into an economy talent: no longer tied to dodging — every activation cons 1 gold out of the enemy, but the mark wises up and permanently gains 1 strength for the rest of the fight',
+      'Second Thoughts replaced by VIP Pass and moved to merchant: every shop is guaranteed to stock an item you already own, and you gain +10% lucky find — but rerolls cost 1 more gold',
+    ]
+  },
+  {
     number: 23,
     name: 'Cooldown',
     changes: [
@@ -51,7 +64,6 @@ export const SEASONS: SeasonInfo[] = [
       'Scam reworked: grants dodge rating, and after you dodge your next scam steals health equal to your dodge rating',
       'Grand Robbery buffed: now also rerolls the shop for free and robs it a second time, and always upgrades every stolen item by a rarity',
       'Weapon Whisperer buffed: the Mythic weapon now also learns a second weapon skill',
-      'Accuracy no longer counters dodge — dodge rating is once again unaffected by the attacker\'s accuracy (accuracy still adds to the min damage roll)',
     ]
   },
   {

@@ -95,7 +95,9 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
             });
         } else if (trigger === TriggerType.ACTIVE) {
             if (!defender || !client || !clock) return;
-            defender.addBurnStacks(clock, client, wandOfFireBurnStacks(item.rarity));
+            // Routed through igniteEnemy: also singes the wielder for a third as many stacks
+            // (rounded up) — see uniqueItemBalance.selfBurnStacks.
+            attacker.igniteEnemy(clock, client, defender, wandOfFireBurnStacks(item.rarity));
             client?.send('combat_log', {
                 text: `${attacker.name}'s ${item.name} ignites ${defender.name}!`,
                 kind: 'item',

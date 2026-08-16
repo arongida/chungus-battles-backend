@@ -18,6 +18,7 @@ import {
   secondWindHealFraction,
   secondWindInvulnMs,
   SECOND_WIND_THRESHOLD,
+  selfBurnStacks,
   TWO_HANDED_WEAPON_IDS,
   wandOfFireBurnStacks,
 } from '../items/behavior/uniqueItemBalance';
@@ -34,7 +35,8 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
   },
   14: (item) => {
     const stacks = wandOfFireBurnStacks(item.rarity);
-    return `Every 2s, ignites the enemy with ${stacks} burn stack${stacks > 1 ? 's' : ''} (${BURN_DAMAGE_PER_STACK} damage per stack per second, for ${BURN_DURATION_MS / 1000}s).`;
+    const selfStacks = selfBurnStacks(stacks);
+    return `Every 2s, ignites the enemy with ${stacks} burn stack${stacks > 1 ? 's' : ''} and yourself with ${selfStacks} (${BURN_DAMAGE_PER_STACK} damage per stack per second, for ${BURN_DURATION_MS / 1000}s).`;
   },
   702: (item) => `Every 1s during battle: Gains bonus stats. Evolves on level up.`,
   18: (item) => {
@@ -231,6 +233,31 @@ export function totalRemainingRaritySteps(player: Player): number {
 /** True when the player owns Misconduct (402), which upgrades every stolen item by one rarity. */
 export function hasMisconductUpgrade(player: Player): boolean {
   return player.talents?.some((t) => t.talentId === TalentType.MISCONDUCT) ?? false;
+}
+
+/** Gold added to Player.refreshShopCost per reroll while VIP Pass is owned — its membership fee.
+ *  Applied as a delta (like Comrade's +income) so Bargain Hunter's halving still lands on the
+ *  fully-adjusted cost. */
+export const VIP_PASS_REROLL_SURCHARGE = 1;
+
+/** True when the player owns VIP Pass (202), which guarantees at least one shop slot is an item
+ *  the player already owns — see DraftRoom.updateShop. */
+export function hasVipPass(player: Player): boolean {
+  return player.talents?.some((t) => t.talentId === TalentType.VIP_PASS) ?? false;
+}
+
+/** Distinct itemIds the player currently owns (equipped ∪ inventory) that are eligible for a
+ *  rarity upgrade — i.e. findOwnedUpgradeTarget would return non-null for them. Backs VIP Pass's
+ *  guaranteed-owned-item shop slot: DraftRoom.updateShop picks a random id from this list and
+ *  rolls its DB template into an empty slot, which the normal upgrade-preview construction below
+ *  then turns into a preview. Delegates eligibility to findOwnedUpgradeTarget itself (rather than
+ *  re-implementing the MYTHIC/dual_wield_copy/NON_UPGRADEABLE_ITEM_IDS rules here) so the two
+ *  can't drift apart. */
+export function getOwnedUpgradeableItemIds(player: Player): number[] {
+  const ids = new Set<number>();
+  player.equippedItems.forEach((item) => { if (item.itemId > 0) ids.add(item.itemId); });
+  player.inventory.forEach((item) => { if (item.itemId > 0) ids.add(item.itemId); });
+  return Array.from(ids).filter((id) => findOwnedUpgradeTarget(player, id) !== null);
 }
 
 /** Shared by Misconduct, Robbery and Grand Robbery: takes a shop item for free.

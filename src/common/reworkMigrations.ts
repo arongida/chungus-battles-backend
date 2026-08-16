@@ -44,21 +44,53 @@ export function migrateLegacyTalent(talent: Talent): void {
         talent.affectedStats.dodgeRate = 15;
     }
 
-    // Bear (31): reworked Season 23 from a flat max-HP-scaled hit into a burn applicator.
-    // Pre-rework copies stored a max-HP damage fraction (0.02) in activationRate — any value
-    // below 1 is a legacy copy still on the old shape.
-    if (talent.talentId === TalentType.BEAR && talent.activationRate < 1) {
-        talent.activationRate = 2;
+    // Fire with Fire (31): reworked Season 24 from The Bear (an ON_ATTACK burn applicator, and
+    // before that a flat max-HP-scaled hit) into an ACTIVE burn-consumer + heal at tier 4. Every
+    // pre-rework copy — either shape — is still sitting on ON_ATTACK, so that's the one check
+    // needed to catch both and convert to the current shape.
+    if (talent.talentId === TalentType.FIRE_WITH_FIRE && talent.triggerTypes.includes(TriggerType.ON_ATTACK)) {
+        talent.triggerTypes.clear();
+        talent.triggerTypes.push(TriggerType.ACTIVE);
+        talent.activationRate = 0.25;
         talent.base = 1;
+        talent.tier = 4;
+        talent.affectedStats.cooldownReduction = 40;
     }
 
-    // Scam (5): reworked Season 23 into a dodge-fuelled active skill. Pre-rework copies fired on
-    // a bare ACTIVE trigger for flat `attacker.level` damage and never listened for ON_DODGE.
-    if (talent.talentId === TalentType.SCAM && !talent.triggerTypes.includes(TriggerType.ON_DODGE)) {
-        talent.triggerTypes.push(TriggerType.ON_DODGE);
-        talent.triggerTypes.push(TriggerType.FIGHT_END);
+    // Scam (5): reworked Season 24 from the dodge-fuelled HP steal into a pure economy active.
+    // Written as an unconditional normalize rather than a guarded branch so it converts the S23
+    // shape (ACTIVE + ON_DODGE + FIGHT_END, base 0.25, 10 dodge rating) and the older bare-ACTIVE
+    // shape alike, and is a harmless no-op on an already-migrated copy.
+    if (talent.talentId === TalentType.SCAM) {
+        const onDodge = talent.triggerTypes.indexOf(TriggerType.ON_DODGE);
+        if (onDodge !== -1) talent.triggerTypes.splice(onDodge, 1);
+        if (!talent.triggerTypes.includes(TriggerType.FIGHT_END)) talent.triggerTypes.push(TriggerType.FIGHT_END);
         talent.base = 1;
-        if (!talent.affectedStats.dodgeRate) talent.affectedStats.dodgeRate = 10;
+        talent.scaling = 1;
+        talent.affectedStats.dodgeRate = 0;      // S23 migration handed out 10 — strip it
+        talent.affectedEnemyStats.strength = 0;  // clear residue from a fight that never hit FIGHT_END
+    }
+
+    // VIP Pass (202): reworked Season 24 from Second Thoughts (a rogue BEFORE_REFRESH item-carry)
+    // into a merchant AURA talent (guaranteed owned-item shop slot + flat lucky-find bonus). The
+    // embedded copy is a full snapshot — triggerTypes, name, description, image and class tag all
+    // need fixing, or a pre-rework copy would keep showing the old rogue icon/text and never fire
+    // (BEFORE_REFRESH no longer exists as a dispatched trigger). affectedStats.luckyFindChance is
+    // the ONLY source the behavior reads for its bonus (TalentBehaviors.ts) — a pre-rework copy
+    // has it at the schema default of 0, so without this backfill a migrated VIP Pass would keep
+    // its new aura trigger but silently grant no lucky-find bonus at all. Written as an
+    // unconditional normalize, same idiom as the Scam branch above, so it's a harmless no-op once
+    // migrated (a stale 0.10 from a future rebalance would still get corrected here on next load).
+    if (talent.talentId === TalentType.VIP_PASS) {
+        talent.triggerTypes.clear();
+        talent.triggerTypes.push(TriggerType.AURA);
+        talent.name = 'VIP Pass';
+        talent.description = 'Every shop is guaranteed to stock an item you already own. +10% lucky find. Membership isn\'t free — rerolls cost 1 more gold.';
+        talent.image = 'assets/talents/Icon_Merchant_basic_01.png';
+        talent.affectedStats.luckyFindChance = 0.10;
+        const rogueTag = talent.tags.indexOf('rogue');
+        if (rogueTag !== -1) talent.tags.splice(rogueTag, 1);
+        if (!talent.tags.includes('merchant')) talent.tags.push('merchant');
     }
 }
 

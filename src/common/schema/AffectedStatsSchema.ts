@@ -13,6 +13,17 @@ export class AffectedStats extends Schema {
     // only granted by active talents and a handful of unique items (Wand of Fire, Flowering
     // Staff, Magic Ring). Declared last so field indices stay stable. See common/cooldown.ts.
     @type('number') cooldownReduction: number = 0;
+    // Shop-only bonus, never rolled on items — currently granted only by VIP Pass (talent 202).
+    // Unlike the stats above, this is NOT part of the combat-stat pipeline (StatsSnapshot/
+    // addStats/recalculatePlayerStats in statsUtils.ts): Player.luckyFindChance is a separate,
+    // shop-specific value re-seeded from scratch every draft aura tick (DraftAuraTriggerCommand),
+    // not accumulated from baseStats+items+talents like strength/defense/etc. The VIP Pass
+    // behavior (TalentBehaviors.ts) reads this field directly and adds it to
+    // Player.luckyFindChance, so this is both the display value AND the single source of truth
+    // for the actual bonus — the two can't drift apart. Declared last so mergeInto/addStats
+    // (item-rarity-upgrade and combat-stat merges — neither of which talents go through) don't
+    // need to reason about it.
+    @type('number') luckyFindChance: number = 0;
 
 
     mergeInto(affectedStatsToMerge: AffectedStats) {

@@ -23,6 +23,11 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         // clean base instead of accumulating or fighting over a raw overwrite.
         player.refreshShopCost = BASE_REFRESH_SHOP_COST;
         player.refreshShopCostMultiplier = 1;
+        // VIP Pass: re-seeded to 1 before aura talents run, same reasoning as
+        // refreshShopCostMultiplier above — Black Market Contact contributes a multiplier here
+        // instead of mutating luckyFindChance directly, so its x2 composes on top of VIP Pass's
+        // flat +10% bonus regardless of which talent runs first in the loop below.
+        player.luckyFindChanceMultiplier = 1;
         // Fortune's Fool: re-seeded to false before aura talents run, same reasoning as
         // refreshShopCostMultiplier above — so it can't survive dropping/replacing the talent.
         player.freeRerolls = false;
@@ -67,6 +72,11 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         });
 
         triggerEquippedItems(this.state.player, behaviorContext, TriggerType.AURA);
+
+        // Applied last (after aura talents), same order-independence reasoning as the reroll-cost
+        // multiplier below — Black Market Contact's x2 always lands on VIP Pass's fully-adjusted
+        // flat bonus, not a partial one.
+        player.luckyFindChance *= player.luckyFindChanceMultiplier;
 
         // Snapshot the pre-discount cost so DraftRoom.refreshShop can credit Bargain Hunter with
         // the gold actually saved by the halving below.

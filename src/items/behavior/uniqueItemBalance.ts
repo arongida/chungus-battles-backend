@@ -163,7 +163,7 @@ export const magicRingCooldownReduction = (rarity: number) => 20 + 10 * (rarity 
  * granted to the wielder, subtracted from the enemy (can push the enemy's regen negative).
  */
 export function floweringStaffRegenSteal(rarity: number): number {
-    return 0.4 + 0.2 * rarity;
+    return 0.5 + 0.3 * rarity;
 }
 
 /** Flowering Staff (8): per-fight cap on the total hpRegen swing stolen (both sides). */
@@ -171,7 +171,7 @@ export const FLOWERING_STAFF_MAX_STEAL = 25;
 
 /** Wand of Fire (14): burn stacks applied per ACTIVE proc. */
 export function wandOfFireBurnStacks(rarity: number): number {
-    return rarity;
+    return 3 + rarity;
 }
 
 /** Burn DoT: flat damage dealt per stack each second. */
@@ -179,6 +179,14 @@ export const BURN_DAMAGE_PER_STACK = 2;
 
 /** Burn DoT: how long an application's stacks last. */
 export const BURN_DURATION_MS = 3000;
+
+/** Burn is double-edged: applying it to the enemy singes the applier for a third as many
+ *  stacks (rounded up). Applied via Player.igniteEnemy — Hidden Vials (24) is the one
+ *  exception and bypasses it. */
+export const selfBurnStacks = (applied: number) => Math.ceil(applied / 3);
+
+/** Fire with Fire (31): max burn stacks consumed from each player per proc. */
+export const FIRE_WITH_FIRE_MAX_STACKS = 10;
 
 /**
  * Health Flask (6): flat price, flat effect — drinking it banks an hpRegen bonus

@@ -7,7 +7,7 @@ import { CombatLogMessage, DamageMessage, DamageSource, DamageType, Invulnerable
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
-import {BURN_DURATION_MS} from "../../items/behavior/uniqueItemBalance";
+import {BURN_DURATION_MS, selfBurnStacks} from "../../items/behavior/uniqueItemBalance";
 import {POISON_DURATION_MS, POISON_TICK_INTERVAL_MS} from "../../common/poisonBalance";
 import {FightStats} from "./FightStats";
 import {weaponWhispererSnapshots} from "../../talents/behavior/weaponWhispererState";
@@ -58,6 +58,13 @@ export class Player extends Schema implements IStats {
     // refreshShopCost after ALL aura talents have run (see DraftAuraTriggerCommand), so halving
     // composes with Comrade's +income regardless of talent pick order. Re-seeded to 1 each tick.
     refreshShopCostMultiplier: number = 1;
+    // VIP Pass (talent 202): reroll-cost surcharge accumulates directly into refreshShopCost
+    // (like Comrade's +income), but the lucky-find bonus needs its own multiplier slot — mirrors
+    // refreshShopCostMultiplier so Black Market Contact's x2 composes on top of VIP Pass's flat
+    // +10% the same order-independent way Bargain Hunter composes with Comrade. Re-seeded to 1
+    // and applied last (after the flat bonus) each draft aura tick — DraftAuraTriggerCommand only;
+    // both talents guard on `shop` being present, so neither ever runs during FightAuraTriggerCommand.
+    luckyFindChanceMultiplier: number = 1;
     // Bargain Hunter: the reroll cost before its multiplier was applied, snapshotted each aura
     // tick by DraftAuraTriggerCommand. Read by DraftRoom.refreshShop to credit the talent with the
     // gold actually saved on a paid reroll.
@@ -82,11 +89,6 @@ export class Player extends Schema implements IStats {
     // recalculatePlayerStats (statsUtils.ts), which zeroes dodgeRate after computing it whenever
     // this is set — after every equipped item/talent has already contributed to the snapshot.
     dodgeDisabled: boolean = false;
-    // Second Thoughts (talent 202): item carried over from the shop that was just discarded by
-    // a reroll (set in BeforeShopRefreshTriggerCommand), injected into the freshly rolled shop
-    // by DraftRoom.updateShop and cleared there. Server-only — never synced, only ever lives on
-    // the player between BEFORE_REFRESH and the following updateShop call.
-    carriedShopItem: Item = null;
     // Comrade: true once the current shop's free-item claim has been spent (DraftRoom.buyItem),
     // reset per shop build (DraftRoom.updateShop). Stops the aura from re-granting a fresh claim
     // every tick after one has been used.
@@ -406,13 +408,60 @@ export class Player extends Schema implements IStats {
         playerClient.send('combat_log', { text: `${this.name} is burning! ${this.burnStack} stacks!`, kind: 'burn_apply', defenderId: this.playerId, burnStacks: this.burnStack } as CombatLogMessage);
 
         clock.setTimeout(() => {
-            this.burnStack -= stack;
+            // Fire with Fire (31) may have already consumed some of this fight's burn stacks
+            // via consumeBurnStacks() before this timeout fires. burnConsumedDebt tracks how
+            // many stacks were consumed "early" so this removal absorbs from that debt first,
+            // instead of decrementing stacks that were applied (and are still owed their full
+            // duration) after the consume happened.
+            const absorbed = Math.min(this.burnConsumedDebt, stack);
+            this.burnConsumedDebt -= absorbed;
+            this.burnStack -= (stack - absorbed);
             removeDotSource(this.burnSources, source, stack);
             if (this.burnStack === 0 && this.burnTimer) {
                 this.burnTimer.clear();
                 this.burnTimer = null;
             }
         }, BURN_DURATION_MS);
+    }
+
+    /** Stacks already removed by consumeBurnStacks() whose originating addBurnStacks() expiry
+     *  timeout is still pending. See addBurnStacks' timeout body for how it's absorbed. */
+    private burnConsumedDebt: number = 0;
+
+    /** Applies burn to `target` and singes the applier (`this`) for the systemic self-burn tax
+     *  (selfBurnStacks, a third as many rounded up) — the burn line's downside. Every burn source should go through here;
+     *  the sole exception is Hidden Vials (24), the tier-5 dodge payoff, which calls
+     *  addBurnStacks directly and stays clean. Self-burn is applied with no source Talent: it
+     *  must not be credited to the applier's own statDamageDealt (that stat means damage dealt
+     *  to the enemy), so it goes uncredited via the dotSources ledger by design. */
+    igniteEnemy(clock: ClockTimer, playerClient: Client, target: Player, stacks: number, source?: Talent) {
+        if (stacks <= 0) return;
+        target.addBurnStacks(clock, playerClient, stacks, source);
+        this.addBurnStacks(clock, playerClient, selfBurnStacks(stacks));
+    }
+
+    /** Removes up to `max` live burn stacks and returns how many were actually removed.
+     *  Used by Fire with Fire (31) to convert accumulated burn into healing. See
+     *  burnConsumedDebt for how this interacts with the pending expiry timeouts. */
+    consumeBurnStacks(max: number): number {
+        const consumed = Math.min(max, this.burnStack);
+        if (consumed <= 0) return 0;
+        this.burnStack -= consumed;
+        this.burnConsumedDebt += consumed;
+        // burnSources is deliberately NOT reduced here: the pending timeouts still remove
+        // exactly what they added, keeping the ledger self-consistent. dotSources.denom()
+        // already tolerates a ledger total exceeding the live stack count.
+        if (this.burnStack === 0) {
+            this.burnTimer?.clear();
+            this.burnTimer = null;
+        }
+        return consumed;
+    }
+
+    /** Resets the consumption-debt counter between fights (see burnConsumedDebt above). Call
+     *  alongside the other burn/poison per-fight resets in FightRoom. */
+    resetBurnConsumedDebt() {
+        this.burnConsumedDebt = 0;
     }
 
     getItem(item: Item) {

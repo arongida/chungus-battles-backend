@@ -597,6 +597,13 @@ export class FightRoom extends Room {
         if (defender.burnStack <= 0) return;
         if (!defender.burnTimer) {
             defender.burnTimer = this.clock.setInterval(() => {
+                // Fire with Fire (31) can zero out burnStack via consumeBurnStacks() between
+                // ticks (it clears the timer, but guard here too in case of same-tick ordering).
+                if (defender.burnStack <= 0) {
+                    defender.burnTimer?.clear();
+                    defender.burnTimer = null;
+                    return;
+                }
                 const burnDamage = defender.burnStack * BURN_DAMAGE_PER_STACK;
 
                 this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
@@ -747,6 +754,8 @@ export class FightRoom extends Room {
         this.state.enemy.poisonSources.clear();
         this.state.player.burnSources.clear();
         this.state.enemy.burnSources.clear();
+        this.state.player.resetBurnConsumedDebt();
+        this.state.enemy.resetBurnConsumedDebt();
         this.state.player.empoweredAttackSource = null;
         this.state.enemy.empoweredAttackSource = null;
         this.state.player.pendingBlockSource = null;

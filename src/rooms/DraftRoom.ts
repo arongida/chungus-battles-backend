@@ -4,7 +4,7 @@ import { buildJoe, copyPlayer, createNewPlayer, getPlayer, getSameRoundPlayer, J
 import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentClasses } from '../players/EnemyPreview';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
-import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem } from '../commands/ShopUpgradeUtils';
+import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, getOwnedUpgradeableItemIds, grantLuckyFindMythicBonus, hasVipPass, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem } from '../commands/ShopUpgradeUtils';
 import { ensureShieldSkill } from '../items/skills/itemSkillRoller';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
@@ -14,7 +14,6 @@ import { Dispatcher } from '@colyseus/command';
 import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCommand';
 import { LevelUpTriggerCommand } from '../commands/triggers/LevelUpTriggerCommand';
 import { AfterShopRefreshTriggerCommand } from '../commands/triggers/AfterShopRefreshTriggerCommand';
-import { BeforeShopRefreshTriggerCommand } from '../commands/triggers/BeforeShopRefreshTriggerCommand';
 import { DraftAuraTriggerCommand } from '../commands/triggers/DraftAuraTriggerCommand';
 import { OnSellTriggerCommand } from '../commands/triggers/OnSellTriggerCommand';
 import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
@@ -257,14 +256,7 @@ export class DraftRoom extends Room {
         // deliberately NOT reset here — each is one free item per shop phase (round), not per
         // shop build, so they survive manual refreshes (see onJoin).
         const excludeTypes: string[] = [];
-        // Second Thoughts (talent 202): a carried-over item from the shop that was just
-        // discarded, stashed by BeforeShopRefreshTriggerCommand. Only injected into a freshly
-        // rolled shop below — a restored locked shop keeps its own (already-priced) items, so
-        // the carry is discarded rather than injected there.
-        const carriedItem = this.state.player.carriedShopItem;
-        this.state.player.carriedShopItem = null;
-        const rollSize = carriedItem ? Math.max(0, newShopSize - 1) : newShopSize;
-        const shopFromDb = await getNumberOfItems(rollSize, this.state.player.level, excludeTypes);
+        const shopFromDb = await getNumberOfItems(newShopSize, this.state.player.level, excludeTypes);
         const lockedShop = this.state.player.lockedShop;
         if (lockedShop.length > 0) {
             this.state.shop.clear();
@@ -276,12 +268,11 @@ export class DraftRoom extends Room {
             await this.revalidateUpgradePreviews();
         } else if (this.state.shop.length < 6) {
             this.state.shop.clear();
-            if (carriedItem) {
-                carriedItem.sold = false;
-                carriedItem.equipped = false;
-                this.state.shop.push(carriedItem);
-                this.clients[0]?.send('shop_floating', { slot: 0, text: 'Kept!', rarity: carriedItem.rarity });
-            }
+            // VIP Pass (talent 202): guarantees at least one slot below resolves to an
+            // upgrade-preview by swapping a rolled template for an owned-item template before the
+            // loop runs — the loop's own findOwnedUpgradeTarget/preview construction then treats
+            // it exactly like any other owned match, lucky-find roll included.
+            const vipPassIndex = await this.injectVipPassPick(shopFromDb);
             for (const rolledItem of shopFromDb) {
                 const slot = this.state.shop.length;
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
@@ -310,6 +301,18 @@ export class DraftRoom extends Room {
                 this.announceLuckyUpgrade(shopItem, steps, slot);
                 this.state.shop.push(shopItem);
             }
+            if (vipPassIndex !== null) {
+                const vipItem = this.state.shop[vipPassIndex];
+                // announceLuckyUpgrade above may already have floated "Lucky find! Rarity up!" on
+                // this same slot if the forced pick also rolled lucky — don't stack a second float.
+                if (!vipItem.luckyFind) {
+                    this.clients[0]?.send('shop_floating', { slot: vipPassIndex, text: 'VIP pick!', rarity: vipItem.rarity });
+                }
+                this.clients[0]?.send('trigger_talent', {
+                    playerId: this.state.player.playerId,
+                    talentId: TalentType.VIP_PASS,
+                });
+            }
         }
 
         this.dispatcher.dispatch(new AfterShopRefreshTriggerCommand());
@@ -319,6 +322,31 @@ export class DraftRoom extends Room {
         // a freshly built shop's free-item claim is immediately claimable instead of racing a
         // ~1s window where the item still looks unaffordable.
         this.dispatcher.dispatch(new DraftAuraTriggerCommand());
+    }
+
+    /** VIP Pass (talent 202): guarantees at least one shop slot resolves to an item the player
+     *  already owns, by swapping one freshly rolled template in `shopFromDb` for an owned-item
+     *  template BEFORE updateShop's preview-construction loop runs — that loop already turns any
+     *  rolledItem with a findOwnedUpgradeTarget match into an upgrade preview (lucky-find roll
+     *  included), so this only needs to seed the right itemId into the array, not duplicate any
+     *  of that construction. Costs nothing when the natural roll already contains an owned item —
+     *  the guarantee only spends a slot when it would otherwise have gone to waste. Returns the
+     *  index in `shopFromDb` (== the final shop slot, since updateShop pushes in array order) that
+     *  was forced, or null when VIP Pass isn't owned, the roll already satisfied the guarantee, or
+     *  the player has no upgrade-eligible items (fresh run, or everything already Mythic). */
+    private async injectVipPassPick(shopFromDb: Item[]): Promise<number | null> {
+        if (!hasVipPass(this.state.player)) return null;
+        if (shopFromDb.length === 0) return null;
+        if (shopFromDb.some((item) => findOwnedUpgradeTarget(this.state.player, item.itemId))) return null;
+        const ownedIds = getOwnedUpgradeableItemIds(this.state.player);
+        if (ownedIds.length === 0) return null;
+        const pickId = ownedIds[Math.floor(Math.random() * ownedIds.length)];
+        const template = await getItemById(pickId);
+        if (!template) return null;
+        rollItemStats(template);
+        const index = Math.floor(Math.random() * shopFromDb.length);
+        shopFromDb[index] = template;
+        return index;
     }
 
     private announceLuckyUpgrade(item: { name: string; rarity: number }, steps: number, slot: number, text = 'Lucky find! Rarity up!') {
@@ -670,7 +698,6 @@ export class DraftRoom extends Room {
      *  does NOT increment rerollsThisRound — a forced reroll must not feed Fortune's Fool's
      *  per-round HP penalty. */
     public forceFreeReroll = async (): Promise<void> => {
-        this.dispatcher.dispatch(new BeforeShopRefreshTriggerCommand());
         this.state.player.unlockShop();
         this.state.shop.clear();
         this.invalidateUndoSell();
@@ -702,9 +729,6 @@ export class DraftRoom extends Room {
             this.creditTalentGold(TalentType.BARGAIN_HUNTER, this.state.player.refreshShopCostBeforeDiscount - this.state.player.refreshShopCost);
         }
         this.state.player.rerollsThisRound++;
-        // BEFORE_REFRESH: dispatched while the outgoing shop is still intact, so talents like
-        // Second Thoughts can inspect/carry an item from it before it's cleared below.
-        this.dispatcher.dispatch(new BeforeShopRefreshTriggerCommand());
         this.state.player.unlockShop();
         this.state.shop.clear();
         this.invalidateUndoSell();
