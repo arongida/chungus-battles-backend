@@ -72,12 +72,13 @@ export class Player extends Schema implements IStats {
     // and applied last (after the flat bonus) each draft aura tick — DraftAuraTriggerCommand only;
     // both talents guard on `shop` being present, so neither ever runs during FightAuraTriggerCommand.
     luckyFindChanceMultiplier: number = 1;
-    // Bulk Discount (item skill): gold-off-per-percent-lucky-find rate, accumulated by the item's
-    // AURA behavior (ItemSkillBehaviors.ts) during the same equipped-item pass that Insider
-    // Trading writes luckyFindChance — equippedItems iteration order is arbitrary, so the actual
-    // shop repricing can't happen inline in that same behavior. DraftAuraTriggerCommand applies it
-    // afterward, once luckyFindChance has its final value for the tick. Re-seeded to 0 each tick.
-    bulkDiscountGoldPerLuckPercent: number = 0;
+    // Bulk Discount (item skill): percent-off-price-per-percent-lucky-find rate, accumulated by
+    // the item's AURA behavior (ItemSkillBehaviors.ts) during the same equipped-item pass that
+    // Insider Trading writes luckyFindChance — equippedItems iteration order is arbitrary, so the
+    // actual shop repricing can't happen inline in that same behavior. DraftAuraTriggerCommand
+    // applies it afterward, once luckyFindChance has its final value for the tick (capped at
+    // BULK_DISCOUNT_MAX_DISCOUNT_FRACTION). Re-seeded to 0 each tick.
+    bulkDiscountPercentPerLuckPercent: number = 0;
     // Bargain Hunter: the reroll cost before its multiplier was applied, snapshotted each aura
     // tick by DraftAuraTriggerCommand. Read by DraftRoom.refreshShop to credit the talent with the
     // gold actually saved on a paid reroll.
