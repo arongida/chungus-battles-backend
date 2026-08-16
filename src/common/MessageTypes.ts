@@ -78,6 +78,17 @@ export type GameWinMessage = {
   wins: number;
   losses: number;
   season: number;
+  replayId?: string;
+  stats?: FightStatsMessage;
+};
+
+/** Run truly over (lives exhausted). Object payload so the client can offer the same
+ *  Stats/Watch Replay actions it gets on a normal end_battle — older clients/replays may
+ *  still see the plain string this replaced. */
+export type GameOverMessage = {
+  message: string;
+  replayId?: string;
+  stats?: FightStatsMessage;
 };
 
 export type CombatLogKind =

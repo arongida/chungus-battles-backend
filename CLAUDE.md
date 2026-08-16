@@ -306,7 +306,8 @@ All served over HTTP on the same port as the WebSocket server.
 | `trigger_talent`  | `{ playerId, talentId }`         | Talent activated                 |
 | `trigger_talent` | `{ playerId, talentId }`  | Item set bonus activated         |
 | `end_battle`      | `string`                         | Fight ended, continue to draft   |
-| `game_over`       | `string`                         | Player won or lost the run       |
+| `game_over`       | `GameOverMessage { message, replayId?, stats? }` | Run over — lives exhausted |
+| `game_win`        | `GameWinMessage { wins, losses, season, replayId?, stats? }` | Run over — hit `WINS_TO_WIN` |
 | `draft_log`       | `string`                         | Draft-phase log message          |
 | `error`           | `string`                         | Operation rejected               |
 

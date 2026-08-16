@@ -29,7 +29,7 @@ import { ItemSkillType } from '../items/types/ItemSkillTypes';
 import { ITEM_SKILLS, skillValues } from '../items/behavior/itemSkillBalance';
 import { crushingBlowCounters } from '../items/behavior/itemSkillState';
 import { Talent } from '../talents/schema/TalentSchema';
-import { CombatLogMessage, FightSideStats, FightStatsMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
+import { CombatLogMessage, FightSideStats, FightStatsMessage, GameOverMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK } from '../items/behavior/uniqueItemBalance';
 import { creditDotDamage } from '../common/dotSources';
@@ -246,9 +246,19 @@ export class FightRoom extends Room {
         if (!this.state.fightResult) return;
 
         if (this.state.gameWinPending) {
-            this.broadcast('game_win', { wins: this.state.player.wins, losses: this.state.player.losses, season: GAME_VERSION } as GameWinMessage);
+            this.broadcast('game_win', {
+                wins: this.state.player.wins,
+                losses: this.state.player.losses,
+                season: GAME_VERSION,
+                replayId: this.currentReplayId,
+                stats: this.currentFightStats,
+            } as GameWinMessage);
         } else if (this.state.player.lives <= 0) {
-            this.broadcast('game_over', 'You have lost the game!');
+            this.broadcast('game_over', {
+                message: 'You have lost the game!',
+                replayId: this.currentReplayId,
+                stats: this.currentFightStats,
+            } as GameOverMessage);
         } else if (this.state.lossRewardOptions) {
             // Reconnect after a loss: resend the pending options (or the resolved outcome).
             this.broadcast('end_battle', this.buildLossEndBattlePayload());
@@ -856,6 +866,8 @@ export class FightRoom extends Room {
                 wins: this.state.player.wins,
                 losses: this.state.player.losses,
                 season: GAME_VERSION,
+                replayId: this.currentReplayId,
+                stats: this.currentFightStats,
             } as GameWinMessage);
             return;
         }
@@ -877,7 +889,11 @@ export class FightRoom extends Room {
             this.state.player.killedByOriginalPlayerId = killer.originalPlayerId;
             this.state.player.killedByName = killer.name;
             incrementRunsEnded(killer.originalPlayerId); // fire-and-forget, like saveReplay
-            this.broadcast('game_over', 'You have lost the game!');
+            this.broadcast('game_over', {
+                message: 'You have lost the game!',
+                replayId: this.currentReplayId,
+                stats: this.currentFightStats,
+            } as GameOverMessage);
         } else {
             const goldAmount = this.state.player.lives === 1 ? 30
                              : this.state.player.lives === 2 ? 20
