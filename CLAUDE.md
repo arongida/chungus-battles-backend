@@ -155,11 +155,11 @@ Stats are **recalculated from scratch on every tick**:
 | Field              | Notes                                        |
 |--------------------|----------------------------------------------|
 | `strength`         | Max damage roll                              |
-| `accuracy`         | Min damage roll + cancels enemy `dodgeRate` 1:1 (`accuracy ≤ strength`) |
+| `accuracy`         | Min damage roll (`accuracy ≤ strength`)      |
 | `defense`          | Damage reduction: `damage * (100 / (100 + defense))` |
 | `attackSpeed`      | Attacks per second (min 0.1)                 |
 | `maxHp` / `hp`     | HP capped at maxHp                           |
-| `dodgeRate`        | Dodge chance: `1 - 100/(100 + max(0, dodgeRate - attacker accuracy))` |
+| `dodgeRate`        | Dodge chance: `1 - 100/(100 + dodgeRate)`    |
 | `income`           | Bonus gold per round                         |
 | `hpRegen`          | HP restored per second during fight          |
 | `cooldownReduction` | Special bonus stat — never rolled on normal items. Shortens active-skill (`TriggerType.ACTIVE`) intervals: `interval * (100 / (100 + cooldownReduction))` (see `common/cooldown.ts`). Granted by every active talent and by Wand of Fire / Flowering Staff / Magic Ring |

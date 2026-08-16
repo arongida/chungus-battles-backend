@@ -379,11 +379,9 @@ export class Player extends Schema implements IStats {
         return afterPct > 0 ? afterPct : 0;
     }
 
-    /** Chance this player dodges an incoming weapon attack. Attacker accuracy cancels
-     *  dodge rating point-for-point, so enough accuracy removes dodge entirely. */
-    getDodgeChance(attackerAccuracy: number): number {
-        const effectiveDodgeRate = Math.max(0, this.dodgeRate - attackerAccuracy);
-        return 1 - 100 / (100 + effectiveDodgeRate);
+    /** Chance this player dodges an incoming weapon attack. */
+    getDodgeChance(): number {
+        return 1 - 100 / (100 + this.dodgeRate);
     }
 
     addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1, source?: Talent) {

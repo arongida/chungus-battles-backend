@@ -50,7 +50,8 @@ export const SEASONS: SeasonInfo[] = [
       'The Bear reworked and moved to rogue: your attacks apply 2 burn stacks to the enemy and 1 to yourself',
       'Scam reworked: grants dodge rating, and after you dodge your next scam steals health equal to your dodge rating',
       'Grand Robbery buffed: now also rerolls the shop for free and robs it a second time, and always upgrades every stolen item by a rarity',
-      'Weapon Whisperer buffed: the Mythic weapon now also learns a second weapon skill'
+      'Weapon Whisperer buffed: the Mythic weapon now also learns a second weapon skill',
+      'Accuracy no longer counters dodge — dodge rating is once again unaffected by the attacker\'s accuracy (accuracy still adds to the min damage roll)',
     ]
   },
   {
