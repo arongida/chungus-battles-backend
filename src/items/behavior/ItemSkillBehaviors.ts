@@ -452,7 +452,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     // the stunned player, the same way 'dodge'/'block' do — see fight-animation.service.ts.
     client?.send('combat_log', {
       text: `${defender.name}'s ${item.name} bashes ${attacker.name}: stunned for ${(stunMs / 1000).toFixed(1)}s!`,
-      kind: 'stun', attackerId: attacker.playerId, defenderId: defender.playerId, itemId: item.itemId,
+      kind: 'stun', attackerId: attacker.playerId, defenderId: defender.playerId, stunnedPlayerId: attacker.playerId, itemId: item.itemId,
     } as CombatLogMessage);
   },
 

@@ -11,6 +11,7 @@ import { Item } from '../items/schema/ItemSchema';
 import { TriggerType } from './types';
 import {
     floweringStaffCooldownReduction,
+    GAMBLERS_DICE_ITEM_ID,
     magicRingCooldownReduction,
     magicWandCooldownReduction,
 } from '../items/behavior/uniqueItemBalance';
@@ -71,6 +72,20 @@ export function migrateLegacyTalent(talent: Talent): void {
         talent.affectedEnemyStats.strength = 0;  // clear residue from a fight that never hit FIGHT_END
     }
 
+    // Bully (WARRIOR_2, 201): reworked Season 24 from "Warrior vol II." (a flat Strength-damage
+    // active) into a conditional stun — see TalentBehaviors.ts. Pre-rework copies still carry
+    // base: 0 (scaling: 2 was the old damage multiplier, now unused), which the new behavior would
+    // read as a 0ms stun — a silent no-op that looks broken rather than a rework. Written as an
+    // unconditional normalize, same idiom as the Scam/VIP Pass branches below, so it's a harmless
+    // no-op once migrated and self-corrects any future retune of base/activationRate.
+    if (talent.talentId === TalentType.WARRIOR_2) {
+        talent.name = 'Bully';
+        talent.description = 'Every 4s: if your Strength is higher than the enemy\'s right now, stun them for 1s — they cannot attack, regenerate, use skills or dodge. If you\'re not stronger, nothing happens. +20 ⏳';
+        talent.activationRate = 0.25;
+        talent.base = 1;
+        talent.scaling = 0;
+    }
+
     // VIP Pass (202): reworked Season 24 from Second Thoughts (a rogue BEFORE_REFRESH item-carry)
     // into a merchant AURA talent (guaranteed owned-item shop slot + flat lucky-find bonus). The
     // embedded copy is a full snapshot — triggerTypes, name, description, image and class tag all
@@ -91,6 +106,27 @@ export function migrateLegacyTalent(talent: Talent): void {
         const rogueTag = talent.tags.indexOf('rogue');
         if (rogueTag !== -1) talent.tags.splice(rogueTag, 1);
         if (!talent.tags.includes('merchant')) talent.tags.push('merchant');
+    }
+
+    // Martial Artist (37): reworked Season 24 to also grant one free weapon the moment the
+    // talent is picked, not just on level-up (TalentBehaviors.ts). The on-pick grant itself is
+    // latched on talent.tags at runtime, so a pre-rework copy retroactively earns its one-time
+    // bonus weapon on its very next AURA tick with no migration needed for that part — this only
+    // refreshes the cosmetic description so an old copy doesn't keep showing stale card text.
+    if (talent.talentId === TalentType.MARTIAL_ARTIST) {
+        talent.description = 'Weapons can now be equipped in any slot. You find a free weapon the moment you take this, and again every time you level up.';
+    }
+
+    // Joker (41): reworked Season 24 from an unconditional single-stat drip into a two-card
+    // pick-every-fight / suspend-until-picked mechanic (see jokerState.ts). The new behavior
+    // needs the AURA trigger to run at all — DraftAuraTriggerCommand/FightAuraTriggerCommand only
+    // invoke a talent's behavior for triggers listed in its own triggerTypes, and that's what
+    // rebuilds affectedStats from the persisted running total and suspends it while a card is
+    // pending. Without this, a pre-rework copy would keep auto-applying a single stat on
+    // FIGHT_END but never suspend or restore anything, since nothing would ever call its AURA
+    // branch. Push-if-missing rather than a full overwrite so it's a no-op once migrated.
+    if (talent.talentId === TalentType.JOKER && !talent.triggerTypes.includes(TriggerType.AURA)) {
+        talent.triggerTypes.push(TriggerType.AURA);
     }
 }
 
@@ -117,5 +153,11 @@ export function migrateLegacyItem(item: Item): void {
         if (!item.affectedStats.cooldownReduction) {
             item.affectedStats.cooldownReduction = magicRingCooldownReduction(item.rarity);
         }
+    } else if (item.itemId === GAMBLERS_DICE_ITEM_ID) {
+        // Gambler's Dice (703): reworked Season 24 to pay out on FIGHT_END (ItemBehaviors.ts) —
+        // main hand gains permanent income on a win, off hand refunds gold on a loss. A
+        // pre-rework copy's triggerTypes never included fight-end, so without this push it would
+        // keep evolving on level-up but never pay out.
+        if (!item.triggerTypes.includes(TriggerType.FIGHT_END)) item.triggerTypes.push(TriggerType.FIGHT_END);
     }
 }

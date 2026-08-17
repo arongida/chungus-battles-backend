@@ -1,10 +1,13 @@
 import { ItemBehaviorContext } from './ItemBehaviorContext';
-import { TriggerType } from '../../common/types';
+import { FightResultType, TriggerType } from '../../common/types';
 import { EquipSlot, ItemRarity } from '../types/ItemTypes';
 import { CombatLogMessage, RewardGainMessage, fmt } from '../../common/MessageTypes';
 import { grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT } from '../../commands/ShopUpgradeUtils';
 import {
     chungiHpDamageFraction,
+    diceDescription,
+    diceLossGold,
+    diceWinIncome,
     floweringStaffCooldownReduction,
     floweringStaffRegenSteal,
     FLOWERING_STAFF_MAX_STEAL,
@@ -223,12 +226,43 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     // rarity = level, capped Mythic, same as Magic Ring). LEVEL_UP bumps rarity
     // further; base attack speed scales +50% per tier and max damage = income *
     // (rarity/2), recomputed each fight/attack from current income.
-    703: ({ attacker, item, trigger, client }) => {
+    // FIGHT_END — the bet: main hand pays permanent income on a win (feeds back into the dice's
+    // own damage above), off hand refunds one-off gold on a loss. Slot is located by instance
+    // identity (equipped === item), same idiom as blockPairedSlot/Magic Ring below — a talent can
+    // push this into armor/helmet too (Martial Artist), so only mainHand/offHand pay out.
+    703: ({ attacker, item, trigger, client, fightResult }) => {
         if (!attacker || !item) return;
-        if (trigger === TriggerType.LEVEL_UP) {
+        if (trigger === TriggerType.FIGHT_END) {
+            let slot: string | null = null;
+            attacker.equippedItems.forEach((equipped, s) => {
+                if (equipped === item) slot = s;
+            });
+
+            if (slot === EquipSlot.MAIN_HAND && fightResult === FightResultType.WIN) {
+                const won = diceWinIncome(item.rarity);
+                item.affectedStats.income += won;
+                client?.send('combat_log', {
+                    text: `Your bet pays off — ${item.name} gains +${won} income, permanently!`,
+                    kind: 'item',
+                    attackerId: attacker.playerId,
+                    itemId: item.itemId,
+                } as CombatLogMessage);
+            } else if (slot === EquipSlot.OFF_HAND && fightResult === FightResultType.LOSE) {
+                const gold = diceLossGold(item.rarity);
+                attacker.gold += gold;
+                client?.send('combat_log', {
+                    text: `${item.name} hedged your loss — you cash out ${gold} gold!`,
+                    kind: 'reward',
+                    attackerId: attacker.playerId,
+                    itemId: item.itemId,
+                    goldDelta: gold,
+                } as CombatLogMessage);
+                client?.send('reward_gain', { playerId: attacker.playerId, gold } as RewardGainMessage);
+            }
+        } else if (trigger === TriggerType.LEVEL_UP) {
             if (item.rarity < ItemRarity.MYTHIC) {
                 item.rarity++;
-                item.description = `Max damage equals ${Math.round((item.rarity / 2) * 100)}% of income.`;
+                item.description = diceDescription(item.rarity);
                 // LEVEL_UP only ever resolves in DraftRoom (LevelUpTriggerCommand extends
                 // Command<DraftRoom>), so draft_log is always the right channel here.
                 if (item.rarity === ItemRarity.MYTHIC) {
