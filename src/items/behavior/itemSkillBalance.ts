@@ -305,9 +305,10 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: "Titan's Might",
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
+    // Divisors raised ~20% in Season 25 (base HP doubled) to hold late-game output roughly steady.
     values: {
-      [ItemRarity.LEGENDARY]: { divisor: 12 },
-      [ItemRarity.MYTHIC]: { divisor: 6 },
+      [ItemRarity.LEGENDARY]: { divisor: 14 },
+      [ItemRarity.MYTHIC]: { divisor: 7 },
     },
     describe: (r) => `Gain 1 strength per ${skillValues(ITEM_SKILLS[ItemSkillType.TITANS_MIGHT], r).divisor} max HP.`,
     status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.strength)} strength`,
@@ -319,9 +320,10 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: 'Iron Hide',
     slots: GEAR_SLOTS,
     triggerTypes: [TriggerType.AURA],
+    // Divisors raised ~20% in Season 25 (base HP doubled) to hold late-game output roughly steady.
     values: {
-      [ItemRarity.LEGENDARY]: { divisor: 8 },
-      [ItemRarity.MYTHIC]: { divisor: 4 },
+      [ItemRarity.LEGENDARY]: { divisor: 10 },
+      [ItemRarity.MYTHIC]: { divisor: 5 },
     },
     describe: (r) => `Gain 1 defense per ${skillValues(ITEM_SKILLS[ItemSkillType.IRON_HIDE], r).divisor} max HP.`,
     status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.defense)} defense`,

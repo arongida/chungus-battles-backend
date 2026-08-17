@@ -7,9 +7,10 @@ import { EquipSlot } from '../types/ItemTypes';
 import { fmt } from '../../common/MessageTypes';
 import type { Item } from '../schema/ItemSchema';
 
-/** Chungi (7): fraction of the wielder's max HP used as max damage. */
+/** Chungi (7): fraction of the wielder's max HP used as max damage.
+ *  Lowered ~20% in Season 25 (base HP doubled) to hold late-game output roughly steady. */
 export function chungiHpDamageFraction(rarity: number): number {
-    return 0.075 + 0.025 * rarity;
+    return 0.06 + 0.02 * rarity;
 }
 
 /**

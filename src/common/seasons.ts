@@ -18,6 +18,16 @@ export interface SeasonInfo {
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
   {
+    number: 25,
+    name: 'Second Wind',
+    changes: [
+      'Base max HP doubled: starting max HP 100 → 200, and every level-up\'s flat max HP grant doubled to match (Warrior +60/level, Merchant +20/level, everyone else +20/level) — bigger health pools mean more room to build offensively without getting one-shot',
+      'Starting strength 3 → 5 and starting accuracy 1 → 2, so early fights keep pace with the bigger health pools instead of dragging toward the end-burn timer',
+      'End burn\'s starting damage now scales with the fight\'s max HP instead of a flat 10, so it resolves at a consistent speed across the wider range of health pools',
+      'Titan\'s Might and Iron Hide divisors raised ~20%, and Chungi\'s max-HP-to-damage fraction lowered ~20%, to hold their late-game output roughly steady against the bigger health pools',
+    ]
+  },
+  {
     number: 24,
     name: 'Insider Trading',
     changes: [

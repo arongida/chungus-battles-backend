@@ -846,13 +846,13 @@ export class DraftRoom extends Room {
 
         const base = this.state.player.baseStats;
 
-        // Every level grants a flat max HP bonus
-        base.maxHp += 10;
+        // Every level grants a flat max HP bonus (doubled Season 25, matching Player.ts's starting maxHp)
+        base.maxHp += 20;
 
-        // Class-specific level-up bonuses (Season 18)
+        // Class-specific level-up bonuses (Season 18, HP doubled Season 25)
         switch (this.state.player.avatarUrl) {
             case PlayerAvatar.WARRIOR:
-                base.maxHp += 30;
+                base.maxHp += 60;
                 base.strength += 6;
                 break;
             case PlayerAvatar.THIEF:
@@ -861,7 +861,7 @@ export class DraftRoom extends Room {
                 break;
             case PlayerAvatar.MERCHANT:
                 base.income += 2;
-                base.maxHp += 10;
+                base.maxHp += 20;
                 break;
         }
 
