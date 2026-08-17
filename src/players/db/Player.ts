@@ -209,10 +209,10 @@ function getNewPlayer(playerId: number,
         activeItemCollections: [],
         equippedItems: {},
         baseStats: {
-            strength: 3,
-            accuracy: 1,
-            // +10 max HP per level, matching DraftRoom.levelUp (Season 17)
-            maxHp: 100 + (startingLevel - 1) * 10,
+            strength: 5,
+            accuracy: 2,
+            // +20 max HP per level, matching DraftRoom.levelUp (Season 17, doubled Season 25)
+            maxHp: 200 + (startingLevel - 1) * 20,
             defense: 0,
             // Thief starts at level 2, so it must already have its free level's class bonus baked in (Season 18)
             attackSpeed: avatarUrl === PlayerAvatar.THIEF ? 1.2 : 1,
@@ -574,12 +574,12 @@ export async function buildJoe(forPlayerId: number): Promise<Player> {
     // the live player's playerId is stable across the whole run.
     const joeModel = getNewPlayer(JOE_PLAYER_ID, 'Joe', '', avatarArray[Math.abs(forPlayerId) % 3], 10);
     const joe = getPlayerSchemaObject(joeModel.toObject());
-    joe.baseStats.maxHp = 50;
+    joe.baseStats.maxHp = 100;
     joe.baseStats.strength = 2;
     const weapon = await getItemById(81);
     joe.setItemEquipped(weapon, EquipSlot.MAIN_HAND);
     // Rooms recompute synced stats every tick (UpdateStatsCommand), but the draft preview is a
-    // plain copy — compute Joe's final stats here (50/50 HP incl. weapon bonuses) the same way
+    // plain copy — compute Joe's final stats here (100/100 HP incl. weapon bonuses) the same way
     // the fight room later will, so preview and fight always agree.
     recalculatePlayerStats(joe);
     return joe;

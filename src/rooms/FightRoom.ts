@@ -432,6 +432,7 @@ export class FightRoom extends Room {
         this.state.endBurnTimer?.clear();
         this.state.endBurnActive = false;
         this.state.endBurnCountdownMs = END_BURN_START_MS;
+        this.state.endBurnDamage = 10;
         this.state.skillsTimers.forEach((timer) => timer.clear());
         this.state.player.regenTimer?.clear();
         this.state.enemy.regenTimer?.clear();
@@ -459,6 +460,11 @@ export class FightRoom extends Room {
         if (this.state.endBurnTimer) return;
         this.state.endBurnActive = true;
         this.state.endBurnCountdownMs = 0;
+        // Seed proportional to the bigger combatant's max HP (Season 25, base HP doubled) so
+        // resolution speed stays consistent across HP pools that can now range from ~200 to
+        // 1000+ — a flat seed of 10 took ~6s to resolve a 200 HP pool but ~17s for a 1500 HP one.
+        // Damage stays symmetric (same to both sides), preserving "bigger bar wins" semantics.
+        this.state.endBurnDamage = Math.max(10, Math.round(Math.max(this.state.player.maxHp, this.state.enemy.maxHp) / 20));
         this.state.endBurnTimer = this.clock.setInterval(() => {
             const burnDamage = this.state.endBurnDamage;
             const increment = Math.pow(10, Math.floor(Math.log10(burnDamage)));
