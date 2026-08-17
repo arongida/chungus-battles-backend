@@ -122,6 +122,10 @@ export type CombatLogMessage = {
   t?: number;
   attackerId?: number;
   defenderId?: number;
+  // kind: 'stun' only — who actually got stunned. Needed as its own field because attacker/
+  // defender roles flip depending on the source: Shield Bash stuns the incoming striker
+  // (attackerId), Bully stuns the target (defenderId) — see fight-animation.service.ts.
+  stunnedPlayerId?: number;
   weaponItemId?: number;
   itemId?: number;
   talentId?: number;

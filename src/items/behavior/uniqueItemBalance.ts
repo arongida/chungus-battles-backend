@@ -252,3 +252,25 @@ export function secondWindHealFraction(rarity: number): number {
 export function secondWindInvulnMs(rarity: number): number {
     return 300 + 350 * rarity;
 }
+
+export const GAMBLERS_DICE_ITEM_ID = 703;
+
+/** Gambler's Dice (703), main hand: permanent income gained after every fight WON while worn
+ *  there — feeds back into the dice's own baseMaxDamage (= income * rarity/2), so a winning
+ *  streak compounds into both economy and damage. */
+export function diceWinIncome(rarity: number): number {
+    return Math.ceil(rarity / 2); // 1,1,2,2,3
+}
+
+/** Gambler's Dice (703), off hand: one-off gold refund after every fight LOST while worn there —
+ *  insurance rather than a snowball. */
+export function diceLossGold(rarity: number): number {
+    return rarity * 4; // 4,8,12,16,20
+}
+
+/** Gambler's Dice (703) description — single source of truth, used by both the item's own
+ *  LEVEL_UP rarity-up text (ItemBehaviors.ts) and the GAMBLER talent's initial grant
+ *  (TalentBehaviors.ts) so the two can't drift apart. */
+export function diceDescription(rarity: number): string {
+    return `Max damage equals ${Math.round((rarity / 2) * 100)}% of income. Main hand: gain permanent income after every win. Off hand: refund gold after every loss.`;
+}

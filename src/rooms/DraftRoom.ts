@@ -24,6 +24,7 @@ import { HEALTH_FLASK_REGEN_PER_SECOND } from '../items/behavior/uniqueItemBalan
 import { TalentType } from '../talents/types/TalentTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { merchantDiscounts } from '../talents/behavior/merchantDiscountState';
+import { addJokerTotal, clearJokerPendingCards, parseJokerPendingCards, rebuildJokerAffectedStats } from '../talents/behavior/jokerState';
 
 export class DraftRoom extends Room {
     declare state: DraftState;
@@ -82,6 +83,9 @@ export class DraftRoom extends Room {
 
         this.onMessage('refresh_talent_slot', async (client, message) => {
             await this.handleRefreshTalentSlot(client, message.talentId);
+        });
+        this.onMessage('joker_pick', (client, message) => {
+            this.handleJokerPick(client, message.stat);
         });
         this.onMessage('lock-shop', (client) => {
             this.handleLockShop(client);
@@ -772,6 +776,38 @@ export class DraftRoom extends Room {
             this.state.remainingTalentPoints--;
             await this.updateTalentSelection();
         }
+    }
+
+    /** Joker (talentId 41): every fight (win or lose, same value either way) deals two cards
+     *  (TalentBehaviors.ts's FIGHT_END branch), encoded onto talent.tags and left pending until
+     *  the player picks one here. Never
+     *  trusts the client with the amount — always re-derives it from the matching pending-card
+     *  tag, so a tampered payload can't grant an arbitrary bonus. Clears both pending cards (the
+     *  one not picked is discarded, not banked) and rebuilds affectedStats immediately so the
+     *  un-suspended total is visible without waiting on the next AURA tick. */
+    private handleJokerPick(client: Client, stat: string) {
+        const talent = this.state.player.talents.find((t) => t.talentId === TalentType.JOKER);
+        if (!talent) {
+            client.send('error', 'No Joker talent found.');
+            return;
+        }
+
+        const card = parseJokerPendingCards(talent.tags).find((c) => c.stat === stat);
+        if (!card) {
+            client.send('error', 'That card is not on offer.');
+            return;
+        }
+
+        addJokerTotal(talent.tags, card.stat, card.amount);
+        clearJokerPendingCards(talent.tags);
+        rebuildJokerAffectedStats(talent);
+
+        track(talent, 1);
+        client.send('draft_log', `You pick +${card.amount} ${card.stat} from the Joker!`);
+        client.send('trigger_talent', {
+            playerId: this.state.player.playerId,
+            talentId: TalentType.JOKER,
+        });
     }
 
     private async buyXp(xp: number, price: number, client: Client) {

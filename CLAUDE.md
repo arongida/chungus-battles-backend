@@ -286,6 +286,7 @@ All served over HTTP on the same port as the WebSocket server.
 | `buy_xp`         | —                          | +4 XP for 4 gold                   |
 | `select_talent`  | `{ talentId: number }`     | Choose a talent                    |
 | `refresh_talent_slot` | `{ talentId: number }` | Re-roll one offered talent slot (once per slot, free) |
+| `joker_pick`     | `{ stat: string }`         | Pick one of Joker's two pending post-win cards (see `talents/behavior/jokerState.ts`) |
 | `lock-shop`      | —                          | Lock current shop items            |
 | `unlock-shop`    | —                          | Unlock shop                        |
 

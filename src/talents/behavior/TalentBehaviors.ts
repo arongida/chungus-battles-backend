@@ -16,10 +16,19 @@ import { CombatLogMessage, RewardGainMessage, DamageMessage, fmt } from "../../c
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
 import { Player } from "../../players/schema/PlayerSchema";
-import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus, FIRE_WITH_FIRE_MAX_STACKS } from "../../items/behavior/uniqueItemBalance";
+import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus, FIRE_WITH_FIRE_MAX_STACKS, diceDescription } from "../../items/behavior/uniqueItemBalance";
 import { weaponWhispererSnapshots, weaponWhispererFinalRolls } from "./weaponWhispererState";
 import { merchantDiscounts } from "./merchantDiscountState";
 import { FESTERING_WOUNDS_GRANT_ITEM_ID } from "../../common/poisonBalance";
+import {
+    JOKER_CARDS,
+    JOKER_BASE_DESCRIPTION,
+    JOKER_SUSPENDED_DESCRIPTION,
+    jokerCardAmount,
+    encodeJokerCard,
+    parseJokerPendingCards,
+    rebuildJokerAffectedStats,
+} from "./jokerState";
 
 /** `reward`, when provided alongside a positive gold/xp amount, sends a `reward_gain` message to
  *  the recipient so the client can pop floating +gold/+xp text over their avatar. */
@@ -193,7 +202,7 @@ export const TalentBehaviors = {
 
     [TalentType.INVIGORATE]: (context: TalentBehaviorContext) => {
         const { attacker, defender, damage, client } = context;
-        const leechAmount = damage * 0.15 + 1;
+        const leechAmount = damage * 0.15 + 2;
         const healed = attacker.heal(leechAmount);
         track(context.talent, 1, 0, healed);
         client.send('trigger_talent', {
@@ -705,16 +714,20 @@ export const TalentBehaviors = {
         }
     },
 
-    // Martial Artist — reworked (Season 23, weapon-grant cadence changed Season 24): trained
-    // hands mean a weapon fits absolutely anywhere. Armor, helmets and shields stay normally
-    // equippable — this only ADDS weapons as an option for the armor/helmet slots too, so
-    // wearing a weapon there instead of real gear is a build decision the player makes, not
-    // something forced on them. AURA (ticks every ~1s in the draft room, and also runs in
-    // fights via FightAuraTriggerCommand):
+    // Martial Artist — reworked (Season 23, weapon-grant cadence changed Season 24, on-pick grant
+    // added Season 24): trained hands mean a weapon fits absolutely anywhere. Armor, helmets and
+    // shields stay normally equippable — this only ADDS weapons as an option for the armor/helmet
+    // slots too, so wearing a weapon there instead of real gear is a build decision the player
+    // makes, not something forced on them. AURA (ticks every ~1s in the draft room, and also runs
+    // in fights via FightAuraTriggerCommand):
     //  - opens the armor/helmet equipOptions on every weapon-like item this player can see
     //    (inventory, equipped, and the shop preview, same sweep shape as Shady Shields below)
     //    so mainHand/offHand/armor/helmet can all carry a weapon;
-    //  - migrates any pre-rework save/opponent snapshot still carrying the old synthetic fists.
+    //  - migrates any pre-rework save/opponent snapshot still carrying the old synthetic fists;
+    //  - grants one free weapon the moment the talent is picked (latched via talent.tags, same
+    //    idiom as Shady Shields/Festering Wounds below). Gated on `shop` being present — AURA also
+    //    runs in the fight room via FightAuraTriggerCommand, which never passes `shop`, and a
+    //    weapon must never be conjured mid-combat.
     // A weapon that "takes both hands" (Zwei-Hander, Flowering Staff — see ItemBehaviors.ts)
     // still blocks a second slot when placed in armor/helmet, via TWO_HANDED_PAIRED_SLOT
     // (uniqueItemBalance.ts) treating armor/helmet as a second pair alongside mainHand/offHand.
@@ -727,7 +740,7 @@ export const TalentBehaviors = {
     // double-grant the way a repeating ~1s AURA tick could.
     [TalentType.MARTIAL_ARTIST]:
         async (context: TalentBehaviorContext) => {
-            const { attacker, client, talent, trigger, shop } = context;
+            const { attacker, talent, trigger, shop } = context;
             if (!attacker) return;
 
             if (trigger === TriggerType.AURA) {
@@ -750,61 +763,18 @@ export const TalentBehaviors = {
                 talent.affectedStats.hpRegen = 0;
                 talent.affectedStats.dodgeRate = 0;
                 talent.affectedStats.attackSpeed = 1;
+
+                // One-shot on-pick grant. Tag pushed BEFORE the await so a second ~1s aura tick
+                // landing mid-roll can't double-grant.
+                if (shop && !talent.tags?.includes('martial-artist-granted')) {
+                    talent.tags?.push('martial-artist-granted');
+                    await grantMartialArtistWeapon(context);
+                }
                 return;
             }
 
             if (trigger !== TriggerType.LEVEL_UP) return;
-
-            try {
-                const rolled = (await getRandomWeaponsByTier(clampTier(attacker.level), 1))[0];
-                if (rolled) {
-                    const owned = findOwnedUpgradeTarget(attacker, rolled.itemId);
-                    let becameMythic: boolean;
-                    if (owned) {
-                        // Merge into the owned copy — same mechanic as a shop upgrade preview.
-                        // findOwnedUpgradeTarget only ever returns sub-MYTHIC items, so a
-                        // MYTHIC result here is always a genuine new forge.
-                        applyRarityUpgrade(owned, rolled, attacker);
-                        applyLuckyShopUpgrades(owned, rolled, attacker);
-                        becameMythic = owned.rarity === ItemRarity.MYTHIC;
-                        // MapSchema change-detection gotcha — re-set if currently equipped.
-                        attacker.equippedItems.forEach((it, slot) => {
-                            if (it === owned) attacker.equippedItems.set(slot, owned);
-                        });
-                        track(talent, 1);
-                        client?.send('trigger_talent', {
-                            playerId: attacker.playerId,
-                            talentId: TalentType.MARTIAL_ARTIST,
-                        });
-                        client?.send('draft_log', `Training pays off — your ${owned.name} grew stronger!`);
-                    } else {
-                        // Rolled like a shop item, Lucky Find included.
-                        const steps = applyLuckyShopUpgrades(rolled, rolled, attacker);
-                        rolled.luckyFind = steps > 0;
-                        rolled.luckyFindSteps = steps;
-                        rolled.sold = true;
-                        rolled.equipped = false;
-                        // Open armor/helmet up front — this item hasn't been through an AURA
-                        // sweep yet, so without this it could only auto-equip into a hand.
-                        openMartialArtistSlots(rolled);
-                        if (!attacker.tryAutoEquipIntoEmptySlot(rolled)) attacker.inventory.push(rolled);
-                        becameMythic = rolled.rarity === ItemRarity.MYTHIC;
-                        track(talent, 1);
-                        client?.send('trigger_talent', {
-                            playerId: attacker.playerId,
-                            talentId: TalentType.MARTIAL_ARTIST,
-                        });
-                        client?.send('draft_log', `Training pays off — found a ${rolled.name}!`);
-                    }
-                    if (becameMythic) {
-                        grantLuckyFindMythicBonus(attacker);
-                        client?.send('draft_log', `Mythic forged! Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`);
-                        client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-            }
+            await grantMartialArtistWeapon(context);
         },
 
     // Comrade — AURA trigger (ticks every ~1s in the draft room) so the bonus applies right after
@@ -837,7 +807,7 @@ export const TalentBehaviors = {
                     // Grant it already caught up to the player's current level (e.g.
                     // Thief starts at level 2), same pattern as Magic Ring: rarity = level.
                     diceItem.rarity = Math.min(attacker.level, ItemRarity.MYTHIC);
-                    diceItem.description = `Max damage equals ${Math.round((diceItem.rarity / 2) * 100)}% of income.`;
+                    diceItem.description = diceDescription(diceItem.rarity);
                     diceItem.baseAttackSpeed = diceItem.rarity === 2 ? 0.81 : 0.54;
                     attacker.getItem(diceItem);
                     client.send('draft_log', `${attacker.name} found a gambler's dice!`);
@@ -853,9 +823,6 @@ export const TalentBehaviors = {
                     }
                 }
             }
-
-            // Baseline income scales with level; re-seeded every aura tick like MERCHANT_5.
-            talent.affectedStats.income = attacker.level;
         },
 
     [TalentType.MAGIC_RING_WEAPON]:
@@ -896,50 +863,39 @@ export const TalentBehaviors = {
         },
 
 
+    // Joker — reworked Season 24 (was an unconditional, no-downside stat drip on every
+    // FIGHT_END). Every FIGHT_END — win, lose or draw, same value either way — deals two
+    // distinct cards, encoded onto talent.tags (see jokerState.ts). DraftRoom.handleJokerPick
+    // applies whichever one the player chooses; the other is discarded. AURA (added this rework
+    // — ticks every ~1s in the draft room and in fights via FightAuraTriggerCommand) rebuilds
+    // affectedStats from the persisted running total every tick, and — the real downside —
+    // suspends the ENTIRE accumulated total to 0 for as long as a card sits unpicked, so ignoring
+    // the Joker costs you everything it's ever given you, not just the pending card.
     [TalentType.JOKER]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, talent } = context;
+            const { attacker, client, talent, trigger } = context;
+            // Defensive: every current DB doc carries tags, but an old embedded copy predating
+            // this field wouldn't — the pending-card/running-total encoding below needs a real
+            // array to push/splice into.
+            if (!talent.tags) talent.tags = new ArraySchema<string>();
 
-            let stat = "";
-            let amount = 0;
-
-            const randomBonus = rollTheDice(1, 8);
-            if (randomBonus === 1) {
-                amount = 10 * attacker.level;
-                talent.affectedStats.maxHp += amount;
-                stat = "hp";
-            } else if (randomBonus === 2) {
-                amount = attacker.level;
-                talent.affectedStats.accuracy += amount;
-                stat = "accuracy";
-            } else if (randomBonus === 3) {
-                amount = 1 + attacker.level;
-                talent.affectedStats.strength += amount;
-                stat = "strength";
-            } else if (randomBonus === 4) {
-                amount = 9 * attacker.level;
-                talent.affectedStats.defense += amount;
-                stat = "defense";
-            } else if (randomBonus === 5) {
-                amount = 10 * attacker.level;
-                talent.affectedStats.dodgeRate += amount;
-                stat = "dodge rate";
-            } else if (randomBonus === 6) {
-                amount = attacker.level * 0.05;
-                talent.affectedStats.attackSpeed += amount;
-                stat = "attack speed";
-            } else if (randomBonus === 7) {
-                amount = attacker.level;
-                talent.affectedStats.income += amount;
-                stat = "income";
-            } else if (randomBonus === 8) {
-                amount = attacker.level * 0.15;
-                talent.affectedStats.hpRegen += amount;
-                stat = "hp regeneration";
+            if (trigger === TriggerType.AURA) {
+                rebuildJokerAffectedStats(talent);
+                talent.description = parseJokerPendingCards(talent.tags).length > 0
+                    ? JOKER_SUSPENDED_DESCRIPTION
+                    : JOKER_BASE_DESCRIPTION;
+                return;
             }
 
+            if (trigger !== TriggerType.FIGHT_END) return;
+
+            const offered = [...JOKER_CARDS].sort(() => Math.random() - 0.5).slice(0, 2);
+            for (const card of offered) {
+                talent.tags.push(encodeJokerCard(card.stat, jokerCardAmount(card, attacker.level)));
+            }
+            rebuildJokerAffectedStats(talent);
             track(talent, 1);
-            client.send('combat_log', { text: `${attacker.name} gets ${amount} bonus ${stat} from Joker talent.`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
+            client.send('combat_log', { text: `${attacker.name}'s Joker deals two cards — pick one in the shop!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.JOKER,
@@ -1130,19 +1086,32 @@ export const TalentBehaviors = {
             }
         },
 
+    // Bully (reworked from "Warrior vol II."'s throw-your-weapon damage active, Season 24): ACTIVE
+    // trigger — a strength contest, not a damage skill. Only lands when the owner's Strength is
+    // strictly higher than the enemy's AT THAT MOMENT, so it swings with any mid-fight Strength
+    // change (Rage, Scam's mark, buffs). That conditional is the talent's downside: on an even or
+    // losing strength race it simply does nothing. Silent no-op on failure (no track/log/flash),
+    // same idiom as Fire with Fire, so a losing matchup doesn't spam the combat log every
+    // activation. Stun length is read from talent.base (seconds) rather than a code constant, so
+    // the card text can never drift from the applied value. Uses the same Player.setStunned as
+    // Shield Bash: the target can't attack, regenerate, dodge or use skills for the duration, and
+    // re-stunning extends the window.
     [TalentType.WARRIOR_2]:
         (context: TalentBehaviorContext) => {
-            const { attacker, defender, client, commandDispatcher } = context;
-            const initialDamage = attacker.strength;
-            const damageAfterReduction = defender.getDamageAfterDefense(initialDamage);
-            commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
-                defender: defender,
-                damage: damageAfterReduction,
-                attacker: attacker,
-            });
-            defender.takeDamage(damageAfterReduction, client, 'normal', 'skill');
-            track(context.talent, 1, damageAfterReduction);
-            client.send('combat_log', { text: `${attacker.name} throws weapons for ${fmt(damageAfterReduction)} damage!`, kind: 'talent', talentId: context.talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, damage: damageAfterReduction } as CombatLogMessage);
+            const { attacker, defender, client, clock, talent } = context;
+            if (attacker.strength <= defender.strength) return;
+            const stunMs = talent.base * 1000;
+            if (stunMs <= 0) return;
+            defender.setStunned(clock, stunMs, client);
+            track(talent, 1);
+            client.send('combat_log', {
+                text: `${attacker.name} bullies ${defender.name}: stunned for ${(stunMs / 1000).toFixed(1)}s!`,
+                kind: 'stun',
+                talentId: talent.talentId,
+                attackerId: attacker.playerId,
+                defenderId: defender.playerId,
+                stunnedPlayerId: defender.playerId,
+            } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.WARRIOR_2,
@@ -1448,6 +1417,67 @@ function openMartialArtistSlots(item: Item): void {
     if (!opts) return;
     for (const slot of MARTIAL_ARTIST_EXTRA_SLOTS) {
         if (!opts.includes(slot)) opts.push(slot);
+    }
+}
+
+/** Rolls one free weapon of the player's tier and folds it in — merging into an owned copy via
+ *  the shop's own upgrade path (applyRarityUpgrade/findOwnedUpgradeTarget) when the roll
+ *  duplicates something they already own, otherwise auto-equipping into an empty slot or falling
+ *  back to inventory. Shared by Martial Artist's LEVEL_UP grant and its one-shot on-pick grant
+ *  (TalentBehaviors.ts's AURA branch above) — same mechanic, two different triggers. */
+async function grantMartialArtistWeapon(context: TalentBehaviorContext): Promise<void> {
+    const { attacker, client, talent } = context;
+    if (!attacker) return;
+
+    try {
+        const rolled = (await getRandomWeaponsByTier(clampTier(attacker.level), 1))[0];
+        if (!rolled) return;
+
+        const owned = findOwnedUpgradeTarget(attacker, rolled.itemId);
+        let becameMythic: boolean;
+        if (owned) {
+            // Merge into the owned copy — same mechanic as a shop upgrade preview.
+            // findOwnedUpgradeTarget only ever returns sub-MYTHIC items, so a
+            // MYTHIC result here is always a genuine new forge.
+            applyRarityUpgrade(owned, rolled, attacker);
+            applyLuckyShopUpgrades(owned, rolled, attacker);
+            becameMythic = owned.rarity === ItemRarity.MYTHIC;
+            // MapSchema change-detection gotcha — re-set if currently equipped.
+            attacker.equippedItems.forEach((it, slot) => {
+                if (it === owned) attacker.equippedItems.set(slot, owned);
+            });
+            track(talent, 1);
+            client?.send('trigger_talent', {
+                playerId: attacker.playerId,
+                talentId: TalentType.MARTIAL_ARTIST,
+            });
+            client?.send('draft_log', `Training pays off — your ${owned.name} grew stronger!`);
+        } else {
+            // Rolled like a shop item, Lucky Find included.
+            const steps = applyLuckyShopUpgrades(rolled, rolled, attacker);
+            rolled.luckyFind = steps > 0;
+            rolled.luckyFindSteps = steps;
+            rolled.sold = true;
+            rolled.equipped = false;
+            // Open armor/helmet up front — this item hasn't been through an AURA
+            // sweep yet, so without this it could only auto-equip into a hand.
+            openMartialArtistSlots(rolled);
+            if (!attacker.tryAutoEquipIntoEmptySlot(rolled)) attacker.inventory.push(rolled);
+            becameMythic = rolled.rarity === ItemRarity.MYTHIC;
+            track(talent, 1);
+            client?.send('trigger_talent', {
+                playerId: attacker.playerId,
+                talentId: TalentType.MARTIAL_ARTIST,
+            });
+            client?.send('draft_log', `Training pays off — found a ${rolled.name}!`);
+        }
+        if (becameMythic) {
+            grantLuckyFindMythicBonus(attacker);
+            client?.send('draft_log', `Mythic forged! Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`);
+            client?.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
+        }
+    } catch (e) {
+        console.error(e);
     }
 }
 

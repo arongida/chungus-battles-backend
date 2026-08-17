@@ -40,6 +40,11 @@ function seededRandom(...parts: number[]): number {
  *  across repeated preview calls in the same tick and only shifts when a new item genuinely rolls
  *  a real skill. */
 export function rollItemSkill(item: Item, player: Player, options?: { exclude?: number }): ItemSkillDefinition | null {
+  // Quest items (e.g. Gambler's Dice, tagged 'merchant' for set-bonus purposes only) run their
+  // own bespoke rarity/behavior progression outside applyRarityUpgrade's Legendary gate — same
+  // reasoning as Weapon Whisperer's quest-tag guard (TalentBehaviors.ts) — so they must never
+  // enter the class-skill pool, whether for a real grant or a futureSkill preview.
+  if (item.tags?.includes('quest')) return null;
   const pool = item.type === ItemType.SHIELD ? SHIELD_SKILLS : SKILLS_BY_CLASS[item.class as ItemClass];
   if (!pool || pool.length === 0) return null;
 

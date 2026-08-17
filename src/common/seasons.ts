@@ -40,6 +40,10 @@ export const SEASONS: SeasonInfo[] = [
       'Shield Bash reworked: now a real stun (attack/regen/skill timers paused, dodge disabled) instead of an attack-speed slow',
       'Fixed: item skills are now spread across your owned items instead of being rolled independently per item — no more ending up with three items sharing one skill while another never shows up',
       'Bulk Discount reworked again: discounts shop prices by a percentage instead of a flat gold amount, capped at 75% off',
+      'Warrior vol II. replaced by Bully: no longer throws weapons for damage — every 4s, if your Strength is higher than the enemy\'s at that moment, you stun them for 1s; if it isn\'t, nothing happens',
+      'Martial Artist: you now find a free weapon the moment you take the talent, on top of the one you get each level up',
+      'Gambler\'s Dice: now pays out after a fight depending on which hand it\'s in — main hand gains permanent income on a win, off hand refunds gold on a loss',
+      'Joker reworked: every fight now deals you two cards to pick from instead of one random stat',
     ]
   },
   {
