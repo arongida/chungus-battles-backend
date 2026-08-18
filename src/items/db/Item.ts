@@ -45,6 +45,10 @@ export const ItemSchema = new Schema({
     skillId2: Number,
     skillName2: String,
     skillDescription2: String,
+    // Shop-roll nonce mixed into the item-skill hash (items/skills/itemSkillRoller.ts) — see
+    // ItemSchema.ts's field comment. Persisted so an owned/locked item's frozen skill roll
+    // survives a save/load round-trip.
+    skillRollNonce: Number,
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);

@@ -88,6 +88,12 @@ export class Item extends Schema {
   // — same reasoning as skillAffectedStats above: FightRoom builds fresh Item instances every
   // fight, so a 0 default is always immediately correct and needs no explicit reset.
   @type('number') bonusMaxDamage: number = 0;
+  // Shop-roll nonce mixed into the item-skill hash (itemSkillRoller.ts). Assigned fresh per slot
+  // each time DraftRoom.updateShop rolls a shop, so rerolling can show a different skill on the
+  // same item — then it travels with the object, so buying (or an upgrade preview cloned from an
+  // owned item) freezes the roll. 0 for every item that never came from a shop roll, which
+  // reproduces the pre-nonce hash exactly.
+  @type('number') skillRollNonce: number = 0;
   // Server-only, not synced: Gold Genie (TalentBehaviors.ts) rolls its post-Legendary lucky-find
   // chance exactly once per shop slot — this latches that so repeat aura ticks don't re-roll it.
   goldGenieLuckyRolled: boolean = false;

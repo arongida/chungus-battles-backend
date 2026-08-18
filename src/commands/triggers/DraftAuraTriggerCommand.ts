@@ -5,8 +5,8 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContext";
 import {triggerEquippedItems} from '../../common/triggerUtils';
 import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
-import {baseLuckyFindChance, BASE_REFRESH_SHOP_COST, applyRefreshCostMultiplier} from '../ShopUpgradeUtils';
-import {ensureShieldSkill, refreshFutureItemSkill} from '../../items/skills/itemSkillRoller';
+import {baseLuckyFindChance, BASE_POTION_CAPACITY, BASE_REFRESH_SHOP_COST, applyRefreshCostMultiplier} from '../ShopUpgradeUtils';
+import {ensurePotionEffect, ensureShieldSkill, refreshFutureItemSkill} from '../../items/skills/itemSkillRoller';
 import {applyBulkDiscount} from '../../items/behavior/ItemSkillBehaviors';
 
 export class DraftAuraTriggerCommand extends Command<DraftRoom> {
@@ -42,6 +42,10 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         // Bulk Discount (item skill): same reasoning — re-seeded before the equipped-item aura
         // pass so the rate can't survive dropping/selling the item.
         player.bulkDiscountPercentPerLuckPercent = 0;
+        // Active-potion cap: re-seeded to base before aura talents run, same reasoning as
+        // refreshShopCost above — Flash Sale (MERCHANT_1) adds to it while owned, on a clean base
+        // each tick rather than accumulating.
+        player.potionCapacity = BASE_POTION_CAPACITY;
 
         // Shields roll their skill from Common (no Legendary gate — see ensureShieldSkill), so
         // unlike class-item skills this can't ride on a rarity-upgrade event. Sweep every shield
@@ -52,6 +56,13 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         player.equippedItems.forEach((item) => ensureShieldSkill(item, player));
         player.inventory.forEach((item) => ensureShieldSkill(item, player));
         this.state.shop.forEach((item) => ensureShieldSkill(item, player));
+
+        // Health Flask brews (see ensurePotionEffect) — same "no rarity gate, sweep every item
+        // the player can currently see" reasoning as the shield sweep above. This is what stamps
+        // a freshly rolled shop flask with its brew, since DraftRoom.updateShop dispatches this
+        // command synchronously right after building the shop.
+        player.inventory.forEach((item) => ensurePotionEffect(item, player));
+        this.state.shop.forEach((item) => ensurePotionEffect(item, player));
 
         // Legendary skill preview (item.futureSkill*) — same "every item the player can currently
         // see" sweep as ensureShieldSkill above, so a Common/Rare/Epic class item always shows

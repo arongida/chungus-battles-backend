@@ -5,7 +5,7 @@ import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentC
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, getOwnedUpgradeableItemIds, grantLuckyFindMythicBonus, hasVipPass, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem } from '../commands/ShopUpgradeUtils';
-import { ensureShieldSkill, refreshFutureItemSkill } from '../items/skills/itemSkillRoller';
+import { ensurePotionEffect, ensureShieldSkill, refreshFutureItemSkill } from '../items/skills/itemSkillRoller';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
@@ -20,10 +20,10 @@ import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 import { RewardGainMessage } from '../common/MessageTypes';
-import { HEALTH_FLASK_REGEN_PER_SECOND } from '../items/behavior/uniqueItemBalance';
+import { ITEM_SKILLS } from '../items/behavior/itemSkillBalance';
+import { ItemSkillType } from '../items/types/ItemSkillTypes';
 import { TalentType } from '../talents/types/TalentTypes';
-import { track } from '../talents/behavior/TalentBehaviors';
-import { merchantDiscounts } from '../talents/behavior/merchantDiscountState';
+import { grantFlashSaleFlask, track } from '../talents/behavior/TalentBehaviors';
 import { addJokerTotal, clearJokerPendingCards, parseJokerPendingCards, rebuildJokerAffectedStats } from '../talents/behavior/jokerState';
 
 export class DraftRoom extends Room {
@@ -78,7 +78,7 @@ export class DraftRoom extends Room {
         });
 
         this.onMessage('select_talent', async (client, message) => {
-            await this.selectTalent(message.talentId);
+            await this.selectTalent(message.talentId, client);
         });
 
         this.onMessage('refresh_talent_slot', async (client, message) => {
@@ -277,6 +277,13 @@ export class DraftRoom extends Room {
             // loop runs — the loop's own findOwnedUpgradeTarget/preview construction then treats
             // it exactly like any other owned match, lucky-find roll included.
             const vipPassIndex = await this.injectVipPassPick(shopFromDb);
+            // Fresh skill-roll nonce per unowned slot on every shop build (see itemSkillRoller.ts) —
+            // must happen before the loop below, since applyRarityUpgrade/applyLuckyShopUpgrades
+            // inside it can grant a real skill using this nonce. Skipped for the VIP Pass slot,
+            // which injectVipPassPick already stamped with its own nonce above.
+            shopFromDb.forEach((item, i) => {
+                if (vipPassIndex !== i) item.skillRollNonce = Math.floor(Math.random() * 0x7fffffff);
+            });
             for (const rolledItem of shopFromDb) {
                 const slot = this.state.shop.length;
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
@@ -348,6 +355,9 @@ export class DraftRoom extends Room {
         const template = await getItemById(pickId);
         if (!template) return null;
         rollItemStats(template);
+        // Same fresh-nonce treatment as the rest of the roll branch below (see updateShop) — this
+        // slot is being force-picked here, before that sweep runs, so it needs its own stamp.
+        template.skillRollNonce = Math.floor(Math.random() * 0x7fffffff);
         const index = Math.floor(Math.random() * shopFromDb.length);
         shopFromDb[index] = template;
         return index;
@@ -537,11 +547,6 @@ export class DraftRoom extends Room {
             // that's the value actually taken.
             this.creditTalentGold(TalentType.MISCONDUCT, item.price);
         }
-        // Flash Sale (Merchant_1): only on a genuinely paid purchase — a free-claimed item was
-        // free regardless of any earlier shop-wide discount, so crediting it there would double up.
-        if (!luckyFree && !goldGenieFree && !storeCreditFree && !comradeFree && !misconductFree) {
-            this.creditTalentGold(TalentType.MERCHANT_1, merchantDiscounts.get(item) ?? 0);
-        }
         this.invalidateUndoSell();
         // Other shop slots for the same item (or previews built off the item just
         // replaced/consumed) need to reflect the new owned rarity immediately.
@@ -647,6 +652,12 @@ export class DraftRoom extends Room {
             rebuilt.previewBaseRarity = ownedTarget.rarity;
         } else {
             rebuilt = template;
+            // Carry the stale slot's skill-roll nonce over (mirrors the luckyFindSteps carry-over
+            // below) — a rebuild here is a stale-preview fixup, not a genuine reroll, so it must
+            // not silently reshuffle which skill an unowned item is currently offering. The
+            // ownedTarget branch above needs no such carry-over: cloneItem(ownedTarget) already
+            // inherited the owned item's own frozen nonce.
+            rebuilt.skillRollNonce = stale.skillRollNonce;
         }
         applyExtraRaritySteps(rebuilt, template, this.state.player, stale.luckyFindSteps);
         rebuilt.luckyFind = stale.luckyFind;
@@ -655,6 +666,10 @@ export class DraftRoom extends Room {
         // preview slot never briefly shows a shield with no skill row (the DraftAuraTriggerCommand
         // sweep would eventually catch it too, but this keeps the rebuild self-contained).
         ensureShieldSkill(rebuilt, this.state.player);
+        // Same self-contained reasoning — a rebuilt potion slot shouldn't briefly show a blank
+        // brew row either (in practice potions are never upgrade-eligible so isPreviewStale never
+        // routes one here today, but this keeps the rebuild correct regardless).
+        ensurePotionEffect(rebuilt, this.state.player);
         // Same self-contained reasoning as ensureShieldSkill above — a rebuilt class-item preview
         // slot shouldn't briefly show a blank/stale futureSkill row either.
         refreshFutureItemSkill(rebuilt, this.state.player);
@@ -762,18 +777,42 @@ export class DraftRoom extends Room {
         if (!equipOptions.includes('drink')) {
             return;
         }
+        // Active-potion cap (Player.potionCapacity, base 1 — see ShopUpgradeUtils.
+        // BASE_POTION_CAPACITY, raised by Flash Sale/MERCHANT_1). Checked before touching
+        // inventory so a rejected drink leaves the flask untouched.
+        if (this.state.player.pendingPotionEffects.length >= this.state.player.potionCapacity) {
+            client.send('draft_log', `You can't carry more than ${this.state.player.potionCapacity} active potion${this.state.player.potionCapacity === 1 ? '' : 's'} right now.`);
+            return;
+        }
         const idx = this.state.player.inventory.indexOf(item);
         this.state.player.inventory.splice(idx, 1);
-        this.state.player.pendingRegenBuff += HEALTH_FLASK_REGEN_PER_SECOND;
+        // Pre-rework flasks saved with no skillId (drunk before this change reached them, or
+        // somehow granted outside the normal roll path) fall back to Regeneration — today's
+        // pre-rework effect — rather than banking nothing.
+        const skillId = item.skillId || ItemSkillType.REGENERATION;
+        const def = ITEM_SKILLS[skillId];
+        this.state.player.pendingPotionEffects.push(skillId);
+        this.state.player.pendingPotionSummary = Array.from(this.state.player.pendingPotionEffects)
+            .map((id) => ITEM_SKILLS[id]?.name ?? 'Unknown brew')
+            .join(', ');
         await this.revalidateUpgradePreviews();
-        client.send('draft_log', `You drank the ${item.name} — +${HEALTH_FLASK_REGEN_PER_SECOND} HP regen for your next fight!`);
+        // item.name is already the rolled effect's own name (see ensurePotionEffect) — no need to
+        // repeat it, just append what it does.
+        const brewDescription = def ? def.describe(ItemRarity.COMMON) : 'a mystery effect';
+        client.send('draft_log', `You drank the ${item.name} — ${brewDescription}`);
     }
 
-    private async selectTalent(talentId: number) {
+    private async selectTalent(talentId: number, client: Client) {
         const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
         if (talent) {
             this.state.player.talents.push(talent);
             this.state.remainingTalentPoints--;
+            // Flash Sale (MERCHANT_1): grants its first free flask the instant it's picked, not
+            // just on the SHOP_START trigger every round after — see grantFlashSaleFlask's own
+            // comment for why this can never double up with that round's SHOP_START firing.
+            if (talent.talentId === TalentType.MERCHANT_1) {
+                await grantFlashSaleFlask(this.state.player, client);
+            }
             await this.updateTalentSelection();
         }
     }

@@ -6,6 +6,8 @@ import {TalentType} from '../../talents/types/TalentTypes';
 import { CombatLogMessage, DamageMessage, DamageSource, DamageType, InvulnerableMessage, InvulnerableStateMessage, StunnedStateMessage } from '../../common/MessageTypes';
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
 import {EquipSlot, ItemRarity} from "../../items/types/ItemTypes";
+import {ItemSkillType} from "../../items/types/ItemSkillTypes";
+import {ITEM_SKILLS, skillValues} from "../../items/behavior/itemSkillBalance";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {BURN_DURATION_MS, selfBurnStacks} from "../../items/behavior/uniqueItemBalance";
 import {POISON_DURATION_MS, POISON_TICK_INTERVAL_MS} from "../../common/poisonBalance";
@@ -243,11 +245,10 @@ export class Player extends Schema implements IStats {
     // shop phase — see misconductClaimUsed. The claimed item also gets a rarity upgrade +
     // full-price sell value (see TalentBehaviors.ts MISCONDUCT).
     @type('boolean') misconductFreeClaim: boolean = false;
-    // Health Flask (itemId 6): hpRegen bonus banked in the draft, consumed by the wearer's very
-    // next fight. Folded into hpRegen every tick by statsUtils.recalculatePlayerStats and zeroed
-    // out in FightRoom.handleFightEnd once that fight concludes. Must stay @type (not a plain
-    // field) — same reasoning as `losses` above: copyFrom() round-trips through toJSON(), so a
-    // plain field would silently reset to 0 the moment FightRoom.onJoin loads the player.
+    // Deprecated — Health Flask brews now bank into pendingPotionEffects (see below), which
+    // replaces this single hard-coded regen buff with any of several rolled effects. Kept
+    // declared (unread, unwritten) purely so every @type field after it keeps its existing
+    // Colyseus index — the frontend schema mirror relies on matching declaration order.
     @type('number') pendingRegenBuff: number = 0;
     // Hidden shop-roll stat: seeded from level every aura tick in both the draft
     // (DraftAuraTriggerCommand) and the fight (FightAuraTriggerCommand), doubled by Black Market
@@ -292,6 +293,26 @@ export class Player extends Schema implements IStats {
     // render a stun aura (mirrors `invincible` above). Declared here (end of the @type block) so
     // existing field indices stay stable.
     @type('boolean') stunned: boolean = false;
+    // Health Flask brews (see items/skills/itemSkillRoller.ts's ensurePotionEffect and
+    // items/types/ItemSkillTypes.ts's REGENERATION..SALVE range) banked in the draft by
+    // DraftRoom.drinkItem, one skillId per flask drunk — capped at potionCapacity entries (see
+    // below). Stat brews (Regeneration/Evasion/Stoneskin/Fortitude) fold into hpRegen/dodgeRate/
+    // defense/maxHp every tick in statsUtils.recalculatePlayerStats, same as pendingRegenBuff used
+    // to; Antidote/Salve are read by getPoisonDamageMultiplier/getBurnDamageMultiplier below;
+    // Liquid Courage is applied directly in FightRoom.startBattle. Cleared (win, lose or draw) in
+    // FightRoom.handleFightEnd — same "spent the moment this fight concludes" contract
+    // pendingRegenBuff had. Must stay @type (not a plain field) — same reasoning as `losses`
+    // above: copyFrom() round-trips through toJSON().
+    @type(['number']) pendingPotionEffects: ArraySchema<number> = new ArraySchema<number>();
+    // Comma-joined brew names for pendingPotionEffects, rebuilt by DraftRoom.drinkItem every time
+    // the array changes — cheap to keep the frontend from needing the item-skill name table just
+    // to render "Brewing: Antidote, Stoneskin".
+    @type('string') pendingPotionSummary: string = '';
+    // How many potions pendingPotionEffects may hold at once — enforced in DraftRoom.drinkItem.
+    // Hidden/derived stat, same treatment as luckyFindChance/refreshShopCost: NOT persisted to
+    // Mongo, re-seeded to BASE_POTION_CAPACITY every draft aura tick before aura talents run
+    // (DraftAuraTriggerCommand), then Flash Sale (MERCHANT_1) adds to it while owned.
+    @type('number') potionCapacity: number = 1;
 
     private _poisonStack: number = 0;
 
@@ -472,6 +493,24 @@ export class Player extends Schema implements IStats {
     /** Chance this player dodges an incoming weapon attack. */
     getDodgeChance(): number {
         return 1 - 100 / (100 + this.dodgeRate);
+    }
+
+    /** Antidote (Health Flask brew): fraction by which this player's poison tick damage is
+     *  multiplied while banked this draft phase, spent by the wearer's next fight (see
+     *  pendingPotionEffects above). A reduction, not an immunity — stacks still apply normally
+     *  (addPoisonStacks below is untouched); only the tick damage computed in FightRoom.ts's
+     *  startPoisonTimer reads this. */
+    getPoisonDamageMultiplier(): number {
+        if (!this.pendingPotionEffects.includes(ItemSkillType.ANTIDOTE)) return 1;
+        return 1 - skillValues(ITEM_SKILLS[ItemSkillType.ANTIDOTE], ItemRarity.COMMON).resistFraction;
+    }
+
+    /** Salve (Health Flask brew): same shape as getPoisonDamageMultiplier above, for burn tick
+     *  damage (FightRoom.ts's checkBurn). Also softens this player's own self-burn tax
+     *  (igniteEnemy), since that's just another addBurnStacks call on the same player. */
+    getBurnDamageMultiplier(): number {
+        if (!this.pendingPotionEffects.includes(ItemSkillType.SALVE)) return 1;
+        return 1 - skillValues(ITEM_SKILLS[ItemSkillType.SALVE], ItemRarity.COMMON).resistFraction;
     }
 
     addPoisonStacks(clock: ClockTimer, playerClient: Client, stack: number = 1, source?: Talent) {

@@ -4,13 +4,16 @@
 import { Item } from '../schema/ItemSchema';
 import { Player } from '../../players/schema/PlayerSchema';
 import { ItemClass, ItemRarity, ItemType } from '../types/ItemTypes';
-import { ITEM_SKILLS, ItemSkillDefinition, SHIELD_SKILLS, SKILLS_BY_CLASS } from '../behavior/itemSkillBalance';
+import { ITEM_SKILLS, ItemSkillDefinition, POTION_SKILLS, SHIELD_SKILLS, SKILLS_BY_CLASS } from '../behavior/itemSkillBalance';
 
 /** Deterministic hash-to-[0,1) — NOT Math.random(). Legendary shop-preview slots
  *  (DraftRoom.updateShop / revalidateUpgradePreviews) rebuild on every 1s aura tick and on
  *  every buy/sell/drink; a random roll would make the displayed skill flicker constantly. This
- *  seed is stable for as long as (playerId, itemId) doesn't change — i.e. for the item's whole
- *  life on that character — so the preview always shows exactly what buying it will grant. */
+ *  seed is stable for as long as (playerId, itemId, skillRollNonce) doesn't change — i.e. for the
+ *  item's whole life once it leaves the shop (DraftRoom.updateShop stamps a fresh
+ *  item.skillRollNonce on every unowned shop slot on every reroll, so the preview can change
+ *  before purchase, then freezes the instant the item is bought/owned) — so an owned item's
+ *  preview always shows exactly what buying/upgrading it will grant. */
 function seededRandom(...parts: number[]): number {
   let h = 2166136261;
   for (const p of parts) {
@@ -80,7 +83,7 @@ export function rollItemSkill(item: Item, player: Player, options?: { exclude?: 
   player.equippedItems.forEach(countCopy);
   player.inventory.forEach(countCopy);
 
-  const seed = seededRandom(player.playerId, item.itemId, ItemRarity.LEGENDARY, copyIndex);
+  const seed = seededRandom(player.playerId, item.itemId, ItemRarity.LEGENDARY, copyIndex, item.skillRollNonce || 0);
   const index = Math.min(Math.floor(seed * leastUsed.length), leastUsed.length - 1);
   return leastUsed[index];
 }
@@ -115,6 +118,27 @@ export function grantItemSkill2(item: Item, def: ItemSkillDefinition): void {
  *  rarity. No-op for non-shields or a shield that already rolled (the `!item.skillId` latch
  *  makes this idempotent and safe to call every aura tick — see call sites in
  *  DraftAuraTriggerCommand, Player.ts, DraftRoom.rebuildShopSlot and Shady Shields). */
+/** Grants a Health Flask (or any item.type === 'potion') its brew if it doesn't have one yet —
+ *  same idempotent-latch shape as ensureShieldSkill above, called from the same sweep sites plus
+ *  DraftRoom.rebuildShopSlot. Deliberately does NOT go through rollItemSkill: a potion is a
+ *  one-shot consumable, not gear the player builds around, so there's no `slots` filter and no
+ *  least-used spread to coordinate against other owned items — just a flat seeded pick across
+ *  POTION_SKILLS. Reroll agency comes from item.skillRollNonce exactly like class/shield skills:
+ *  DraftRoom.updateShop stamps a fresh nonce on every unowned shop slot per shop build, so a
+ *  flask's brew changes on reroll and freezes the moment it's bought. */
+export function ensurePotionEffect(item: Item, player: Player): void {
+  if (item.type !== 'potion' || item.skillId) return;
+  if (POTION_SKILLS.length === 0) return;
+  const seed = seededRandom(player.playerId, item.itemId, item.skillRollNonce || 0);
+  const index = Math.min(Math.floor(seed * POTION_SKILLS.length), POTION_SKILLS.length - 1);
+  const def = POTION_SKILLS[index];
+  grantItemSkill(item, def);
+  // A flask is titled by what it does — "Stoneskin", "Antidote", etc. — rather than the generic
+  // Mongo template name, since the template covers seven different rolled effects now. Latched by
+  // the same `!item.skillId` guard above, so this only ever happens once per item.
+  item.name = def.name;
+}
+
 export function ensureShieldSkill(item: Item, player: Player): void {
   if (item.type !== ItemType.SHIELD || item.skillId) return;
   const def = rollItemSkill(item, player);
@@ -144,6 +168,10 @@ export function reconcileItemSkill(item: Item): void {
   if (!def) return;
   item.skillName = def.name;
   item.skillDescription = def.describe(item.rarity);
+  // Potions are titled by their rolled effect (see ensurePotionEffect) — re-sync that too, same
+  // "don't show a stale name after a future rebalance renames the skill" reasoning this whole
+  // function exists for.
+  if (item.type === 'potion') item.name = def.name;
   def.triggerTypes.forEach((t) => {
     if (!item.triggerTypes.includes(t)) item.triggerTypes.push(t);
   });

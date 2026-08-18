@@ -228,18 +228,21 @@ export const selfBurnStacks = (applied: number) => Math.ceil(applied / 3);
 export const FIRE_WITH_FIRE_MAX_STACKS = 10;
 
 /**
- * Health Flask (6): flat price, flat effect — drinking it banks an hpRegen bonus
- * (PlayerSchema.pendingRegenBuff) that applies for the wearer's next fight only, then is spent
- * (see FightRoom.handleFightEnd). Priced like any other item (HEALTH_FLASK_PRICE) rather than
- * scaled by level/gold. Roughly 3x the hpRegen a normal tier-3 item gives at a comparable price
- * (tier 3 gear costs 10 and rolls up to 4 hpRegen — see STAT_RANGES.hpRegen in itemStatPool.ts),
- * since this bonus only lasts one fight instead of being permanent.
+ * Health Flask (6): flat price, rolled effect — drinking it banks one of several one-fight
+ * brews into PlayerSchema.pendingPotionEffects (Health Flask brews — see
+ * items/skills/itemSkillRoller.ts's ensurePotionEffect and items/behavior/itemSkillBalance.ts's
+ * POTION_SKILLS for the tuning/effect list, since this replaced the old single hard-coded +10
+ * hpRegen effect). Priced like any other item (HEALTH_FLASK_PRICE) rather than scaled by
+ * level/gold.
  *
  * Documentation only — the authoritative value is Item(6).price in Mongo (see
  * scripts/increaseItemPrices.ts); this constant is never imported.
  */
 export const HEALTH_FLASK_PRICE = 12;
-export const HEALTH_FLASK_REGEN_PER_SECOND = 10;
+
+/** Item id of the Health Flask — the item Flash Sale (MERCHANT_1) grants for free, both on-pick
+ *  and every round after (see TalentBehaviors.ts's grantFlashSaleFlask). */
+export const HEALTH_FLASK_ITEM_ID = 6;
 
 /** Band of Vigor (27): HP fraction below which "Second Wind" can proc, once per fight. */
 export const SECOND_WIND_THRESHOLD = 0.3;

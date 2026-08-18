@@ -24,7 +24,7 @@ import { FightAuraTriggerCommand } from '../commands/triggers/FightAuraTriggerCo
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { OnDodgeTriggerCommand } from "../commands/triggers/OnDodgeTriggerCommand";
 import { Item } from '../items/schema/ItemSchema';
-import { ItemType } from '../items/types/ItemTypes';
+import { ItemRarity, ItemType } from '../items/types/ItemTypes';
 import { ItemSkillType } from '../items/types/ItemSkillTypes';
 import { ITEM_SKILLS, skillValues } from '../items/behavior/itemSkillBalance';
 import { crushingBlowCounters, openingActCounters } from '../items/behavior/itemSkillState';
@@ -592,7 +592,10 @@ export class FightRoom extends Room {
         }
 
         defender.poisonTimer = this.clock.setInterval(() => {
-            const poisonDamage = defender.poisonStack * defender.maxHp * POISON_DAMAGE_PER_STACK_FRACTION;
+            // Antidote (Health Flask brew): softens tick damage, not stack count — see
+            // PlayerSchema.getPoisonDamageMultiplier. Applied here (before dispatch/credit) so
+            // stat tracking and OnDamageTriggerCommand see the real post-mitigation number.
+            const poisonDamage = defender.poisonStack * defender.maxHp * POISON_DAMAGE_PER_STACK_FRACTION * defender.getPoisonDamageMultiplier();
 
             this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
                 defender: defender,
@@ -626,7 +629,11 @@ export class FightRoom extends Room {
                     defender.burnTimer = null;
                     return;
                 }
-                const burnDamage = defender.burnStack * BURN_DAMAGE_PER_STACK;
+                // Salve (Health Flask brew): same "reduce tick damage, not stack count" treatment
+                // as Antidote above — see PlayerSchema.getBurnDamageMultiplier. This also softens
+                // the wearer's own self-burn tax (igniteEnemy), since that's just another
+                // addBurnStacks call on the same player.
+                const burnDamage = defender.burnStack * BURN_DAMAGE_PER_STACK * defender.getBurnDamageMultiplier();
 
                 this.dispatcher.dispatch(new OnDamageTriggerCommand(), {
                     defender: defender,
@@ -843,6 +850,19 @@ export class FightRoom extends Room {
         this.state.player.pendingBlockSource = null;
         this.state.enemy.pendingBlockSource = null;
 
+        // Liquid Courage (Health Flask brew): grants fight-start invulnerability directly rather
+        // than through a trigger command — the flask is gone from inventory by fight time (drunk
+        // in the draft phase), so there's nothing left for FightStartTriggerCommand to iterate.
+        // Same shape as Aegis's own fight-start grant (ItemSkillBehaviors.ts).
+        if (this.state.player.pendingPotionEffects.includes(ItemSkillType.LIQUID_COURAGE)) {
+            const { invulnMs } = skillValues(ITEM_SKILLS[ItemSkillType.LIQUID_COURAGE], ItemRarity.COMMON);
+            this.state.player.setInvincible(this.clock, invulnMs, this.state.playerClient);
+            this.logCombat(this.state.playerClient, {
+                text: `${this.state.player.name}'s Liquid Courage kicks in: ${(invulnMs / 1000).toFixed(1)}s invulnerability!`,
+                kind: 'item', attackerId: this.state.player.playerId,
+            } as CombatLogMessage);
+        }
+
         //start attack timers
         this.startWeaponAttackTimers(this.state.player, this.state.enemy);
         this.startWeaponAttackTimers(this.state.enemy, this.state.player);
@@ -877,9 +897,11 @@ export class FightRoom extends Room {
     }
 
     private async handleFightEnd() {
-        // Health Flask's regen buff is a one-fight consumable — spent the moment this fight
-        // concludes (win, lose, or draw), regardless of whether it actually procced any healing.
-        this.state.player.pendingRegenBuff = 0;
+        // Health Flask brews are a one-fight consumable — spent the moment this fight concludes
+        // (win, lose, or draw), regardless of whether they actually procced (e.g. an Antidote
+        // that never saw poison/burn, or a Liquid Courage window that never absorbed a hit).
+        this.state.player.pendingPotionEffects.clear();
+        this.state.player.pendingPotionSummary = '';
 
         if (!this.state.fightResult) {
             if (this.state.player.hp <= 0 && this.state.enemy.hp <= 0) {

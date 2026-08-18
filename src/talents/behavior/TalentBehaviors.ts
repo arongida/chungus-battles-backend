@@ -11,14 +11,13 @@ import { cloneItem, getItemById, getRandomWeaponsByTier } from "../../items/db/I
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { clampTier } from "../../items/stats/itemStatPool";
 import { applyRarityUpgrade, applyLuckyShopUpgrades, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER, VIP_PASS_REROLL_SURCHARGE } from "../../commands/ShopUpgradeUtils";
-import { ensureShieldSkill, rollItemSkill, grantItemSkill2 } from "../../items/skills/itemSkillRoller";
+import { ensurePotionEffect, ensureShieldSkill, rollItemSkill, grantItemSkill2 } from "../../items/skills/itemSkillRoller";
 import { CombatLogMessage, RewardGainMessage, DamageMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
 import { Talent } from "../schema/TalentSchema";
 import { Player } from "../../players/schema/PlayerSchema";
-import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus, FIRE_WITH_FIRE_MAX_STACKS, diceDescription } from "../../items/behavior/uniqueItemBalance";
+import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus, FIRE_WITH_FIRE_MAX_STACKS, diceDescription, HEALTH_FLASK_ITEM_ID } from "../../items/behavior/uniqueItemBalance";
 import { weaponWhispererSnapshots, weaponWhispererFinalRolls } from "./weaponWhispererState";
-import { merchantDiscounts } from "./merchantDiscountState";
 import { FESTERING_WOUNDS_GRANT_ITEM_ID } from "../../common/poisonBalance";
 import {
     JOKER_CARDS,
@@ -85,6 +84,27 @@ function grantWeaponWhispererSecondSkill(weapon: Item, attacker: Player, client:
         client.send('draft_log', text);
     }
     return true;
+}
+
+// Flash Sale (MERCHANT_1, reworked to be potion-themed): +1 active-potion capacity while owned
+// (see the AURA branch below and DraftAuraTriggerCommand's BASE_POTION_CAPACITY reseed).
+const FLASH_SALE_POTION_CAPACITY_BONUS = 1;
+
+/** Flash Sale (MERCHANT_1): grants a free, already-rolled Health Flask into inventory. Shared by
+ *  the immediate on-pick grant (DraftRoom.selectTalent) and the every-round SHOP_START grant
+ *  below, so the two paths can't drift. Same shape as Festering Wounds' free-dagger grant. */
+export async function grantFlashSaleFlask(attacker: Player, client?: Client): Promise<void> {
+    const flask = await getItemById(HEALTH_FLASK_ITEM_ID);
+    if (!flask) return;
+    const item = cloneItem(flask);
+    attacker.gold += item.price; // refund so getItem nets to free
+    attacker.getItem(item);
+    // Roll its brew immediately rather than waiting up to 1s for the next draft aura tick —
+    // ensurePotionEffect's `!item.skillId` latch makes this idempotent/safe either way, and it's
+    // what titles `item.name` after its rolled effect (e.g. "Antidote") instead of "Health Flask".
+    ensurePotionEffect(item, attacker);
+    client?.send('draft_log', `Flash Sale delivers a free potion — ${item.name}!`);
+    client?.send('trigger_talent', { playerId: attacker.playerId, talentId: TalentType.MERCHANT_1 });
 }
 
 export const TalentBehaviors = {
@@ -176,16 +196,16 @@ export const TalentBehaviors = {
 
         switch (defender.avatarUrl) {
             case PlayerAvatar.MERCHANT:
-                talent.affectedStats.income += 2;
-                client.send('combat_log', { text: `${attacker.name}'s wit brings in +2 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
+                talent.affectedStats.income += 3;
+                client.send('combat_log', { text: `${attacker.name}'s wit brings in +3 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
                 break;
             case PlayerAvatar.WARRIOR:
-                goldGained = 8;
+                goldGained = 12;
                 attacker.gold += goldGained;
                 client.send('combat_log', { text: `${attacker.name} earns ${goldGained} gold for outwitting the warrior!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldGained } as CombatLogMessage);
                 break;
             case PlayerAvatar.THIEF:
-                xpGained = 12;
+                xpGained = 18;
                 attacker.xp += xpGained;
                 client.send('combat_log', { text: `${attacker.name} gains ${xpGained} xp for outwitting the rogue!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
                 break;
@@ -1018,22 +1038,19 @@ export const TalentBehaviors = {
         },
 
     [TalentType.MERCHANT_1]:
-        (context: TalentBehaviorContext) => {
-            const { attacker, client, talent, shop } = context;
-            if (!shop) return;
-            const discount = talent.base * attacker.level;
-            shop.forEach((item) => {
-                const priceBefore = item.price;
-                item.price = Math.max(0, item.price - discount);
-                item.sellPrice = Math.max(0, item.sellPrice - discount);
-                // Actual reduction (clamped, so a cheap item's share can be less than the nominal
-                // discount) — read by DraftRoom.buyItem to credit gold saved only on items bought.
-                merchantDiscounts.set(item, priceBefore - item.price);
-            });
-            client.send('trigger_talent', {
-                playerId: attacker.playerId,
-                talentId: TalentType.MERCHANT_1,
-            });
+        async (context: TalentBehaviorContext) => {
+            const { attacker, client, trigger, shop } = context;
+            if (trigger === TriggerType.AURA) {
+                // Draft-only: potionCapacity has no meaning mid-fight, and FightAuraTriggerCommand's
+                // AURA context never sets `shop` (only DraftAuraTriggerCommand does). Without this
+                // guard the bonus re-applies every second for the whole fight, since only
+                // DraftAuraTriggerCommand ever reseeds potionCapacity back to base before this runs.
+                if (!shop) return;
+                attacker.potionCapacity += FLASH_SALE_POTION_CAPACITY_BONUS;
+                return;
+            }
+            if (trigger !== TriggerType.SHOP_START) return;
+            await grantFlashSaleFlask(attacker, client);
         },
 
     [TalentType.ROGUE_1]:

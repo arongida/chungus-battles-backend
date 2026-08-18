@@ -18,8 +18,9 @@ import type { Player } from '../../players/schema/PlayerSchema';
 import type { ClockTimer } from '@colyseus/timer';
 
 /** Class skills only ever roll onto a `class`-bearing item (ItemClass); shield skills roll
- *  onto any shield regardless of `class` (see itemSkillRoller.ts's type-based pool branch). */
-export type ItemSkillGroup = ItemClass | 'shield';
+ *  onto any shield regardless of `class`; potion skills (Health Flask brews) roll onto any
+ *  item of type 'potion' (see itemSkillRoller.ts's type-based pool branches). */
+export type ItemSkillGroup = ItemClass | 'shield' | 'potion';
 
 /** Context passed to `status()` every UpdateStatsCommand tick, for an EQUIPPED item only (see
  *  itemSkillStatus.ts's refreshItemSkillStatus, the only caller). */
@@ -726,6 +727,91 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
       return `${count % every}/${every} hits to next block`;
     },
   },
+
+  // ------------------------------------------------------------- POTION (Health Flask) ----
+  // Health Flask brews — one is rolled per shop slot (itemSkillRoller.ts's ensurePotionEffect),
+  // shown on the card before purchase, banked on drink (DraftRoom.drinkItem) and spent by the
+  // wearer's very next fight only (PlayerSchema.pendingPotionEffects, folded in by
+  // statsUtils.recalculatePlayerStats / FightRoom.startBattle). Pinned to Common — flasks are in
+  // NON_UPGRADEABLE_ITEM_IDS and excluded from shop lucky-find (see uniqueItemBalance.ts,
+  // DraftRoom.ts) — so only a COMMON bracket is ever defined; no status() since potions are never
+  // equipped, so ItemSkillStatusContext's per-tick sweep would never reach them.
+
+  [ItemSkillType.REGENERATION]: {
+    id: ItemSkillType.REGENERATION,
+    class: 'potion',
+    name: 'Regeneration',
+    slots: [],
+    triggerTypes: [],
+    values: { [ItemRarity.COMMON]: { hpRegen: 10 } },
+    describe: (r) => `+${skillValues(ITEM_SKILLS[ItemSkillType.REGENERATION], r).hpRegen} HP regen for your next fight.`,
+  },
+
+  // Antidote and Salve reduce (not block) their damage type — see PlayerSchema's
+  // getPoisonDamageMultiplier/getBurnDamageMultiplier, applied at tick-damage calculation time in
+  // FightRoom.ts (startPoisonTimer/checkBurn) rather than at stack application, so poison/burn
+  // stacks still visibly apply (log lines, healing-effectiveness penalty) — only the tick damage
+  // itself is softened. This also softens Salve's own wearer's self-burn tax (igniteEnemy), since
+  // that's just another addBurnStacks call on the same player.
+  [ItemSkillType.ANTIDOTE]: {
+    id: ItemSkillType.ANTIDOTE,
+    class: 'potion',
+    name: 'Antidote',
+    slots: [],
+    triggerTypes: [],
+    values: { [ItemRarity.COMMON]: { resistFraction: 0.5 } },
+    describe: (r) => `Take ${pct(skillValues(ITEM_SKILLS[ItemSkillType.ANTIDOTE], r).resistFraction)} less damage from poison for your next fight.`,
+  },
+
+  [ItemSkillType.SALVE]: {
+    id: ItemSkillType.SALVE,
+    class: 'potion',
+    name: 'Salve',
+    slots: [],
+    triggerTypes: [],
+    values: { [ItemRarity.COMMON]: { resistFraction: 0.5 } },
+    describe: (r) => `Take ${pct(skillValues(ITEM_SKILLS[ItemSkillType.SALVE], r).resistFraction)} less damage from burn (including your own self-inflicted burn) for your next fight.`,
+  },
+
+  [ItemSkillType.EVASION]: {
+    id: ItemSkillType.EVASION,
+    class: 'potion',
+    name: 'Evasion',
+    slots: [],
+    triggerTypes: [],
+    values: { [ItemRarity.COMMON]: { dodgeRate: 50 } },
+    describe: (r) => `+${skillValues(ITEM_SKILLS[ItemSkillType.EVASION], r).dodgeRate} dodge rate for your next fight.`,
+  },
+
+  [ItemSkillType.STONESKIN]: {
+    id: ItemSkillType.STONESKIN,
+    class: 'potion',
+    name: 'Stoneskin',
+    slots: [],
+    triggerTypes: [],
+    values: { [ItemRarity.COMMON]: { defense: 50 } },
+    describe: (r) => `+${skillValues(ITEM_SKILLS[ItemSkillType.STONESKIN], r).defense} defense for your next fight.`,
+  },
+
+  [ItemSkillType.FORTITUDE]: {
+    id: ItemSkillType.FORTITUDE,
+    class: 'potion',
+    name: 'Fortitude',
+    slots: [],
+    triggerTypes: [],
+    values: { [ItemRarity.COMMON]: { maxHp: 160 } },
+    describe: (r) => `+${skillValues(ITEM_SKILLS[ItemSkillType.FORTITUDE], r).maxHp} max HP for your next fight.`,
+  },
+
+  [ItemSkillType.LIQUID_COURAGE]: {
+    id: ItemSkillType.LIQUID_COURAGE,
+    class: 'potion',
+    name: 'Liquid Courage',
+    slots: [],
+    triggerTypes: [],
+    values: { [ItemRarity.COMMON]: { invulnMs: 2500 } },
+    describe: (r) => `Invulnerable for the first ${(skillValues(ITEM_SKILLS[ItemSkillType.LIQUID_COURAGE], r).invulnMs / 1000).toFixed(1)}s of your next fight.`,
+  },
 };
 
 export const SKILLS_BY_CLASS: Record<ItemClass, ItemSkillDefinition[]> = {
@@ -737,3 +823,7 @@ export const SKILLS_BY_CLASS: Record<ItemClass, ItemSkillDefinition[]> = {
 /** Shield-only skill pool — rolled onto any shield (ItemType.SHIELD) regardless of `class`,
  *  see itemSkillRoller.ts's type-based branch. */
 export const SHIELD_SKILLS: ItemSkillDefinition[] = Object.values(ITEM_SKILLS).filter((d) => d.class === 'shield');
+
+/** Health Flask brew pool — rolled onto any item.type === 'potion', see
+ *  itemSkillRoller.ts's ensurePotionEffect. */
+export const POTION_SKILLS: ItemSkillDefinition[] = Object.values(ITEM_SKILLS).filter((d) => d.class === 'potion');
