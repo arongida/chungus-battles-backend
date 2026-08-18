@@ -45,10 +45,12 @@ export const ItemSchema = new Schema({
     skillId2: Number,
     skillName2: String,
     skillDescription2: String,
-    // Shop-roll nonce mixed into the item-skill hash (items/skills/itemSkillRoller.ts) — see
-    // ItemSchema.ts's field comment. Persisted so an owned/locked item's frozen skill roll
-    // survives a save/load round-trip.
-    skillRollNonce: Number,
+    // Latched Legendary-skill preview id (items/skills/itemSkillRoller.ts's refreshFutureItemSkill)
+    // — persisted so an owned item's frozen "At Legendary: X" promise survives a save/load
+    // round-trip, same treatment as skillId. futureSkillName/futureSkillDescription are NOT
+    // persisted — those are always re-derived from this id against the current ITEM_SKILLS table
+    // (see ItemSchema.ts's field comment).
+    futureSkillId: Number,
 });
 
 export const itemModel = mongoose.model('Item', ItemSchema);
@@ -87,11 +89,14 @@ function getItemSchemaObject(itemFromDb: any): Item {
     // schema sync — "AffectedStats was expected, but Object was provided"). skillStatus is
     // excluded for the same "pure runtime output, never worth carrying over" reason — leaving it
     // out of `primitives` lets it fall back to the schema default ('') rather than a stale string.
-    // futureSkillId/futureSkillName/futureSkillDescription are excluded for the same "pure
-    // runtime output, never worth carrying over" reason as skillStatus above — a stale preview
-    // from a cloneItem() round-trip falls back to the schema default (0/'') instead, and gets
-    // recomputed fresh on the next aura tick by refreshFutureItemSkill.
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, skillAffectedStats2, skillAffectedEnemyStats2, skillStatus2, futureSkillId, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    // futureSkillName/futureSkillDescription are excluded for the same "pure runtime output,
+    // never worth carrying over" reason as skillStatus above — they're always re-derived from
+    // futureSkillId against the current ITEM_SKILLS table by refreshFutureItemSkill. futureSkillId
+    // ITSELF is deliberately kept in `primitives` (not destructured out) — it's the latch that
+    // makes an owned item's Legendary-skill preview a real promise instead of re-rolling every
+    // tick (see itemSkillRoller.ts's refreshFutureItemSkill), so it must survive both a DB load
+    // and a cloneItem() round-trip the same way skillId does.
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, skillAffectedStats2, skillAffectedEnemyStats2, skillStatus2, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
     if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);

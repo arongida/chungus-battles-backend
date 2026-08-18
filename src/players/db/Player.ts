@@ -96,9 +96,12 @@ function buildItemSchema(itemFromDb: any): Item {
     // getItemSchemaObject: they're pure runtime aura output (ItemSchema.ts), and leaving them in
     // `primitives` would let a stale plain-object snapshot clobber the Item constructor's real
     // AffectedStats instance via .assign().
-    // futureSkillId/Name/Description excluded too — same "pure runtime output, recomputed every
-    // load" reasoning, so a stale preview never survives a round-trip through toJSON().
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillAffectedStats2, skillAffectedEnemyStats2, futureSkillId, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    // futureSkillName/Description excluded — always re-derived from futureSkillId against the
+    // current ITEM_SKILLS table (see items/db/Item.ts's getItemSchemaObject and
+    // itemSkillRoller.ts's refreshFutureItemSkill). futureSkillId itself IS kept in `primitives`
+    // — it's the latch that makes an owned item's Legendary-skill preview a promise instead of a
+    // re-rolled guess, so it must survive the DB round-trip like skillId does.
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillAffectedStats2, skillAffectedEnemyStats2, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
     if (!item.sellPrice) item.sellPrice = Math.floor(item.price * item.rarity * 0.7);
     item.affectedStats = affectedStatsFromRaw(affectedStats);

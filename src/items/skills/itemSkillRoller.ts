@@ -6,26 +6,15 @@ import { Player } from '../../players/schema/PlayerSchema';
 import { ItemClass, ItemRarity, ItemType } from '../types/ItemTypes';
 import { ITEM_SKILLS, ItemSkillDefinition, POTION_SKILLS, SHIELD_SKILLS, SKILLS_BY_CLASS } from '../behavior/itemSkillBalance';
 
-/** Deterministic hash-to-[0,1) — NOT Math.random(). Legendary shop-preview slots
- *  (DraftRoom.updateShop / revalidateUpgradePreviews) rebuild on every 1s aura tick and on
- *  every buy/sell/drink; a random roll would make the displayed skill flicker constantly. This
- *  seed is stable for as long as (playerId, itemId, skillRollNonce) doesn't change — i.e. for the
- *  item's whole life once it leaves the shop (DraftRoom.updateShop stamps a fresh
- *  item.skillRollNonce on every unowned shop slot on every reroll, so the preview can change
- *  before purchase, then freezes the instant the item is bought/owned) — so an owned item's
- *  preview always shows exactly what buying/upgrading it will grant. */
-function seededRandom(...parts: number[]): number {
-  let h = 2166136261;
-  for (const p of parts) {
-    h ^= Math.trunc(p);
-    h = Math.imul(h, 16777619);
-  }
-  h ^= h >>> 15;
-  h = Math.imul(h, 2246822519);
-  h ^= h >>> 13;
-  h = Math.imul(h, 3266489917);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
+/** True when `def` is still a legal roll for `item` — i.e. it's in `item`'s pool (class/shield)
+ *  and at least one of its `slots` overlaps `item.equipOptions`. Shared by rollItemSkill's own
+ *  filter and refreshFutureItemSkill's latch check, so a rebalance that moves a skill out of an
+ *  item's eligible slots is honored the same way in both places. */
+export function isSkillEligibleForItem(def: ItemSkillDefinition, item: Item): boolean {
+  const pool = item.type === ItemType.SHIELD ? SHIELD_SKILLS : SKILLS_BY_CLASS[item.class as ItemClass];
+  if (!pool || !pool.includes(def)) return false;
+  const equipOptions = new Set(Array.from(item.equipOptions));
+  return def.slots.some((s) => equipOptions.has(s));
 }
 
 /** Rolls a skill for `item` from its pool — the shield-only pool for any ItemType.SHIELD
@@ -34,14 +23,11 @@ function seededRandom(...parts: number[]): number {
  *  fire — see itemSkillBalance.ts). Returns null for non-class, non-shield items or an item whose
  *  equipOptions don't overlap any skill's slot list.
  *
- *  Spread fix: narrows the eligible pool to whichever skill(s) this player has used the LEAST
- *  among their other owned items before doing the seeded pick (falling back to an even seeded
- *  pick only among ties), instead of sampling uniformly across the whole pool every time. Sampling
- *  independently per item let several items land on the same popular skill while another skill
- *  never showed up on anything the player owned. Only counts items that have ALREADY been
- *  granted a real skillId/skillId2 (not other items' unrolled previews), so the result is stable
- *  across repeated preview calls in the same tick and only shifts when a new item genuinely rolls
- *  a real skill. */
+ *  Uniform random pick across the slot-eligible pool — no coordination against the player's other
+ *  items. Two items (or two copies of the same item) can land on the same skill; that's by design.
+ *  Safe to call with `Math.random()` rather than a seeded hash because every caller latches the
+ *  result the moment it's rolled (refreshFutureItemSkill for the preview, applyRarityUpgrade for
+ *  the real grant) instead of re-rolling on every tick — see refreshFutureItemSkill's doc comment. */
 export function rollItemSkill(item: Item, player: Player, options?: { exclude?: number }): ItemSkillDefinition | null {
   // Quest items (e.g. Gambler's Dice, tagged 'merchant' for set-bonus purposes only) run their
   // own bespoke rarity/behavior progression outside applyRarityUpgrade's Legendary gate — same
@@ -58,34 +44,7 @@ export function rollItemSkill(item: Item, player: Player, options?: { exclude?: 
   if (options?.exclude) slotEligible = slotEligible.filter((def) => def.id !== options.exclude);
   if (slotEligible.length === 0) return null;
 
-  const usage = new Map<number, number>(slotEligible.map((def) => [def.id, 0]));
-  const countUsage = (i: Item) => {
-    if (i === item) return;
-    if (i.skillId && usage.has(i.skillId)) usage.set(i.skillId, usage.get(i.skillId)! + 1);
-    if (i.skillId2 && usage.has(i.skillId2)) usage.set(i.skillId2, usage.get(i.skillId2)! + 1);
-  };
-  player.equippedItems.forEach(countUsage);
-  player.inventory.forEach(countUsage);
-  const minUsage = Math.min(...slotEligible.map((def) => usage.get(def.id)!));
-  const leastUsed = slotEligible.filter((def) => usage.get(def.id) === minUsage);
-
-  // Count owned copies of this same itemId that have already rolled a skill, so two copies of
-  // one item don't always land on the identical skill among the tied candidates above (the seed
-  // below is otherwise a pure function of playerId+itemId). Stable across the 1s aura-tick
-  // preview rebuilds — a granted skillId is latched (see applyRarityUpgrade's `if
-  // (!target.skillId)` guard) and persisted, so this never flickers the shop the way an
-  // inventory-index discriminator would. Excludes dual-wield ghost copies, which clone skillId
-  // from the real weapon rather than rolling.
-  let copyIndex = 0;
-  const countCopy = (i: Item) => {
-    if (i !== item && i.itemId === item.itemId && i.skillId && !i.tags?.includes('dual_wield_copy')) copyIndex++;
-  };
-  player.equippedItems.forEach(countCopy);
-  player.inventory.forEach(countCopy);
-
-  const seed = seededRandom(player.playerId, item.itemId, ItemRarity.LEGENDARY, copyIndex, item.skillRollNonce || 0);
-  const index = Math.min(Math.floor(seed * leastUsed.length), leastUsed.length - 1);
-  return leastUsed[index];
+  return slotEligible[Math.floor(Math.random() * slotEligible.length)];
 }
 
 /** Locks in a rolled skill on `item`: sets the display fields and unions the skill's trigger
@@ -121,17 +80,14 @@ export function grantItemSkill2(item: Item, def: ItemSkillDefinition): void {
 /** Grants a Health Flask (or any item.type === 'potion') its brew if it doesn't have one yet —
  *  same idempotent-latch shape as ensureShieldSkill above, called from the same sweep sites plus
  *  DraftRoom.rebuildShopSlot. Deliberately does NOT go through rollItemSkill: a potion is a
- *  one-shot consumable, not gear the player builds around, so there's no `slots` filter and no
- *  least-used spread to coordinate against other owned items — just a flat seeded pick across
- *  POTION_SKILLS. Reroll agency comes from item.skillRollNonce exactly like class/shield skills:
- *  DraftRoom.updateShop stamps a fresh nonce on every unowned shop slot per shop build, so a
- *  flask's brew changes on reroll and freezes the moment it's bought. */
+ *  one-shot consumable, not gear the player builds around, so there's no `slots` filter to apply —
+ *  just a flat random pick across POTION_SKILLS, latched by the `!item.skillId` guard below the
+ *  moment it's rolled (a fresh shop roll is a new object with skillId unset, so rerolling still
+ *  varies the brew on offer; buying/owning freezes it). */
 export function ensurePotionEffect(item: Item, player: Player): void {
   if (item.type !== 'potion' || item.skillId) return;
   if (POTION_SKILLS.length === 0) return;
-  const seed = seededRandom(player.playerId, item.itemId, item.skillRollNonce || 0);
-  const index = Math.min(Math.floor(seed * POTION_SKILLS.length), POTION_SKILLS.length - 1);
-  const def = POTION_SKILLS[index];
+  const def = POTION_SKILLS[Math.floor(Math.random() * POTION_SKILLS.length)];
   grantItemSkill(item, def);
   // A flask is titled by what it does — "Stoneskin", "Antidote", etc. — rather than the generic
   // Mongo template name, since the template covers seven different rolled effects now. Latched by
@@ -191,16 +147,17 @@ export function reconcileItemSkill2(item: Item): void {
   });
 }
 
-/** Fills item.futureSkill*(Id/Name/Description) with the skill this class item WOULD roll right
- *  now if it reached Legendary — reuses rollItemSkill, so it reflects the same coordinated spread
- *  against the player's other owned items (see rollItemSkill's doc comment). This means the
- *  preview can shift as the player's other items develop, not just once picked at random and
- *  fixed forever — an honest "current best guess" rather than a promise fixed the moment the item
- *  is acquired. Clears the fields once they're no longer meaningful: shields (which already roll
- *  from Common — no "future" state for them), a non-class item, or an item that already has a
- *  real skillId (the real skill supersedes the preview) or has already reached Legendary. Cheap
- *  and idempotent — safe to call every aura tick, same contract as ensureShieldSkill; called from
- *  exactly the same sweep sites. */
+/** Fills item.futureSkill*(Id/Name/Description) with the skill this class item WILL roll once it
+ *  reaches Legendary. LATCHED: the first time this runs for an item (no existing futureSkillId, or
+ *  one that's no longer a legal roll — e.g. a rebalance moved it out of this item's slots), it
+ *  calls rollItemSkill for a fresh uniform-random pick and keeps that id from then on, only
+ *  re-describing it from the current ITEM_SKILLS table on later calls. This is what makes the
+ *  shop-preview text an actual promise instead of a value that could be re-rolled out from under
+ *  the player on the next aura tick. Clears the fields once they're no longer meaningful: shields
+ *  (which already roll from Common — no "future" state for them), a non-class item, or an item
+ *  that already has a real skillId (the real skill supersedes the preview) or has already reached
+ *  Legendary. Cheap and idempotent — safe to call every aura tick, same contract as
+ *  ensureShieldSkill; called from exactly the same sweep sites. */
 export function refreshFutureItemSkill(item: Item, player: Player): void {
   const eligible = item.type !== ItemType.SHIELD && !!item.class && !item.skillId && item.rarity < ItemRarity.LEGENDARY;
   if (!eligible) {
@@ -211,6 +168,18 @@ export function refreshFutureItemSkill(item: Item, player: Player): void {
     }
     return;
   }
+
+  if (item.futureSkillId) {
+    const latched = ITEM_SKILLS[item.futureSkillId];
+    if (latched && isSkillEligibleForItem(latched, item)) {
+      item.futureSkillName = latched.name;
+      item.futureSkillDescription = latched.describe(ItemRarity.LEGENDARY);
+      return;
+    }
+    // Latch is no longer valid (skill removed/rebalanced out of this item's slots) — fall through
+    // to a fresh roll rather than keep showing a promise this item can never actually fire.
+  }
+
   const def = rollItemSkill(item, player);
   if (!def) {
     if (item.futureSkillId) {

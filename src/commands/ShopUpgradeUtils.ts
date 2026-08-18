@@ -4,7 +4,8 @@ import { ItemRarity, ItemType } from '../items/types/ItemTypes';
 import { cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { TalentType } from '../talents/types/TalentTypes';
-import { ensureShieldSkill, grantItemSkill, refreshFutureItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
+import { ensureShieldSkill, grantItemSkill, isSkillEligibleForItem, refreshFutureItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
+import { ITEM_SKILLS } from '../items/behavior/itemSkillBalance';
 import {
   BURN_DAMAGE_PER_STACK,
   BURN_DURATION_MS,
@@ -98,7 +99,14 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
     refreshItemSkillDescription(target);
   } else if (target.class && target.rarity >= ItemRarity.LEGENDARY) {
     if (!target.skillId) {
-      const def = rollItemSkill(target, player);
+      // Honor whatever the shop/inventory preview already promised (item.futureSkillId — see
+      // refreshFutureItemSkill's latch) rather than rolling fresh here: a fresh roll is
+      // independently random and would silently grant a different skill than the one the player
+      // was shown. Only falls back to a genuine roll when there's no usable latch — quest items,
+      // shields (routed through the branch above), or an item that reached Legendary without ever
+      // previewing (e.g. a talent instantly maxing an item's rarity).
+      const latched = target.futureSkillId ? ITEM_SKILLS[target.futureSkillId] : null;
+      const def = latched && isSkillEligibleForItem(latched, target) ? latched : rollItemSkill(target, player);
       if (def) grantItemSkill(target, def);
     } else {
       refreshItemSkillDescription(target);

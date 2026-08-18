@@ -194,7 +194,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHADOWSTEP], r);
-      return `Each dodge heals ${pct(v.healRatio)} of your max HP, but costs you ${v.dodgeCost} dodge rate for the rest of the fight.`;
+      return `Each dodge heals ${pct(v.healRatio)} of your max HP, but costs you ${v.dodgeCost}% dodge rating for the rest of the fight.`;
     },
     status: (ctx) => (ctx.inFight ? `${fmt(-ctx.item.skillAffectedStats.dodgeRate)} dodge rate spent this fight` : ''),
   },

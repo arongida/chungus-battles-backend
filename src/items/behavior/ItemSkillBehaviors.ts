@@ -93,7 +93,8 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     // Accumulating -= write (unlike every AURA skill's self-clearing =) — the cost is meant to
     // persist for the rest of the fight; FIGHT_END above is the only reset. Clamp against the
     // live dodgeRate so this can't drive the stat negative once other sources also touch it.
-    const consumed = Math.min(dodgeCost, Math.max(0, defender.dodgeRate));
+    const dodgeCostValue = dodgeCost * defender.dodgeRate * 0.01;
+    const consumed = Math.min(dodgeCostValue, Math.max(0, defender.dodgeRate));
     if (consumed > 0) item.skillAffectedStats.dodgeRate -= consumed;
     client?.send('combat_log', {
       text: `${defender.name}'s ${item.name} melts into the shadows: +${fmt(healed)} HP, ${consumed} dodge rate spent.`,
