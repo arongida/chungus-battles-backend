@@ -214,8 +214,8 @@ export class DraftRoom extends Room {
                     : await getPlayer(loadedPlayer.nextFightEnemyId);
             }
             if (!enemy) {
-                enemy = await getSameRoundPlayer(round, playerId); // existing pool + recursive fallback
-                await setNextFightEnemy(playerId, enemy?.playerId ?? null, round);
+                enemy = await getSameRoundPlayer(round, playerId, loadedPlayer.recentOpponentIds ?? []); // existing pool + recursive fallback, avoiding recent repeats
+                await setNextFightEnemy(playerId, enemy?.playerId ?? null, round, enemy?.originalPlayerId);
             }
         }
         const revealLevel = round === 1 ? EnemyRevealLevel.FULL : EnemyRevealLevel.IDENTITY;

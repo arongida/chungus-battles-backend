@@ -25,6 +25,7 @@ export const SEASONS: SeasonInfo[] = [
       'Starting strength 3 → 5 and starting accuracy 1 → 2, so early fights keep pace with the bigger health pools instead of dragging toward the end-burn timer',
       'End burn\'s starting damage now scales with the fight\'s max HP instead of a flat 10, so it resolves at a consistent speed across the wider range of health pools',
       'Titan\'s Might and Iron Hide divisors raised ~20%, and Chungi\'s max-HP-to-damage fraction lowered ~20%, to hold their late-game output roughly steady against the bigger health pools',
+      'Matchmaking no longer repeats an opponent you fought in the last 3 rounds while a fresher same-round opponent is available',
     ]
   },
   {

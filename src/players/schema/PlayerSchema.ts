@@ -137,6 +137,11 @@ export class Player extends Schema implements IStats {
     // getPlayer() result instead (see FightRoom.onJoin).
     nextFightEnemyId: number;
     nextFightEnemyRound: number;
+    // Recently fought opponents (originalPlayerIds, oldest → newest, capped at
+    // RECENT_OPPONENT_MEMORY) — used by getSameRoundPlayer to avoid repeat matchmaking. Same
+    // server-only treatment as nextFightEnemyId/Round above: not @type, not in
+    // playerToPlainObject/snapshotPlayer, persisted via setNextFightEnemy's targeted $push/$slice.
+    recentOpponentIds: number[];
     // "Runs ended" leaderboard stat. Persisted ONLY via Player.ts's incrementRunsEnded ($inc on
     // the killer's original doc) + read back via the leaderboard's $max aggregation. Deliberately
     // NOT @type and NOT in playerToPlainObject — it must never round-trip through live room state

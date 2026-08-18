@@ -41,6 +41,11 @@ const PlayerSchema = new Schema({
     // snapshotPlayer so matchmaking snapshots never carry a stale enemy pointer.
     nextFightEnemyId: Number,
     nextFightEnemyRound: Number,
+    // Recently fought opponents (originalPlayerIds, oldest → newest, capped at
+    // RECENT_OPPONENT_MEMORY). Written only by setNextFightEnemy's targeted $push/$slice —
+    // deliberately NOT part of playerToPlainObject/snapshotPlayer, so a matchmaking snapshot
+    // never carries the original character's fight history.
+    recentOpponentIds: {type: [Number], default: []},
     pendingRegenBuff: {type: Number, default: 0},
     // Permanent Lucky Find snowball bonus (see PlayerSchema.luckyFindMythicBonus) — persisted
     // normally, unlike pendingRegenBuff it is NOT reset in copyPlayer since it only affects the
@@ -69,6 +74,10 @@ PlayerSchema.index({ wins: -1, originalPlayerId: -1, playerId: 1 });
 // Backs the "All Characters" leaderboard recency sort ({$sort: {playerId:-1}}) and getNextPlayerId's
 // findOne().sort({playerId:-1}) — without it those blocking-sort the whole collection and exceed the 32MB sort limit.
 PlayerSchema.index({ playerId: -1 });
+// Backs matchmaking's candidate scan in getSameRoundPlayer — the {playerId, originalPlayerId}
+// projection is fully covered by this index, so the per-round pool is read straight from the
+// index instead of scanning and materializing every player document in the collection.
+PlayerSchema.index({ round: 1, gameVersion: 1, originalPlayerId: 1, playerId: 1 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
 
@@ -567,6 +576,9 @@ export async function getWallOfFame({ limit = 20, skip = 0, season }: { limit?: 
 }
 
 export const JOE_PLAYER_ID = 0;
+// How many of the most recent opponents (by originalPlayerId) getSameRoundPlayer will avoid
+// re-drawing, as long as the round's in-season pool has a fresher candidate available.
+export const RECENT_OPPONENT_MEMORY = 3;
 
 export async function buildJoe(forPlayerId: number): Promise<Player> {
     const avatarArray = Array.from(Object.values(PlayerAvatar));
@@ -585,11 +597,53 @@ export async function buildJoe(forPlayerId: number): Promise<Player> {
     return joe;
 }
 
-export async function setNextFightEnemy(playerId: number, enemyId: number, round: number) {
-    await playerModel.updateOne({ playerId }, { $set: { nextFightEnemyId: enemyId, nextFightEnemyRound: round } });
+export async function setNextFightEnemy(playerId: number, enemyId: number, round: number, enemyOriginalId?: number) {
+    const update: any = { $set: { nextFightEnemyId: enemyId, nextFightEnemyRound: round } };
+    // Joe (round 1) is synthetic and never persisted, so he never occupies a history slot.
+    if (enemyOriginalId != null && enemyOriginalId !== JOE_PLAYER_ID) {
+        update.$push = { recentOpponentIds: { $each: [enemyOriginalId], $slice: -RECENT_OPPONENT_MEMORY } };
+    }
+    await playerModel.updateOne({ playerId }, update);
 }
 
-export async function getSameRoundPlayer(round: number, playerId: number): Promise<Player> {
+interface OpponentCandidate {
+    playerId: number;
+    originalPlayerId: number;
+}
+
+/** Picks one snapshot playerId out of `candidates`, preferring characters not in `recentIds`.
+ *  Dedupes by originalPlayerId first, so a character with several snapshots at this round isn't
+ *  drawn more often than one with a single snapshot. Falls back to the LEAST recently fought
+ *  character (earliest position in `recentIds`, which is stored oldest → newest) when every
+ *  candidate has been fought recently. Returns null when `candidates` is empty. */
+export function pickVariedOpponent(candidates: OpponentCandidate[], recentIds: number[] = []): number | null {
+    if (!candidates.length) return null;
+
+    // Dedupe by originalPlayerId, keeping one representative snapshot playerId per character.
+    const byOriginal = new Map<number, number>();
+    for (const c of candidates) byOriginal.set(c.originalPlayerId, c.playerId);
+
+    const fresh = [...byOriginal.entries()].filter(([originalId]) => !recentIds.includes(originalId));
+    if (fresh.length) {
+        const [, playerId] = fresh[Math.floor(Math.random() * fresh.length)];
+        return playerId;
+    }
+
+    // Everyone available has been fought recently — pick whoever is earliest in recentIds
+    // (i.e. fought longest ago). Every candidate here is guaranteed to be in recentIds.
+    let leastRecentOriginalId: number | null = null;
+    let leastRecentIndex = Infinity;
+    for (const originalId of byOriginal.keys()) {
+        const idx = recentIds.indexOf(originalId);
+        if (idx !== -1 && idx < leastRecentIndex) {
+            leastRecentIndex = idx;
+            leastRecentOriginalId = originalId;
+        }
+    }
+    return leastRecentOriginalId !== null ? byOriginal.get(leastRecentOriginalId) : null;
+}
+
+export async function getSameRoundPlayer(round: number, playerId: number, recentOpponentIds: number[] = []): Promise<Player> {
     if (round < 1) {
         const defaultPlayerClone = await playerModel
             .findOne({originalPlayerId: playerId, playerId: {$ne: playerId}})
@@ -602,19 +656,19 @@ export async function getSameRoundPlayer(round: number, playerId: number): Promi
     }
 
     const baseMatch = {round, originalPlayerId: {$ne: playerId}};
+    const projection = {playerId: 1, originalPlayerId: 1, _id: 0};
 
-    const [sameVersion] = await playerModel.aggregate([
-        {$match: {...baseMatch, gameVersion: GAME_VERSION}},
-        {$sample: {size: 1}},
-    ]);
-    if (sameVersion) return getPlayerSchemaObject(sameVersion);
+    const sameVersion = await playerModel
+        .find({...baseMatch, gameVersion: GAME_VERSION}, projection)
+        .lean();
+    let pickedId = pickVariedOpponent(sameVersion as OpponentCandidate[], recentOpponentIds);
 
-    const [anyVersion] = await playerModel.aggregate([
-        {$match: baseMatch},
-        {$sample: {size: 1}},
-    ]);
-    if (anyVersion) return getPlayerSchemaObject(anyVersion);
+    if (pickedId === null) {
+        const anyVersion = await playerModel.find(baseMatch, projection).lean();
+        pickedId = pickVariedOpponent(anyVersion as OpponentCandidate[], recentOpponentIds);
+    }
+    if (pickedId !== null) return getPlayer(pickedId);
 
     console.log('No player found for round', round, '— trying round', round - 1);
-    return getSameRoundPlayer(round - 1, playerId);
+    return getSameRoundPlayer(round - 1, playerId, recentOpponentIds);
 }
