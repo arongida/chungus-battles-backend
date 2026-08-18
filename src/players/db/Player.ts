@@ -9,7 +9,7 @@ import {StatsSchema} from "../../common/db/Stats";
 import {affectedStatsFromRaw} from "../../common/schema/AffectedStatsSchema";
 import {EquipSlot} from '../../items/types/ItemTypes';
 import {rollItemStats} from "../../items/stats/itemStatRoller";
-import {ensureShieldSkill, reconcileItemSkill, reconcileItemSkill2, refreshFutureItemSkill} from "../../items/skills/itemSkillRoller";
+import {ensurePotionEffect, ensureShieldSkill, reconcileItemSkill, reconcileItemSkill2, refreshFutureItemSkill} from "../../items/skills/itemSkillRoller";
 import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 import {recalculatePlayerStats} from "../../common/statsUtils";
@@ -46,7 +46,11 @@ const PlayerSchema = new Schema({
     // deliberately NOT part of playerToPlainObject/snapshotPlayer, so a matchmaking snapshot
     // never carries the original character's fight history.
     recentOpponentIds: {type: [Number], default: []},
-    pendingRegenBuff: {type: Number, default: 0},
+    // Health Flask brews banked in the draft for the wearer's next fight only — one skillId per
+    // flask drunk (see PlayerSchema.pendingPotionEffects). Replaces the old flat pendingRegenBuff
+    // field (removed — Mongoose documents aren't order-sensitive like the Colyseus wire schema).
+    pendingPotionEffects: {type: [Number], default: []},
+    pendingPotionSummary: {type: String, default: ''},
     // Permanent Lucky Find snowball bonus (see PlayerSchema.luckyFindMythicBonus) — persisted
     // normally, unlike pendingRegenBuff it is NOT reset in copyPlayer since it only affects the
     // owner's own future shop rolls, never an opponent-bot snapshot's fight stats.
@@ -136,10 +140,17 @@ function buildItemSchema(itemFromDb: any): Item {
 }
 
 function getPlayerSchemaObject(playerFromDb: any): Player {
-    const { baseStats, equippedItems, talents, inventory, lockedShop, ...primitives } = playerFromDb;
+    const { baseStats, equippedItems, talents, inventory, lockedShop, pendingPotionEffects, ...primitives } = playerFromDb;
 
     const newPlayerSchemaObject = new Player().assign(primitives);
     newPlayerSchemaObject.baseStats = affectedStatsFromRaw(baseStats);
+
+    // Rebuilt manually rather than left in `primitives` — same "ArraySchema must be rebuilt
+    // manually" reasoning as talents/inventory/lockedShop below (see CLAUDE.md's DB->Schema
+    // pattern), even though this is a plain-number array rather than a Schema-object array.
+    const newPlayerPendingPotionEffectsArraySchema = new ArraySchema<number>();
+    (pendingPotionEffects || []).forEach((skillId: number) => newPlayerPendingPotionEffectsArraySchema.push(skillId));
+    newPlayerSchemaObject.pendingPotionEffects = newPlayerPendingPotionEffectsArraySchema;
 
     const newPlayerEquippedItemsMapSchema = new MapSchema();
     if (equippedItems) {
@@ -183,6 +194,13 @@ function getPlayerSchemaObject(playerFromDb: any): Player {
     newPlayerSchemaObject.equippedItems.forEach((item) => ensureShieldSkill(item, newPlayerSchemaObject));
     newPlayerSchemaObject.inventory.forEach((item) => ensureShieldSkill(item, newPlayerSchemaObject));
     newPlayerSchemaObject.lockedShop.forEach((item) => ensureShieldSkill(item, newPlayerSchemaObject));
+
+    // Health Flask brews — same load-time back-fill as ensureShieldSkill above, for a flask
+    // saved before this rework (or otherwise granted with no skillId yet). Never equippedItems:
+    // potions are consumed straight out of inventory (DraftRoom.drinkItem) and can never be
+    // equipped.
+    newPlayerSchemaObject.inventory.forEach((item) => ensurePotionEffect(item, newPlayerSchemaObject));
+    newPlayerSchemaObject.lockedShop.forEach((item) => ensurePotionEffect(item, newPlayerSchemaObject));
 
     // Legendary skill preview (item.futureSkill*) — same load-time sweep as ensureShieldSkill above.
     newPlayerSchemaObject.equippedItems.forEach((item) => refreshFutureItemSkill(item, newPlayerSchemaObject));
@@ -267,9 +285,10 @@ export async function copyPlayer(player: Player): Promise<Player> {
         ...playerToPlainObject(player),
         playerId: await getNextPlayerId(),
         // This snapshot is only ever read back as a future opponent bot — it never plays through
-        // its own FightRoom.handleFightEnd, so a banked Health Flask regen buff would otherwise
-        // leak in permanently and grant free regen every time this snapshot is drawn as an enemy.
-        pendingRegenBuff: 0,
+        // its own FightRoom.handleFightEnd, so a banked Health Flask brew would otherwise leak in
+        // permanently and grant its effect every time this snapshot is drawn as an enemy.
+        pendingPotionEffects: [] as number[],
+        pendingPotionSummary: '',
     };
 
     const newPlayer = new playerModel(newPlayerObject);
@@ -381,7 +400,8 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         accuracy: player.accuracy,
         defense: player.defense,
         attackSpeed: player.attackSpeed,
-        pendingRegenBuff: player.pendingRegenBuff,
+        pendingPotionEffects: Array.from(player.pendingPotionEffects),
+        pendingPotionSummary: player.pendingPotionSummary,
         luckyFindMythicBonus: player.luckyFindMythicBonus,
         rerollsThisRound: player.rerollsThisRound,
         killedByPlayerId: player.killedByPlayerId,

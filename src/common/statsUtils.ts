@@ -1,6 +1,8 @@
 import {Player} from '../players/schema/PlayerSchema';
 import {AffectedStats} from './schema/AffectedStatsSchema';
 import {POISON_HEALING_EFFECTIVENESS} from './poisonBalance';
+import {ITEM_SKILLS, skillValues} from '../items/behavior/itemSkillBalance';
+import {ItemRarity} from '../items/types/ItemTypes';
 
 export interface StatsSnapshot {
     strength: number;
@@ -102,6 +104,25 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
         });
     }
 
+    // Health Flask brews: the stat-granting ones (Regeneration/Evasion/Stoneskin/Fortitude) fold
+    // straight into the snapshot alongside every other item/talent source — see
+    // PlayerSchema.pendingPotionEffects. Folding into the snapshot (rather than adding to
+    // player.hpRegen/dodgeRate/etc. after assignment, as the old single-effect pendingRegenBuff
+    // did) means an Evasion brew's dodge bonus is correctly zeroed by the Zealot/stun check below
+    // like any other dodge source, instead of bypassing it. Antidote and Salve grant no stats —
+    // they're read directly via getPoisonDamageMultiplier/getBurnDamageMultiplier (FightRoom.ts's
+    // poison/burn tick calculations); Liquid Courage is read directly in FightRoom.startBattle —
+    // so none of the three contribute anything here.
+    player.pendingPotionEffects.forEach((skillId) => {
+        const def = ITEM_SKILLS[skillId];
+        if (!def) return;
+        const v = skillValues(def, ItemRarity.COMMON);
+        snapshot.hpRegen += v.hpRegen || 0;
+        snapshot.dodgeRate += v.dodgeRate || 0;
+        snapshot.defense += v.defense || 0;
+        snapshot.maxHp += v.maxHp || 0;
+    });
+
     // Assign once: neutralize accuracy first so the strength setter can't clamp up to a
     // stale value, then strength, then accuracy (its setter clamps to min(accuracy, strength)).
     player.accuracy = 1;
@@ -119,10 +140,6 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
 
     player.attackSpeedMultiplier = attackSpeedMultiplier;
     player.attackSpeed = player.attackSpeedMultiplier;
-    // Health Flask: a banked one-fight regen buff (see PlayerSchema.pendingRegenBuff) folds
-    // straight into the recomputed hpRegen, so it shows up immediately in the draft UI and
-    // drives FightRoom.startRegenTimer during the player's next fight with no separate field.
-    player.hpRegen += player.pendingRegenBuff || 0;
     player.hp = player.maxHp - damageTaken;
     // Flat 50% cut while poisoned at all — does not scale with stack count. Stacking poison
     // now only increases DoT damage, not the healing penalty (see poisonBalance.ts).

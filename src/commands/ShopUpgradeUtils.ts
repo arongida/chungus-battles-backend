@@ -149,6 +149,11 @@ export const BASE_REFRESH_SHOP_COST = 2;
 /** Bargain Hunter's reroll-cost multiplier (halved). */
 export const BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER = 0.5;
 
+/** Base (un-modified) active-potion capacity, seeded onto Player.potionCapacity each draft aura
+ *  tick before aura talents run; Flash Sale (MERCHANT_1) adds to it while owned — see
+ *  DraftRoom.drinkItem for where the cap is actually enforced. */
+export const BASE_POTION_CAPACITY = 1;
+
 /** Reroll cost after multipliers: floored, never below 1 (no free/negative-cost rerolls). */
 export function applyRefreshCostMultiplier(cost: number, multiplier: number): number {
     return Math.max(1, Math.floor(cost * multiplier));

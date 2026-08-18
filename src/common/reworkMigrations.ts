@@ -108,6 +108,22 @@ export function migrateLegacyTalent(talent: Talent): void {
         if (!talent.tags.includes('merchant')) talent.tags.push('merchant');
     }
 
+    // Flash Sale (MERCHANT_1, 103): reworked from a per-refresh shop-wide price discount into a
+    // potion-themed talent — grants a free Health Flask the moment it's picked and every round
+    // after (SHOP_START), and raises active-potion capacity by 1 while owned (AURA) — see
+    // TalentBehaviors.ts's grantFlashSaleFlask. A pre-rework copy is still sitting on
+    // `after-refresh`, which the new behavior no longer reads at all (it branches on AURA/
+    // SHOP_START only), so without this it would silently do nothing forever. Written as an
+    // unconditional normalize, same idiom as the VIP Pass branch above, so it's a harmless no-op
+    // once migrated.
+    if (talent.talentId === TalentType.MERCHANT_1) {
+        talent.triggerTypes.clear();
+        talent.triggerTypes.push(TriggerType.SHOP_START, TriggerType.AURA);
+        talent.description = 'Get a free Health Flask the moment you pick this, and another every round after. +1 active potion capacity.';
+        talent.base = 0;
+        talent.scaling = 0;
+    }
+
     // Martial Artist (37): reworked Season 24 to also grant one free weapon the moment the
     // talent is picked, not just on level-up (TalentBehaviors.ts). The on-pick grant itself is
     // latched on talent.tags at runtime, so a pre-rework copy retroactively earns its one-time

@@ -40,4 +40,16 @@ export enum ItemSkillType {
   SHIELD_WALL = 403,
   SHIELD_BASH = 404,
   BRACE = 405,
+
+  // Health Flask brews (itemType 'potion') — rolled per shop slot (see itemSkillRoller.ts's
+  // ensurePotionEffect), banked on drink (DraftRoom.drinkItem), spent by the wearer's next fight
+  // only (PlayerSchema.pendingPotionEffects). Not dispatched via ItemSkillBehaviors — potions are
+  // never equipped, so nothing would ever call executeBehavior on them.
+  REGENERATION = 501,
+  ANTIDOTE = 502,
+  EVASION = 503,
+  STONESKIN = 504,
+  FORTITUDE = 505,
+  LIQUID_COURAGE = 506,
+  SALVE = 507,
 }

@@ -26,6 +26,8 @@ export const SEASONS: SeasonInfo[] = [
       'End burn\'s starting damage now scales with the fight\'s max HP instead of a flat 10, so it resolves at a consistent speed across the wider range of health pools',
       'Titan\'s Might and Iron Hide divisors raised ~20%, and Chungi\'s max-HP-to-damage fraction lowered ~20%, to hold their late-game output roughly steady against the bigger health pools',
       'Matchmaking no longer repeats an opponent you fought in the last 3 rounds while a fresher same-round opponent is available',
+      'Class item and shield skills are no longer locked in for the character\'s whole life the moment they\'re rolled — rerolling the shop can now reroll the skill an unowned item is offering (an item you already own, or its shop upgrade preview, is never affected)',
+      'Health Flask reworked: no longer a flat +10 HP regen — now rolls one of six brews (Regeneration, Antidote, Evasion, Stoneskin, Fortitude, Liquid Courage) shown on the card before you buy, banked for your next fight only',
     ]
   },
   {
