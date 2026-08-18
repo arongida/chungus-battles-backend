@@ -51,16 +51,16 @@ export class DraftRoom extends Room {
             await this.buyItem(message.itemId, client);
         });
         this.onMessage('sell', async (client, message) => {
-            await this.sellItem(message.itemId);
+            await this.sellItem(message.uid);
         });
         this.onMessage('undo_sell', (client) => {
             this.undoSell(client);
         });
         this.onMessage('equip', async (client, message) => {
-            await this.equipItem(message.itemId, message.slot, client);
+            await this.equipItem(message.uid, message.slot, client);
         });
         this.onMessage('unequip', async (client, message) => {
-            await this.unequipItem(message.itemId, message.slot);
+            await this.unequipItem(message.uid, message.slot);
         });
         this.onMessage('refresh_shop', (client) => {
             this.refreshShop(client);
@@ -543,8 +543,8 @@ export class DraftRoom extends Room {
         await this.revalidateUpgradePreviews();
     }
 
-    private async sellItem(itemId: number) {
-        const item = this.state.player.inventory.find((item) => item.itemId === itemId);
+    private async sellItem(uid: number) {
+        const item = this.state.player.inventory.find((item) => item.uid === uid);
         if (!item) return;
         const goldBefore = this.state.player.gold;
         const sold = await this.state.player.sellItem(item);
@@ -691,21 +691,21 @@ export class DraftRoom extends Room {
         }
     }
 
-    private async equipItem(itemId: number, slot: EquipSlot | string, client: Client) {
+    private async equipItem(uid: number, slot: EquipSlot | string, client: Client) {
         if (slot === 'drink') {
-            await this.drinkItem(itemId, client);
+            await this.drinkItem(uid, client);
             return;
         }
-        const item = this.state.player.inventory.find((item) => item.itemId === itemId);
+        const item = this.state.player.inventory.find((item) => item.uid === uid);
         if (!item) return;
         const equipOptions = Array.from(item.equipOptions as any as Iterable<string>);
         if (!equipOptions.includes(slot as string)) return;
         this.state.player.setItemEquipped(item, slot as EquipSlot);
     }
 
-    private async unequipItem(itemId: number, slot: EquipSlot) {
+    private async unequipItem(uid: number, slot: EquipSlot) {
         const item = this.state.player.equippedItems.get(slot);
-        if (!item || item.itemId !== itemId) return;
+        if (!item || item.uid !== uid) return;
         this.state.player.setItemUnequipped(item, slot);
     }
 
@@ -764,8 +764,8 @@ export class DraftRoom extends Room {
         client.send('message', 'shop unlocked');
     }
 
-    private async drinkItem(itemId: number, client: Client) {
-        const item = this.state.player.inventory.find((item) => item.itemId === itemId);
+    private async drinkItem(uid: number, client: Client) {
+        const item = this.state.player.inventory.find((item) => item.uid === uid);
         if (!item) {
             return;
         }

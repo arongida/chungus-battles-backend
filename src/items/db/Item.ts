@@ -55,6 +55,15 @@ export const ItemSchema = new Schema({
 
 export const itemModel = mongoose.model('Item', ItemSchema);
 
+// Runtime-only per-instance id (Item.uid) — process-lifetime counter, never persisted. Every
+// item construction (fresh DB roll, cloneItem round-trip, players/db/Player.ts's buildItemSchema,
+// etc.) hands out the next value via nextItemUid() so stacked duplicate-itemId items (two
+// potions, two rings) remain individually addressable.
+let itemUidCounter = 1;
+export function nextItemUid(): number {
+    return itemUidCounter++;
+}
+
 export async function getNumberOfItems(
     numberOfItems: number,
     levelRequirement: number,
@@ -96,9 +105,12 @@ function getItemSchemaObject(itemFromDb: any): Item {
     // makes an owned item's Legendary-skill preview a real promise instead of re-rolling every
     // tick (see itemSkillRoller.ts's refreshFutureItemSkill), so it must survive both a DB load
     // and a cloneItem() round-trip the same way skillId does.
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, skillAffectedStats2, skillAffectedEnemyStats2, skillStatus2, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    // uid is excluded from `primitives` (like _id/__v) so a cloneItem() round-trip through
+    // toJSON() never carries the source instance's uid over — it's reassigned fresh below.
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, skillAffectedStats2, skillAffectedEnemyStats2, skillStatus2, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, uid, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);
+    newItemSchemaObject.uid = nextItemUid();
     if (!newItemSchemaObject.sellPrice) newItemSchemaObject.sellPrice = Math.floor(newItemSchemaObject.price * 0.7);
     newItemSchemaObject.affectedStats = affectedStatsFromRaw(affectedStats);
     newItemSchemaObject.affectedEnemyStats = affectedStatsFromRaw(affectedEnemyStats);

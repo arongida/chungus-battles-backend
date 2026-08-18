@@ -1,7 +1,7 @@
 import mongoose, {Schema, PipelineStage} from 'mongoose';
 import {Player} from '../schema/PlayerSchema';
 import {Item} from '../../items/schema/ItemSchema';
-import {getItemById, ItemSchema} from "../../items/db/Item";
+import {getItemById, ItemSchema, nextItemUid} from "../../items/db/Item";
 import {TalentSchema} from "../../talents/db/Talent";
 import {Talent} from "../../talents/schema/TalentSchema";
 import {ArraySchema, MapSchema} from "@colyseus/schema";
@@ -101,8 +101,12 @@ function buildItemSchema(itemFromDb: any): Item {
     // itemSkillRoller.ts's refreshFutureItemSkill). futureSkillId itself IS kept in `primitives`
     // — it's the latch that makes an owned item's Legendary-skill preview a promise instead of a
     // re-rolled guess, so it must survive the DB round-trip like skillId does.
-    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillAffectedStats2, skillAffectedEnemyStats2, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
+    // uid excluded from `primitives` (like _id/__v) — a loaded item always gets a fresh
+    // process-lifetime uid rather than trusting whatever (if anything) was saved, same reasoning
+    // as items/db/Item.ts's getItemSchemaObject.
+    const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillAffectedStats2, skillAffectedEnemyStats2, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, uid, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
+    item.uid = nextItemUid();
     if (!item.sellPrice) item.sellPrice = Math.floor(item.price * item.rarity * 0.7);
     item.affectedStats = affectedStatsFromRaw(affectedStats);
     item.affectedEnemyStats = affectedStatsFromRaw(affectedEnemyStats);
