@@ -1,6 +1,6 @@
 import { Client, Room } from '@colyseus/core';
 import { FightState } from './schema/FightState';
-import { buildJoe, getPlayer, getSameRoundPlayer, incrementRunsEnded, JOE_PLAYER_ID, snapshotPlayer, updatePlayer } from '../players/db/Player';
+import { buildJoe, getPlayer, getSameRoundPlayer, incrementRunsEnded, JOE_PLAYER_ID, setNextFightEnemy, snapshotPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
 import { END_BURN_START_MS, FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
@@ -238,7 +238,9 @@ export class FightRoom extends Room {
             // Locked-in snapshot deleted before the fight — rare preview mismatch, fall through.
             console.warn('[FightRoom] locked-in enemy', player.nextFightEnemyId, 'not found — falling back to random matchmaking');
         }
-        return getSameRoundPlayer(player.round, player.playerId);
+        const enemy = await getSameRoundPlayer(player.round, player.playerId, player.recentOpponentIds ?? []);
+        if (enemy) await setNextFightEnemy(player.playerId, enemy.playerId, player.round, enemy.originalPlayerId);
+        return enemy;
     }
 
     async sendFightEndToClient() {

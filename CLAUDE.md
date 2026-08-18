@@ -336,10 +336,19 @@ When a player finishes a fight and leaves DraftRoom, `copyPlayer()` creates a ne
 
 ### Enemy Matchmaking
 
-`getSameRoundPlayer(round, playerId)` logic:
+`getSameRoundPlayer(round, playerId, recentOpponentIds)` logic:
 - Round 1: Returns a fixed bot ("Joe") with starter stats and a weapon
 - `round < 1`: Returns the player's own previous copy (for testing/replay)
-- Otherwise: Random player at the same round, excluding self; falls back to `round - 1` recursively
+- Otherwise: Candidates at the same round, excluding self, preferring the current `gameVersion`
+  (falling back to any version if that pool is empty). `pickVariedOpponent` dedupes candidates by
+  `originalPlayerId` and prefers one NOT in `recentOpponentIds` (the player's last
+  `RECENT_OPPONENT_MEMORY` — currently 3 — opponents, oldest first); if every candidate has been
+  fought recently it returns the least-recently-fought one instead. Recurses to `round - 1` only
+  when the pool is completely empty.
+- The chosen opponent's `originalPlayerId` is recorded via `setNextFightEnemy`'s targeted
+  `$push`/`$slice` into the player's `recentOpponentIds` field (server-only, not part of
+  `playerToPlainObject`/`snapshotPlayer` — a matchmaking snapshot never carries its origin
+  character's fight history).
 
 ---
 
