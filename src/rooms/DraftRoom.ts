@@ -652,12 +652,13 @@ export class DraftRoom extends Room {
             rebuilt.previewBaseRarity = ownedTarget.rarity;
         } else {
             rebuilt = template;
-            // Carry the stale slot's skill-roll nonce over (mirrors the luckyFindSteps carry-over
-            // below) — a rebuild here is a stale-preview fixup, not a genuine reroll, so it must
-            // not silently reshuffle which skill an unowned item is currently offering. The
-            // ownedTarget branch above needs no such carry-over: cloneItem(ownedTarget) already
-            // inherited the owned item's own frozen nonce.
+            // Carry the stale slot's skill-roll nonce AND latched futureSkillId over (mirrors the
+            // luckyFindSteps carry-over below) — a rebuild here is a stale-preview fixup, not a
+            // genuine reroll, so it must not silently reshuffle which skill an unowned item is
+            // currently offering/promising. The ownedTarget branch above needs no such carry-over:
+            // cloneItem(ownedTarget) already inherited the owned item's own frozen nonce/latch.
             rebuilt.skillRollNonce = stale.skillRollNonce;
+            rebuilt.futureSkillId = stale.futureSkillId;
         }
         applyExtraRaritySteps(rebuilt, template, this.state.player, stale.luckyFindSteps);
         rebuilt.luckyFind = stale.luckyFind;

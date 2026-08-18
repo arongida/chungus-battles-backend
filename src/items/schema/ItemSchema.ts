@@ -73,13 +73,15 @@ export class Item extends Schema {
   @type(AffectedStats) skillAffectedStats2: AffectedStats = new AffectedStats();
   @type(AffectedStats) skillAffectedEnemyStats2: AffectedStats = new AffectedStats();
   @type('string') skillStatus2: string = '';
-  // The skill this class item WILL roll once it reaches Legendary — precomputed from the same
-  // deterministic seed rollItemSkill uses (see items/skills/itemSkillRoller.ts's
-  // refreshFutureItemSkill), so it's a promise, not a guess. 0/empty once a real skillId is
-  // granted (the real skill supersedes the preview), for shields (which already roll from
-  // Common), and for non-class items. Deliberately NOT persisted to Mongo (items/db/Item.ts has
-  // no field for these) — recomputed every load/aura tick, same reasoning as skillAffectedStats.
-  // Declared at the end of the @type block so existing field indices stay stable.
+  // The skill this class item WILL roll once it reaches Legendary. LATCHED the first time it's
+  // rolled (see items/skills/itemSkillRoller.ts's refreshFutureItemSkill) — a real promise, not a
+  // guess that shifts as the player's other items develop. 0/empty once a real skillId is granted
+  // (the real skill supersedes the preview), for shields (which already roll from Common), and
+  // for non-class items. futureSkillId IS persisted to Mongo (items/db/Item.ts) so the latch
+  // survives a save/load round-trip; futureSkillName/futureSkillDescription are not — they're
+  // always re-derived from futureSkillId against the current ITEM_SKILLS table, same reasoning as
+  // skillName/skillDescription. Declared at the end of the @type block so existing field indices
+  // stay stable.
   @type('number') futureSkillId: number = 0;
   @type('string') futureSkillName: string = '';
   @type('string') futureSkillDescription: string = '';

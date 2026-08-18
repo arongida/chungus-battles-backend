@@ -28,6 +28,17 @@ function seededRandom(...parts: number[]): number {
   return (h >>> 0) / 4294967296;
 }
 
+/** True when `def` is still a legal roll for `item` — i.e. it's in `item`'s pool (class/shield)
+ *  and at least one of its `slots` overlaps `item.equipOptions`. Shared by rollItemSkill's own
+ *  filter and refreshFutureItemSkill's latch check, so a rebalance that moves a skill out of an
+ *  item's eligible slots is honored the same way in both places. */
+export function isSkillEligibleForItem(def: ItemSkillDefinition, item: Item): boolean {
+  const pool = item.type === ItemType.SHIELD ? SHIELD_SKILLS : SKILLS_BY_CLASS[item.class as ItemClass];
+  if (!pool || !pool.includes(def)) return false;
+  const equipOptions = new Set(Array.from(item.equipOptions));
+  return def.slots.some((s) => equipOptions.has(s));
+}
+
 /** Rolls a skill for `item` from its pool — the shield-only pool for any ItemType.SHIELD
  *  (regardless of `class`, which shields leave empty), otherwise its `class`'s pool — filtered
  *  to slots the item can actually be equipped in (an ON_ATTACK skill on a helmet would never
@@ -38,10 +49,12 @@ function seededRandom(...parts: number[]): number {
  *  among their other owned items before doing the seeded pick (falling back to an even seeded
  *  pick only among ties), instead of sampling uniformly across the whole pool every time. Sampling
  *  independently per item let several items land on the same popular skill while another skill
- *  never showed up on anything the player owned. Only counts items that have ALREADY been
- *  granted a real skillId/skillId2 (not other items' unrolled previews), so the result is stable
- *  across repeated preview calls in the same tick and only shifts when a new item genuinely rolls
- *  a real skill. */
+ *  never showed up on anything the player owned. Counts items that have ALREADY been granted a
+ *  real skillId/skillId2, AND other items' LATCHED futureSkillId previews (see
+ *  refreshFutureItemSkill) — a latched preview is exactly as stable as a real grant within one
+ *  tick, so counting it here is what keeps two simultaneously-previewing items from both landing
+ *  on the same popular skill. An unlatched preview is never visible to countUsage, since latching
+ *  happens before any of this player's OTHER items get a chance to re-roll in the same tick. */
 export function rollItemSkill(item: Item, player: Player, options?: { exclude?: number }): ItemSkillDefinition | null {
   // Quest items (e.g. Gambler's Dice, tagged 'merchant' for set-bonus purposes only) run their
   // own bespoke rarity/behavior progression outside applyRarityUpgrade's Legendary gate — same
@@ -63,6 +76,7 @@ export function rollItemSkill(item: Item, player: Player, options?: { exclude?: 
     if (i === item) return;
     if (i.skillId && usage.has(i.skillId)) usage.set(i.skillId, usage.get(i.skillId)! + 1);
     if (i.skillId2 && usage.has(i.skillId2)) usage.set(i.skillId2, usage.get(i.skillId2)! + 1);
+    if (!i.skillId && i.futureSkillId && usage.has(i.futureSkillId)) usage.set(i.futureSkillId, usage.get(i.futureSkillId)! + 1);
   };
   player.equippedItems.forEach(countUsage);
   player.inventory.forEach(countUsage);
@@ -191,16 +205,19 @@ export function reconcileItemSkill2(item: Item): void {
   });
 }
 
-/** Fills item.futureSkill*(Id/Name/Description) with the skill this class item WOULD roll right
- *  now if it reached Legendary — reuses rollItemSkill, so it reflects the same coordinated spread
- *  against the player's other owned items (see rollItemSkill's doc comment). This means the
- *  preview can shift as the player's other items develop, not just once picked at random and
- *  fixed forever — an honest "current best guess" rather than a promise fixed the moment the item
- *  is acquired. Clears the fields once they're no longer meaningful: shields (which already roll
- *  from Common — no "future" state for them), a non-class item, or an item that already has a
- *  real skillId (the real skill supersedes the preview) or has already reached Legendary. Cheap
- *  and idempotent — safe to call every aura tick, same contract as ensureShieldSkill; called from
- *  exactly the same sweep sites. */
+/** Fills item.futureSkill*(Id/Name/Description) with the skill this class item WILL roll once it
+ *  reaches Legendary. LATCHED: once a real skill has been picked for this item (item.futureSkillId
+ *  set), that same id is kept and only re-described from the current ITEM_SKILLS table — it is
+ *  never re-rolled. This is what makes the shop-preview text an actual promise: without the latch,
+ *  every other owned item genuinely rolling a real skill shifts rollItemSkill's least-used pool
+ *  (see its doc comment) and silently changes what THIS item was shown to grant. The very first
+ *  time this runs for an item (no existing futureSkillId, or one that's no longer a legal roll —
+ *  e.g. a rebalance moved it out of this item's slots) it calls rollItemSkill for a fresh pick,
+ *  same coordinated-spread reasoning as before. Clears the fields once they're no longer
+ *  meaningful: shields (which already roll from Common — no "future" state for them), a non-class
+ *  item, or an item that already has a real skillId (the real skill supersedes the preview) or has
+ *  already reached Legendary. Cheap and idempotent — safe to call every aura tick, same contract
+ *  as ensureShieldSkill; called from exactly the same sweep sites. */
 export function refreshFutureItemSkill(item: Item, player: Player): void {
   const eligible = item.type !== ItemType.SHIELD && !!item.class && !item.skillId && item.rarity < ItemRarity.LEGENDARY;
   if (!eligible) {
@@ -211,6 +228,18 @@ export function refreshFutureItemSkill(item: Item, player: Player): void {
     }
     return;
   }
+
+  if (item.futureSkillId) {
+    const latched = ITEM_SKILLS[item.futureSkillId];
+    if (latched && isSkillEligibleForItem(latched, item)) {
+      item.futureSkillName = latched.name;
+      item.futureSkillDescription = latched.describe(ItemRarity.LEGENDARY);
+      return;
+    }
+    // Latch is no longer valid (skill removed/rebalanced out of this item's slots) — fall through
+    // to a fresh roll rather than keep showing a promise this item can never actually fire.
+  }
+
   const def = rollItemSkill(item, player);
   if (!def) {
     if (item.futureSkillId) {
