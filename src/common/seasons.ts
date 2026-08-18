@@ -28,6 +28,7 @@ export const SEASONS: SeasonInfo[] = [
       'Matchmaking no longer repeats an opponent you fought in the last 3 rounds while a fresher same-round opponent is available',
       'Class item and shield skills are no longer locked in for the character\'s whole life the moment they\'re rolled — rerolling the shop can now reroll the skill an unowned item is offering (an item you already own, or its shop upgrade preview, is never affected)',
       'Health Flask reworked: no longer a flat +10 HP regen — now rolls one of six brews (Regeneration, Antidote, Evasion, Stoneskin, Fortitude, Liquid Courage) shown on the card before you buy, banked for your next fight only',
+      'Class item, shield and potion skills are no longer spread across your owned items — each item now rolls independently and can land on the same skill/brew as another item you own',
     ]
   },
   {

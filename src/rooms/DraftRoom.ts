@@ -5,7 +5,7 @@ import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentC
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { applyExtraRaritySteps, applyLuckyShopUpgrades, applyRarityUpgrade, baseLuckyFindChance, BASE_REFRESH_SHOP_COST, findOwnedUpgradeTarget, getOwnedUpgradeableItemIds, grantLuckyFindMythicBonus, hasVipPass, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem } from '../commands/ShopUpgradeUtils';
-import { ensurePotionEffect, ensureShieldSkill, refreshFutureItemSkill } from '../items/skills/itemSkillRoller';
+import { ensurePotionEffect, ensureShieldSkill, reconcileItemSkill, refreshFutureItemSkill } from '../items/skills/itemSkillRoller';
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
@@ -277,13 +277,6 @@ export class DraftRoom extends Room {
             // loop runs — the loop's own findOwnedUpgradeTarget/preview construction then treats
             // it exactly like any other owned match, lucky-find roll included.
             const vipPassIndex = await this.injectVipPassPick(shopFromDb);
-            // Fresh skill-roll nonce per unowned slot on every shop build (see itemSkillRoller.ts) —
-            // must happen before the loop below, since applyRarityUpgrade/applyLuckyShopUpgrades
-            // inside it can grant a real skill using this nonce. Skipped for the VIP Pass slot,
-            // which injectVipPassPick already stamped with its own nonce above.
-            shopFromDb.forEach((item, i) => {
-                if (vipPassIndex !== i) item.skillRollNonce = Math.floor(Math.random() * 0x7fffffff);
-            });
             for (const rolledItem of shopFromDb) {
                 const slot = this.state.shop.length;
                 const ownedTarget = findOwnedUpgradeTarget(this.state.player, rolledItem.itemId);
@@ -355,9 +348,6 @@ export class DraftRoom extends Room {
         const template = await getItemById(pickId);
         if (!template) return null;
         rollItemStats(template);
-        // Same fresh-nonce treatment as the rest of the roll branch below (see updateShop) — this
-        // slot is being force-picked here, before that sweep runs, so it needs its own stamp.
-        template.skillRollNonce = Math.floor(Math.random() * 0x7fffffff);
         const index = Math.floor(Math.random() * shopFromDb.length);
         shopFromDb[index] = template;
         return index;
@@ -652,12 +642,17 @@ export class DraftRoom extends Room {
             rebuilt.previewBaseRarity = ownedTarget.rarity;
         } else {
             rebuilt = template;
-            // Carry the stale slot's skill-roll nonce AND latched futureSkillId over (mirrors the
-            // luckyFindSteps carry-over below) — a rebuild here is a stale-preview fixup, not a
-            // genuine reroll, so it must not silently reshuffle which skill an unowned item is
-            // currently offering/promising. The ownedTarget branch above needs no such carry-over:
-            // cloneItem(ownedTarget) already inherited the owned item's own frozen nonce/latch.
-            rebuilt.skillRollNonce = stale.skillRollNonce;
+            // Carry the stale slot's already-granted skillId AND latched futureSkillId preview
+            // over (mirrors the luckyFindSteps carry-over below) — a rebuild here is a
+            // stale-preview fixup, not a genuine reroll, so it must not silently reshuffle which
+            // skill/brew an unowned item is currently offering or promising. `template` is a fresh
+            // catalog roll with skillId unset, so without this a shield or potion mid-offer would
+            // re-roll its skill/brew on every rebuild. reconcileItemSkill repopulates
+            // skillName/skillDescription/triggerTypes (and item.name for potions) from the carried
+            // id. The ownedTarget branch above needs no such carry-over: cloneItem(ownedTarget)
+            // already inherited the owned item's own frozen skillId/latch.
+            rebuilt.skillId = stale.skillId;
+            reconcileItemSkill(rebuilt);
             rebuilt.futureSkillId = stale.futureSkillId;
         }
         applyExtraRaritySteps(rebuilt, template, this.state.player, stale.luckyFindSteps);

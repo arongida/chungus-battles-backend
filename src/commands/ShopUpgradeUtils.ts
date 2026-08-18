@@ -100,12 +100,11 @@ export function applyRarityUpgrade(target: Item, source: Item, player: Player, i
   } else if (target.class && target.rarity >= ItemRarity.LEGENDARY) {
     if (!target.skillId) {
       // Honor whatever the shop/inventory preview already promised (item.futureSkillId — see
-      // refreshFutureItemSkill's latch) rather than rolling fresh here: a fresh roll would use
-      // the CURRENT least-used pool, which can legitimately differ from the pool at the moment
-      // the preview was shown and latched, silently granting a different skill than the one the
-      // player was shown. Only falls back to a genuine roll when there's no usable latch — quest
-      // items, shields (routed through the branch above), or an item that reached Legendary
-      // without ever previewing (e.g. a talent instantly maxing an item's rarity).
+      // refreshFutureItemSkill's latch) rather than rolling fresh here: a fresh roll is
+      // independently random and would silently grant a different skill than the one the player
+      // was shown. Only falls back to a genuine roll when there's no usable latch — quest items,
+      // shields (routed through the branch above), or an item that reached Legendary without ever
+      // previewing (e.g. a talent instantly maxing an item's rarity).
       const latched = target.futureSkillId ? ITEM_SKILLS[target.futureSkillId] : null;
       const def = latched && isSkillEligibleForItem(latched, target) ? latched : rollItemSkill(target, player);
       if (def) grantItemSkill(target, def);

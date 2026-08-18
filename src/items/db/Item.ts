@@ -45,15 +45,11 @@ export const ItemSchema = new Schema({
     skillId2: Number,
     skillName2: String,
     skillDescription2: String,
-    // Shop-roll nonce mixed into the item-skill hash (items/skills/itemSkillRoller.ts) — see
-    // ItemSchema.ts's field comment. Persisted so an owned/locked item's frozen skill roll
-    // survives a save/load round-trip.
-    skillRollNonce: Number,
     // Latched Legendary-skill preview id (items/skills/itemSkillRoller.ts's refreshFutureItemSkill)
     // — persisted so an owned item's frozen "At Legendary: X" promise survives a save/load
-    // round-trip, the same reasoning as skillRollNonce above. futureSkillName/futureSkillDescription
-    // are NOT persisted — those are always re-derived from this id against the current ITEM_SKILLS
-    // table (see ItemSchema.ts's field comment).
+    // round-trip, same treatment as skillId. futureSkillName/futureSkillDescription are NOT
+    // persisted — those are always re-derived from this id against the current ITEM_SKILLS table
+    // (see ItemSchema.ts's field comment).
     futureSkillId: Number,
 });
 
@@ -99,7 +95,7 @@ function getItemSchemaObject(itemFromDb: any): Item {
     // ITSELF is deliberately kept in `primitives` (not destructured out) — it's the latch that
     // makes an owned item's Legendary-skill preview a real promise instead of re-rolling every
     // tick (see itemSkillRoller.ts's refreshFutureItemSkill), so it must survive both a DB load
-    // and a cloneItem() round-trip the same way skillId/skillRollNonce do.
+    // and a cloneItem() round-trip the same way skillId does.
     const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillStatus, skillAffectedStats2, skillAffectedEnemyStats2, skillStatus2, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
 
     const newItemSchemaObject = new Item().assign(primitives);

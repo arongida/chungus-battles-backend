@@ -100,7 +100,7 @@ function buildItemSchema(itemFromDb: any): Item {
     // current ITEM_SKILLS table (see items/db/Item.ts's getItemSchemaObject and
     // itemSkillRoller.ts's refreshFutureItemSkill). futureSkillId itself IS kept in `primitives`
     // — it's the latch that makes an owned item's Legendary-skill preview a promise instead of a
-    // re-rolled guess, so it must survive the DB round-trip like skillId/skillRollNonce do.
+    // re-rolled guess, so it must survive the DB round-trip like skillId does.
     const { affectedStats, affectedEnemyStats, skillAffectedStats, skillAffectedEnemyStats, skillAffectedStats2, skillAffectedEnemyStats2, futureSkillName, futureSkillDescription, tags, equipOptions, itemCollections, triggerTypes, _id, __v, ...primitives } = itemFromDb;
     const item = new Item().assign(primitives);
     if (!item.sellPrice) item.sellPrice = Math.floor(item.price * item.rarity * 0.7);
