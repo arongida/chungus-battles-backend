@@ -9,6 +9,12 @@ import {getSkillSlot2View} from '../skills/itemSkillSlot2View';
 
 export class Item extends Schema {
   @type('number') itemId: number = 0;
+  // Per-instance identity, distinct from itemId (the shared template id — e.g. every Health
+  // Flask rolls itemId 6). Assigned fresh by getItemSchemaObject/cloneItem (items/db/Item.ts)
+  // whenever an Item object is constructed, never persisted to Mongo. Inventory/equip/sell/drink
+  // target a specific owned instance by uid so stacked duplicates (two potions, two rings) can't
+  // be confused with one another the way a plain itemId match would.
+  @type('number') uid: number = 0;
   @type('string') name: string = 'Missing';
   @type('string') description: string;
   @type('number') price: number = 0;
