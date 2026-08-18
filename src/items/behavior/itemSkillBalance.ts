@@ -743,7 +743,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: 'Regeneration',
     slots: [],
     triggerTypes: [],
-    values: { [ItemRarity.COMMON]: { hpRegen: 10 } },
+    values: { [ItemRarity.COMMON]: { hpRegen: 12 } },
     describe: (r) => `+${skillValues(ITEM_SKILLS[ItemSkillType.REGENERATION], r).hpRegen} HP regen for your next fight.`,
   },
 
@@ -779,7 +779,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: 'Evasion',
     slots: [],
     triggerTypes: [],
-    values: { [ItemRarity.COMMON]: { dodgeRate: 50 } },
+    values: { [ItemRarity.COMMON]: { dodgeRate: 75 } },
     describe: (r) => `+${skillValues(ITEM_SKILLS[ItemSkillType.EVASION], r).dodgeRate} dodge rate for your next fight.`,
   },
 
@@ -789,7 +789,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: 'Stoneskin',
     slots: [],
     triggerTypes: [],
-    values: { [ItemRarity.COMMON]: { defense: 50 } },
+    values: { [ItemRarity.COMMON]: { defense: 75 } },
     describe: (r) => `+${skillValues(ITEM_SKILLS[ItemSkillType.STONESKIN], r).defense} defense for your next fight.`,
   },
 
@@ -799,7 +799,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: 'Fortitude',
     slots: [],
     triggerTypes: [],
-    values: { [ItemRarity.COMMON]: { maxHp: 160 } },
+    values: { [ItemRarity.COMMON]: { maxHp: 200 } },
     describe: (r) => `+${skillValues(ITEM_SKILLS[ItemSkillType.FORTITUDE], r).maxHp} max HP for your next fight.`,
   },
 
