@@ -1,7 +1,23 @@
-import {defineServer, defineRoom} from "colyseus"
+import {defineServer, defineRoom, matchMaker} from "colyseus"
 import {monitor} from '@colyseus/monitor';
 import {playground} from '@colyseus/playground';
 import cors from 'cors';
+import express from 'express';
+import { timingSafeEqual } from 'crypto';
+
+// Colyseus's own router installs a raw `server.prependListener('request', ...)` (see
+// @colyseus/core/src/router/index.ts) that intercepts every OPTIONS preflight — including ones
+// for our own /admin/* Express routes — and answers it directly with a hardcoded
+// Access-Control-Allow-Headers list, before Express's `cors()` middleware below ever runs. That
+// fixed list doesn't include the custom `x-admin-secret` header the admin panel sends, so the
+// browser's preflight check fails and the actual request is never sent — no amount of `cors()`
+// configuration can fix this, since the raw listener already ended the response. This is the
+// documented override hook (see controller.ts's own doc comment) for reflecting the requested
+// headers back, matching what `cors()`'s default behavior would do if it got the chance to run.
+matchMaker.controller.getCorsHeaders = (headers: Headers) => ({
+    'Access-Control-Allow-Origin': headers.get('origin') || '*',
+    'Access-Control-Allow-Headers': headers.get('access-control-request-headers') || 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+});
 
 /**
  * Import your Room files
@@ -14,9 +30,26 @@ import { getAllItems } from "./items/db/Item";
 import { getItemRollPreview } from "./items/stats/itemRollPreview";
 import { ItemRarity } from "./items/types/ItemTypes";
 import { getAllTalents } from "./talents/db/Talent";
-import { getReplaysByOriginalPlayer, getReplayById, getGameStats } from './replay/db/Replay';
+import { getReplaysByOriginalPlayer, getReplayById, getGameStats, pruneSeasonReplays } from './replay/db/Replay';
 import { SEASONS } from './common/seasons';
 import { definedRarityTiers, ITEM_SKILLS } from './items/behavior/itemSkillBalance';
+import { TournamentFightRoom } from './tournament/TournamentFightRoom';
+import { executeTournament, isTournamentRunning, prepareTournament } from './tournament/TournamentRunner';
+import { getTournamentBySeason, listTournaments } from './tournament/db/Tournament';
+import type { Request } from 'express';
+
+// Guards the /admin/* endpoints (tournament trigger, replay pruning) — set this in the fly.io
+// deployment's secrets, never committed. Requests without a matching x-admin-secret header are
+// rejected; if the env var itself isn't set, every request is rejected (fail closed).
+function isAuthorizedAdmin(req: Request): boolean {
+    const expected = process.env.ADMIN_SECRET;
+    if (!expected) return false;
+    const provided = String(req.header('x-admin-secret') ?? '');
+    const expectedBuf = Buffer.from(expected);
+    const providedBuf = Buffer.from(provided);
+    if (expectedBuf.length !== providedBuf.length) return false;
+    return timingSafeEqual(expectedBuf, providedBuf);
+}
 
 export const server = defineServer({
 
@@ -24,12 +57,19 @@ export const server = defineServer({
 
     rooms: {
         draft_room: defineRoom(DraftRoom),
-        fight_room: defineRoom(FightRoom)
+        fight_room: defineRoom(FightRoom),
+        // Never joined by a client (maxClients = 0) — created directly via matchMaker.createRoom
+        // by TournamentRunner.ts to run headless season-end tournament fights. Registered here
+        // because that's what makes the room name resolvable to matchMaker.createRoom at all.
+        tournament_fight: defineRoom(TournamentFightRoom),
     },
 
     express: (app) => {
 
         app.use(cors());
+        // Only the two /admin/* POST routes read a JSON body (season/force) — added here rather
+        // than left implicit since nothing previously registered a body parser.
+        app.use(express.json());
 
 
         /**
@@ -132,6 +172,10 @@ export const server = defineServer({
         app.get('/replays/:id', async (req, res) => {
             const replay = await getReplayById(req.params.id);
             if (!replay) return res.status(404).send({ error: 'Replay not found' });
+            // Distinct from 404 (which the replay viewer retries — the save is fire-and-forget
+            // and can lag the end_battle broadcast) — a pruned replay will never come back, so it
+            // gets its own status the frontend renders as an "archived" message instead of retrying.
+            if (replay.pruned) return res.status(410).send({ error: 'Replay pruned', pruned: true, playerName: replay.playerName, enemyName: replay.enemyName, result: replay.result, gameVersion: replay.gameVersion });
             res.status(200).json(replay);
         });
 
@@ -139,6 +183,53 @@ export const server = defineServer({
             const originalPlayerId = Number(req.query.originalPlayerId);
             if (!originalPlayerId || Number.isNaN(originalPlayerId)) return res.status(400).send({ error: 'originalPlayerId required' });
             const result = await getGameStats(originalPlayerId);
+            res.status(200).json(result);
+        });
+
+        // --- Season-end Hall of Fame tournament -----------------------------------------------
+
+        app.get('/tournament', async (req, res) => {
+            const season = req.query.season !== undefined ? Number(req.query.season) : GAME_VERSION;
+            if (Number.isNaN(season)) return res.status(400).send({ error: 'invalid season' });
+            const tournament = await getTournamentBySeason(season);
+            if (!tournament) return res.status(404).send({ error: 'No tournament for this season' });
+            res.status(200).json(tournament);
+        });
+
+        app.get('/tournaments', async (_req, res) => {
+            res.status(200).json(await listTournaments());
+        });
+
+        // Kicks off (or resumes) a season's tournament. prepareTournament is awaited — it's just
+        // a handful of DB round trips — so the response carries the real tournamentId; the fight
+        // simulation itself (minutes, not milliseconds) runs after the response is sent.
+        app.post('/admin/tournament', async (req, res) => {
+            if (!isAuthorizedAdmin(req)) return res.status(401).send({ error: 'unauthorized' });
+            const season = req.body?.season !== undefined ? Number(req.body.season) : GAME_VERSION;
+            const force = req.body?.force === true;
+            if (Number.isNaN(season)) return res.status(400).send({ error: 'invalid season' });
+            if (isTournamentRunning(season)) return res.status(409).send({ error: `Tournament for season ${season} is already running.` });
+
+            let prepared;
+            try {
+                prepared = await prepareTournament(season, { force });
+            } catch (err: any) {
+                return res.status(409).send({ error: err?.message ?? String(err) });
+            }
+
+            res.status(202).json(prepared);
+            if (prepared.status === 'running') {
+                executeTournament(season).catch(err => console.error(`[Tournament] season ${season} run failed:`, err));
+            }
+        });
+
+        // Separate, deliberate call from the tournament trigger — run only after that season's
+        // tournament reports status 'complete' (see CLAUDE.md's season-rollover procedure).
+        app.post('/admin/pruneReplays', async (req, res) => {
+            if (!isAuthorizedAdmin(req)) return res.status(401).send({ error: 'unauthorized' });
+            const season = req.body?.season !== undefined ? Number(req.body.season) : undefined;
+            if (!season || Number.isNaN(season)) return res.status(400).send({ error: 'season required' });
+            const result = await pruneSeasonReplays(season);
             res.status(200).json(result);
         });
 

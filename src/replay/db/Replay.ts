@@ -26,9 +26,21 @@ const ReplaySchema = new Schema({
     events: [ReplayEventSchema],
     truncated: { type: Boolean, default: false },
     stats: Schema.Types.Mixed,
+    // 'run' = an ordinary in-game fight (draft-phase progression); 'tournament' = a season-end
+    // Hall of Fame tournament fight (see src/tournament/). Tournament replays are never pruned —
+    // pruneSeasonReplays() below explicitly excludes kind: 'tournament'.
+    kind: { type: String, default: 'run' },
+    tournamentId: String,
+    stage: String, // 'gauntlet' | 'SF1' | 'SF2' | 'FIN' — only set when kind === 'tournament'
+    matchId: String,
+    gameIndex: Number,
+    // Set by pruneSeasonReplays() once a closed season's ordinary replays have had their
+    // `events`/`initialState` stripped to reclaim storage — see that function's doc comment.
+    pruned: { type: Boolean, default: false },
 });
 
 ReplaySchema.index({ originalPlayerId: 1, round: 1 });
+ReplaySchema.index({ gameVersion: 1, kind: 1 });
 
 export const replayModel = mongoose.model('Replay', ReplaySchema);
 
@@ -45,6 +57,8 @@ export interface ReplayListItem {
     createdAt: Date;
     truncated: boolean;
     stats?: FightStatsMessage;
+    kind: string;
+    pruned: boolean;
 }
 
 export async function getReplaysByOriginalPlayer(originalPlayerId: number): Promise<ReplayListItem[]> {
@@ -168,6 +182,34 @@ export async function saveReplay(data: {
     events: any[];
     truncated: boolean;
     stats?: FightStatsMessage;
+    kind?: 'run' | 'tournament';
+    tournamentId?: string;
+    stage?: string;
+    matchId?: string;
+    gameIndex?: number;
 }): Promise<void> {
     await replayModel.create(data);
+}
+
+/** Deletes one replay outright — used only by the tournament gauntlet's showcase-replay
+ *  selection (src/tournament/TournamentRunner.ts) to drop a candidate that a later, closer-finish
+ *  game in the same pairing superseded. Never used on 'run' replays. */
+export async function deleteReplayById(replayId: string): Promise<void> {
+    await replayModel.deleteOne({ replayId });
+}
+
+/** End-of-season storage reclaim: strips the two heavy fields — `events` (the recorded fight,
+ *  ~63% of a doc's bytes) and `initialState` (both players' full snapshots, ~36%) — from every
+ *  ordinary ('run') replay of a closed season, leaving the ~1% `stats` field and every other
+ *  metadata field intact. Nothing else reads either stripped field:
+ *  getReplaysByOriginalPlayer() already projects them out, and getGameStats() only reads `stats`.
+ *  Tournament replays (`kind: 'tournament'`) are excluded — those are the season's permanent
+ *  record and are never pruned. Call only after that season's tournament reports `status:
+ *  'complete'` (see CLAUDE.md's season-rollover procedure). */
+export async function pruneSeasonReplays(season: number): Promise<{ modifiedCount: number }> {
+    const result = await replayModel.updateMany(
+        { gameVersion: season, kind: { $ne: 'tournament' }, events: { $exists: true } },
+        { $unset: { events: '', initialState: '' }, $set: { pruned: true } }
+    );
+    return { modifiedCount: result.modifiedCount ?? 0 };
 }

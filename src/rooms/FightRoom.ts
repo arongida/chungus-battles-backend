@@ -53,23 +53,25 @@ export class FightRoom extends Room {
     dispatcher = new Dispatcher(this);
     // Game-time timestamps (clock.elapsedTime): replays of a sped-up/slowed-down fight
     // still play back at normal 1x pacing.
-    private recorder = new ReplayRecorder(() => this.clock.elapsedTime);
+    // protected (not private): TournamentFightRoom subclasses this room to run headless
+    // fights and needs to reset/read these per game.
+    protected recorder = new ReplayRecorder(() => this.clock.elapsedTime);
     // Periodically folds recomputed stats/skillStatus into the replay stream — see
     // StatsSyncRecorder.ts's doc comment for why replay playback needs this at all.
-    private statsSync = new StatsSyncRecorder();
+    protected statsSync = new StatsSyncRecorder();
     // Stable id for the fight currently in progress — generated up front (in startBattle)
     // so it can be included in the end_battle broadcast, not just the fire-and-forget
     // replay save that happens afterward. Lets the client deep-link "Watch Replay".
-    private replayId = randomUUID();
+    protected replayId = randomUUID();
     // Built once in handleFightEnd, before any end_battle broadcast — included in every
     // end_battle payload and the saved replay doc. null until the fight actually concludes.
-    private fightStatsPayload: FightStatsMessage | null = null;
+    protected fightStatsPayload: FightStatsMessage | null = null;
     // clock.elapsedTime at the moment the battle actually starts (set in startBattle()).
     // The end-burn countdown/gate must be measured from here, not from room creation —
     // otherwise the pre-battle DB-load delay + 3-2-1 countdown (during which update()
     // skips recalculating endBurnCountdownMs, gated on battleStarted) get silently
     // absorbed into the timer, making it visibly jump once the fight starts.
-    private battleStartElapsedTime = 0;
+    protected battleStartElapsedTime = 0;
 
     onCreate() {
         this.state = new FightState();
@@ -160,7 +162,7 @@ export class FightRoom extends Room {
     // Keep the game-time tick quantum at ~100ms: at 2x a 100ms wall tick would deliver
     // 200ms of game time, making sub-second attack intervals coarse. Slowing down only
     // gains resolution, so the interval is never lengthened past 100ms.
-    private applySimulationResolution(scale: number) {
+    protected applySimulationResolution(scale: number) {
         const wallMs = scale > 1 ? Math.round(100 / scale) : 100;
         this.setSimulationInterval(() => this.update(), wallMs);
     }
@@ -280,7 +282,7 @@ export class FightRoom extends Room {
         this.sendFightEndToClient();
     }
 
-    private wrapPlayerClient(client: Client): void {
+    protected wrapPlayerClient(client: Client): void {
         if ((client.send as any).__replayWrapped) return;
         const origSend = client.send.bind(client);
         (client as any).send = (type: string, message?: any) => {
@@ -349,7 +351,7 @@ export class FightRoom extends Room {
         return this.recorder.initialState ? this.fightStatsPayload ?? undefined : undefined;
     }
 
-    private buildFightStatsPayload(): FightStatsMessage {
+    protected buildFightStatsPayload(): FightStatsMessage {
         const sideFor = (self: Player, opponent: Player): FightSideStats => ({
             damageDealt: {
                 weapon: Math.round(opponent.fightStats.damageTaken.weapon),
@@ -417,7 +419,7 @@ export class FightRoom extends Room {
 
     // Stops every combat timer and runs the win/lose/draw resolution. Shared by the
     // natural HP<=0 check in update() and the forfeit_fight handler below.
-    private concludeBattle() {
+    protected concludeBattle() {
         // Pin an exact final frame before battleStarted flips false below (which gates the
         // periodic sync in update() and FightEndTriggerCommand's aura-stat resets) — otherwise
         // the replay's last panel could be up to SYNC_INTERVAL_MS stale.
@@ -825,7 +827,7 @@ export class FightRoom extends Room {
     }
 
     //start attack/skill loop for player and enemy, they run at different intervals according to their attack speed
-    startBattle() {
+    protected startBattle() {
         this.battleStartElapsedTime = this.clock.elapsedTime;
         this.replayId = randomUUID();
         this.recorder.start({
@@ -896,7 +898,7 @@ export class FightRoom extends Room {
         }
     }
 
-    private async handleFightEnd() {
+    protected async handleFightEnd() {
         // Health Flask brews are a one-fight consumable — spent the moment this fight concludes
         // (win, lose, or draw), regardless of whether they actually procced (e.g. an Antidote
         // that never saw poison/burn, or a Liquid Courage window that never absorbed a hit).

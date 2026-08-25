@@ -146,7 +146,10 @@ function buildItemSchema(itemFromDb: any): Item {
     return item;
 }
 
-function getPlayerSchemaObject(playerFromDb: any): Player {
+// Exported so out-of-room code (TournamentFightRoom) can turn a stored/frozen player snapshot
+// into a fighting Player with no DB round trip — the same pure conversion getPlayer() itself
+// wraps around a live findOne(). See snapshotPlayer() below: its output round-trips through here.
+export function getPlayerSchemaObject(playerFromDb: any): Player {
     const { baseStats, equippedItems, talents, inventory, lockedShop, pendingPotionEffects, ...primitives } = playerFromDb;
 
     const newPlayerSchemaObject = new Player().assign(primitives);
