@@ -192,15 +192,22 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
     // clears freezes immediately instead of needing a fresh full stack cycle. Stays silent
     // hit-to-hit (see UNIQUE_ITEM_STATUS for the passive stack-count readout, same idiom as the
     // Scythe's souls) and only announces loudly at the freeze moment itself.
+    //
+    // The cooldown gate (frostbiteLastProcMs) is keyed by `defender`, not `item` — dual-wielding
+    // two Frostbite Edges must not grant two independent once-per-second timers that can hand off
+    // freezes to each other with no gap between them (setStunned extends an active stun rather
+    // than resetting it, so an ungapped handoff would chain into a near-permanent lock). Chill
+    // stacks themselves (chillStacks) stay keyed per weapon — only the freeze trigger itself is
+    // shared across both hands.
     82: ({ attacker, defender, trigger, client, clock, item }) => {
         if (trigger !== TriggerType.ON_ATTACK || !attacker || !defender || !client || !clock || !item) return;
         const threshold = frostbiteChillThreshold(item.rarity);
         const stacks = Math.min((chillStacks.get(item) ?? 0) + 1, threshold);
         chillStacks.set(item, stacks);
         if (stacks < threshold) return;
-        const last = frostbiteLastProcMs.get(item);
+        const last = frostbiteLastProcMs.get(defender);
         if (last !== undefined && clock.elapsedTime - last < FROSTBITE_PROC_COOLDOWN_MS) return;
-        frostbiteLastProcMs.set(item, clock.elapsedTime);
+        frostbiteLastProcMs.set(defender, clock.elapsedTime);
         chillStacks.set(item, 0);
         const freezeMs = frostbiteFreezeMs(item.rarity);
         defender.setStunned(clock, freezeMs, client);
