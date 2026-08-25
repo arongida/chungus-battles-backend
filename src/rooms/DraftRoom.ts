@@ -159,10 +159,11 @@ export class DraftRoom extends Room {
         // Store Credit (item skill): same per-shop-phase reset reasoning as misconductClaimUsed
         // above — one free claim per round, not one per reroll.
         this.state.player.storeCreditClaimUsed = false;
-        // Haggler: same per-shop-phase reset reasoning as misconductClaimUsed above.
-        this.state.player.hagglerRerollsUsed = 0;
+        // Free shop rerolls (Haggler item skill + Bargain Hunter talent): same per-shop-phase
+        // reset reasoning as misconductClaimUsed above.
+        this.state.player.freeRerollChargesUsed = 0;
         // Fortune's Fool reads this at FIGHT_START to size the HP penalty — per-shop-phase reset,
-        // same reasoning as hagglerRerollsUsed above.
+        // same reasoning as freeRerollChargesUsed above.
         this.state.player.rerollsThisRound = 0;
 
         //set room state
@@ -491,10 +492,9 @@ export class DraftRoom extends Room {
             client.send('error', 'Not possible to buy item!');
             return;
         }
-        const slot = this.state.shop.indexOf(item);
-        let misconductSteps = 0;
         if (misconductFree) {
-            ({ steps: misconductSteps } = stealShopItem(item, this.state.player, true));
+            // Season 26: Misconduct no longer bumps the taken item's rarity — just a free steal.
+            stealShopItem(item, this.state.player, false);
         } else {
             this.state.player.getItem(item);
         }
@@ -531,10 +531,7 @@ export class DraftRoom extends Room {
         if (misconductFree) {
             this.state.player.misconductClaimUsed = true;
             this.state.player.misconductFreeClaim = false;
-            this.announceLuckyUpgrade(item, misconductSteps, slot, 'Misconduct! Rarity up!');
-            client.send('draft_log', `Misconduct! Took ${item.name}${misconductSteps > 0 ? ' and upgraded it' : ''}!`);
-            // item.price reflects the post-upgrade re-pricing applied inside stealShopItem above —
-            // that's the value actually taken.
+            client.send('draft_log', `Misconduct! Took ${item.name}!`);
             this.creditTalentGold(TalentType.MISCONDUCT, item.price);
         }
         this.invalidateUndoSell();
@@ -723,28 +720,30 @@ export class DraftRoom extends Room {
     };
 
     private async refreshShop(client: Client) {
-        // Fortune's Fool (aura): rerolls are entirely free, checked before Haggler's per-shop
-        // charge pool so it doesn't burn Haggler's limited free rerolls either.
-        // Haggler (item skill): spend a free reroll before falling back to the gold cost.
-        const freeReroll = this.state.player.freeRerolls || this.state.player.hagglerFreeRerolls > 0;
+        // Fortune's Fool (aura): rerolls are entirely free, checked before the shared free-charge
+        // pool so it doesn't burn a Haggler/Bargain Hunter charge either.
+        // Free-charge pool (Haggler item skill + Bargain Hunter talent): spend a charge before
+        // falling back to the gold cost.
+        const freeReroll = this.state.player.freeRerolls || this.state.player.freeRerollCharges > 0;
         if (!freeReroll && this.state.player.gold < this.state.player.refreshShopCost) {
             client.send('error', 'Not enough gold!');
             return;
         }
         if (this.state.player.freeRerolls) {
-            // no gold cost, no Haggler charge consumed
-        } else if (this.state.player.hagglerFreeRerolls > 0) {
-            this.state.player.hagglerRerollsUsed++;
+            // no gold cost, no charge consumed
+        } else if (this.state.player.freeRerollCharges > 0) {
+            this.state.player.freeRerollChargesUsed++;
             // Decrement the synced counter now rather than waiting for the next 1s aura tick to
             // re-derive it — otherwise repeated refresh_shop messages inside that window all read
             // a stale > 0 and take the free branch. The aura pass remains the source of truth and
             // recomputes the same value.
-            this.state.player.hagglerFreeRerolls = Math.max(0, this.state.player.hagglerFreeRerolls - 1);
+            this.state.player.freeRerollCharges = Math.max(0, this.state.player.freeRerollCharges - 1);
+            // Bargain Hunter: a spent charge saves the full reroll cost. The pool is shared with
+            // the Haggler item skill, so owning both over-credits the talent slightly — accepted
+            // rather than tracking per-source charge provenance for a stats readout.
+            this.creditTalentGold(TalentType.BARGAIN_HUNTER, this.state.player.refreshShopCost);
         } else {
             this.state.player.gold -= this.state.player.refreshShopCost;
-            // Bargain Hunter: credit the gold actually saved by the reroll-cost halving on a paid
-            // reroll only — free rerolls (Fortune's Fool/Haggler, handled above) save nothing extra.
-            this.creditTalentGold(TalentType.BARGAIN_HUNTER, this.state.player.refreshShopCostBeforeDiscount - this.state.player.refreshShopCost);
         }
         this.state.player.rerollsThisRound++;
         this.state.player.unlockShop();
@@ -846,6 +845,10 @@ export class DraftRoom extends Room {
     }
 
     private async buyXp(xp: number, price: number, client: Client) {
+        if (this.state.player.talents.some((t) => t.talentId === TalentType.FUTURE_NOW)) {
+            client.send('error', 'Future is Now blocks buying XP directly!');
+            return;
+        }
         if (this.state.player.gold < price) {
             client.send('error', 'Not enough gold!');
             return;

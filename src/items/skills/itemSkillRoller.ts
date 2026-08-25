@@ -5,12 +5,14 @@ import { Item } from '../schema/ItemSchema';
 import { Player } from '../../players/schema/PlayerSchema';
 import { ItemClass, ItemRarity, ItemType } from '../types/ItemTypes';
 import { ITEM_SKILLS, ItemSkillDefinition, POTION_SKILLS, SHIELD_SKILLS, SKILLS_BY_CLASS } from '../behavior/itemSkillBalance';
+import { NO_CLASS_SKILL_ITEM_IDS } from '../behavior/uniqueItemBalance';
 
 /** True when `def` is still a legal roll for `item` — i.e. it's in `item`'s pool (class/shield)
  *  and at least one of its `slots` overlaps `item.equipOptions`. Shared by rollItemSkill's own
  *  filter and refreshFutureItemSkill's latch check, so a rebalance that moves a skill out of an
  *  item's eligible slots is honored the same way in both places. */
 export function isSkillEligibleForItem(def: ItemSkillDefinition, item: Item): boolean {
+  if (NO_CLASS_SKILL_ITEM_IDS.has(item.itemId)) return false;
   const pool = item.type === ItemType.SHIELD ? SHIELD_SKILLS : SKILLS_BY_CLASS[item.class as ItemClass];
   if (!pool || !pool.includes(def)) return false;
   const equipOptions = new Set(Array.from(item.equipOptions));
@@ -34,6 +36,10 @@ export function rollItemSkill(item: Item, player: Player, options?: { exclude?: 
   // reasoning as Weapon Whisperer's quest-tag guard (TalentBehaviors.ts) — so they must never
   // enter the class-skill pool, whether for a real grant or a futureSkill preview.
   if (item.tags?.includes('quest')) return null;
+  // Class-unique weapons (Dagger of Poison, Frostbite Edge) already carry a hardcoded signature
+  // effect (ItemBehaviors.ts) — see NO_CLASS_SKILL_ITEM_IDS — so they never additionally roll a
+  // random class skill on top of it, for the real grant or the futureSkill preview.
+  if (NO_CLASS_SKILL_ITEM_IDS.has(item.itemId)) return null;
   const pool = item.type === ItemType.SHIELD ? SHIELD_SKILLS : SKILLS_BY_CLASS[item.class as ItemClass];
   if (!pool || pool.length === 0) return null;
 
@@ -119,6 +125,17 @@ export function refreshItemSkillDescription(item: Item): void {
  *  the stale display fields are left alone rather than guessed at). Triggers are only ever
  *  added, never pruned — items can carry their own unrelated triggerTypes. */
 export function reconcileItemSkill(item: Item): void {
+  // Back-compat: a Dagger of Poison/Frostbite Edge granted a class skill before
+  // NO_CLASS_SKILL_ITEM_IDS excluded them from rollItemSkill — strip it on load so an
+  // in-progress run's item stops double-dipping. ItemSchema dispatches skill behaviors purely
+  // off skillId (see triggerBehavior), so clearing it fully disables the extra effect even
+  // though the triggerTypes it added along the way are left in place (harmless: nothing reads
+  // skillId to re-derive them, and they may overlap the item's own hardcoded ON_ATTACK trigger).
+  if (item.skillId && NO_CLASS_SKILL_ITEM_IDS.has(item.itemId)) {
+    item.skillId = 0;
+    item.skillName = '';
+    item.skillDescription = '';
+  }
   if (!item.skillId) return;
   const def = ITEM_SKILLS[item.skillId];
   if (!def) return;

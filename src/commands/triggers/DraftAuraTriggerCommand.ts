@@ -5,7 +5,7 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContext";
 import {triggerEquippedItems} from '../../common/triggerUtils';
 import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
-import {baseLuckyFindChance, BASE_POTION_CAPACITY, BASE_REFRESH_SHOP_COST, applyRefreshCostMultiplier} from '../ShopUpgradeUtils';
+import {baseLuckyFindChance, BASE_POTION_CAPACITY, BASE_REFRESH_SHOP_COST} from '../ShopUpgradeUtils';
 import {ensurePotionEffect, ensureShieldSkill, refreshFutureItemSkill} from '../../items/skills/itemSkillRoller';
 import {applyBulkDiscount} from '../../items/behavior/ItemSkillBehaviors';
 
@@ -20,23 +20,23 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         player.luckyFindChance = baseLuckyFindChance(player.level) + player.luckyFindMythicBonus;
 
         // Re-seed the reroll cost to its base every tick, before aura talents run, so talents
-        // that adjust it (Comrade +income, Bargain Hunter x0.5) apply as deltas/multipliers on a
-        // clean base instead of accumulating or fighting over a raw overwrite.
+        // that adjust it (Comrade +income, VIP Pass surcharge) apply as deltas on a clean base
+        // instead of accumulating.
         player.refreshShopCost = BASE_REFRESH_SHOP_COST;
-        player.refreshShopCostMultiplier = 1;
-        // VIP Pass: re-seeded to 1 before aura talents run, same reasoning as
-        // refreshShopCostMultiplier above — Black Market Contact contributes a multiplier here
-        // instead of mutating luckyFindChance directly, so its x2 composes on top of VIP Pass's
-        // flat +10% bonus regardless of which talent runs first in the loop below.
+        // VIP Pass: re-seeded to 1 before aura talents run so Black Market Contact's multiplier
+        // (contributed here instead of mutating luckyFindChance directly) composes on top of VIP
+        // Pass's flat +10% bonus regardless of which talent runs first in the loop below.
         player.luckyFindChanceMultiplier = 1;
-        // Fortune's Fool: re-seeded to false before aura talents run, same reasoning as
-        // refreshShopCostMultiplier above — so it can't survive dropping/replacing the talent.
+        // Fortune's Fool: re-seeded to false before aura talents run so it can't survive
+        // dropping/replacing the talent.
         player.freeRerolls = false;
-        // Item-skill draft grants (Haggler 301, Store Credit 302): re-seeded to 0/false before the
-        // equipped-item aura pass, same reasoning as freeRerolls above — triggerEquippedItems only
-        // visits equippedItems, so without this the last granted value latches forever once the
-        // item is unequipped or sold. The skills write them back each tick while still equipped.
-        player.hagglerFreeRerolls = 0;
+        // Free-reroll grant pool (Bargain Hunter talent + Haggler/Store Credit item skills):
+        // re-seeded to 0/false before the talent-aura and equipped-item passes, same reasoning as
+        // freeRerolls above — triggerEquippedItems only visits equippedItems, so without this the
+        // last granted value latches forever once the item is unequipped or sold. Each source adds
+        // its own contribution back in during this tick's passes; freeRerollCharges is derived from
+        // the total further down, once every source has run.
+        player.freeRerollGrant = 0;
         player.storeCreditFreeClaim = false;
         player.storeCreditFreeClaimCap = 0;
         // Bulk Discount (item skill): same reasoning — re-seeded before the equipped-item aura
@@ -95,9 +95,8 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
 
         triggerEquippedItems(this.state.player, behaviorContext, TriggerType.AURA);
 
-        // Applied last (after aura talents), same order-independence reasoning as the reroll-cost
-        // multiplier below — Black Market Contact's x2 always lands on VIP Pass's fully-adjusted
-        // flat bonus, not a partial one.
+        // Applied last (after aura talents), so Black Market Contact's x2 always lands on VIP
+        // Pass's fully-adjusted flat bonus, not a partial one.
         player.luckyFindChance *= player.luckyFindChanceMultiplier;
 
         // Bulk Discount's actual shop repricing — deliberately not inside the item's own AURA
@@ -106,11 +105,11 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         // item iteration if Insider Trading hasn't run first.
         applyBulkDiscount(player, this.state.shop);
 
-        // Snapshot the pre-discount cost so DraftRoom.refreshShop can credit Bargain Hunter with
-        // the gold actually saved by the halving below.
-        player.refreshShopCostBeforeDiscount = player.refreshShopCost;
-        // Applied last (after aura talents and item skills) so Bargain Hunter's halving is
-        // order-independent — it always lands on the fully-adjusted cost, not a partial one.
-        player.refreshShopCost = applyRefreshCostMultiplier(player.refreshShopCost, player.refreshShopCostMultiplier);
+        // Free rerolls: derived after ALL grant sources have run (Bargain Hunter's talent aura
+        // above, the Haggler item skill in triggerEquippedItems) so the sources stack additively
+        // instead of fighting over a raw overwrite. freeRerollChargesUsed is a per-ROUND counter
+        // (reset in DraftRoom.onJoin, not per shop build) — re-deriving from it each tick means a
+        // paid refresh can't refund an already-spent charge.
+        player.freeRerollCharges = Math.max(0, player.freeRerollGrant - player.freeRerollChargesUsed);
     }
 }

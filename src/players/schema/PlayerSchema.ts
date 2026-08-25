@@ -63,16 +63,12 @@ export class Player extends Schema implements IStats {
     invincibleTimer: Delayed;
     talentsOnCooldown: TalentType[] = [];
     attackSpeedMultiplier: number = 1;
-    // Bargain Hunter: reroll-cost multiplier collected during the draft aura pass and applied to
-    // refreshShopCost after ALL aura talents have run (see DraftAuraTriggerCommand), so halving
-    // composes with Comrade's +income regardless of talent pick order. Re-seeded to 1 each tick.
-    refreshShopCostMultiplier: number = 1;
     // VIP Pass (talent 202): reroll-cost surcharge accumulates directly into refreshShopCost
     // (like Comrade's +income), but the lucky-find bonus needs its own multiplier slot — mirrors
-    // refreshShopCostMultiplier so Black Market Contact's x2 composes on top of VIP Pass's flat
-    // +10% the same order-independent way Bargain Hunter composes with Comrade. Re-seeded to 1
-    // and applied last (after the flat bonus) each draft aura tick — DraftAuraTriggerCommand only;
-    // both talents guard on `shop` being present, so neither ever runs during FightAuraTriggerCommand.
+    // the seed-then-apply-last idiom Black Market Contact's x2 uses so it composes on top of VIP
+    // Pass's flat +10% regardless of talent pick order. Re-seeded to 1 and applied last (after the
+    // flat bonus) each draft aura tick — DraftAuraTriggerCommand only; both talents guard on `shop`
+    // being present, so neither ever runs during FightAuraTriggerCommand.
     luckyFindChanceMultiplier: number = 1;
     // Bulk Discount (item skill): percent-off-price-per-percent-lucky-find rate, accumulated by
     // the item's AURA behavior (ItemSkillBehaviors.ts) during the same equipped-item pass that
@@ -81,10 +77,6 @@ export class Player extends Schema implements IStats {
     // applies it afterward, once luckyFindChance has its final value for the tick (capped at
     // BULK_DISCOUNT_MAX_DISCOUNT_FRACTION). Re-seeded to 0 each tick.
     bulkDiscountPercentPerLuckPercent: number = 0;
-    // Bargain Hunter: the reroll cost before its multiplier was applied, snapshotted each aura
-    // tick by DraftAuraTriggerCommand. Read by DraftRoom.refreshShop to credit the talent with the
-    // gold actually saved on a paid reroll.
-    refreshShopCostBeforeDiscount: number = 0;
     healingEffectiveness: number = 1;
     // Black Market Contact: true once the current shop's free lucky-find claim has been spent
     // (DraftRoom.buyItem), reset once per shop phase (DraftRoom.onJoin) — same reset timing as
@@ -123,14 +115,20 @@ export class Player extends Schema implements IStats {
     // stealShopItem / DraftRoom.buyItem).
     misconductClaimUsed: boolean = false;
     // Store Credit (item skill): one free item per shop PHASE, not per shop build — same
-    // per-phase reset reasoning as hagglerRerollsUsed below (DraftRoom.onJoin), unlike
+    // per-phase reset reasoning as freeRerollChargesUsed below (DraftRoom.onJoin), unlike
     // comradeClaimUsed which refreshes on every reroll.
     storeCreditClaimUsed: boolean = false;
-    // Haggler (item skill): how many of this shop-phase's free rerolls have already been spent
-    // (DraftRoom.refreshShop). Reset once per shop PHASE (DraftRoom.onJoin), not per shop build —
-    // a paid/free reroll rebuilds the shop itself, so resetting it there would refund the reroll
-    // that just consumed it. Same reasoning as misconductClaimUsed.
-    hagglerRerollsUsed: number = 0;
+    // Free shop rerolls (Haggler item skill + Bargain Hunter talent): how many of this shop-phase's
+    // free rerolls have already been spent (DraftRoom.refreshShop). Reset once per shop PHASE
+    // (DraftRoom.onJoin), not per shop build — a paid/free reroll rebuilds the shop itself, so
+    // resetting it there would refund the reroll that just consumed it. Same reasoning as
+    // misconductClaimUsed.
+    freeRerollChargesUsed: number = 0;
+    // Free shop rerolls: accumulator for the current tick's grant, summed across every source
+    // (Bargain Hunter's talent aura, the Haggler item skill) before freeRerollCharges is derived
+    // from it in DraftAuraTriggerCommand's post-pass — same "seed, accumulate, finalize" idiom as
+    // refreshShopCostMultiplier used to be. Re-seeded to 0 each aura tick.
+    freeRerollGrant: number = 0;
     // Locked-in next-fight opponent (Next-Enemy Preview feature). Server-only: never add to
     // playerToPlainObject/snapshotPlayer (would smear a stale pointer into matchmaking
     // snapshots). Persisted via the targeted setNextFightEnemy() $set instead. Not @type —
@@ -270,18 +268,18 @@ export class Player extends Schema implements IStats {
     // STORE_CREDIT). Declared here (end of the @type block) so existing field indices stay stable.
     @type('boolean') storeCreditFreeClaim: boolean = false;
     @type('number') storeCreditFreeClaimCap: number = 0;
-    // Haggler (item skill): remaining free shop rerolls for the current shop phase — re-seeded
-    // from the skill's count minus hagglerRerollsUsed each aura tick (see ItemSkillBehaviors.ts
-    // HAGGLER). Consumed in DraftRoom.refreshShop.
-    @type('number') hagglerFreeRerolls: number = 0;
+    // Free shop rerolls (Haggler item skill + Bargain Hunter talent): remaining free rerolls for
+    // the current shop phase — derived as max(0, freeRerollGrant - freeRerollChargesUsed) each aura
+    // tick, after every grant source has run (see DraftAuraTriggerCommand). Consumed in
+    // DraftRoom.refreshShop.
+    @type('number') freeRerollCharges: number = 0;
     // Fortune's Fool (talent 403): how many times the shop has been rerolled this shop phase.
     // Synced so the client can preview the HP penalty; reset per shop phase (DraftRoom.onJoin),
     // incremented in DraftRoom.refreshShop, read at FIGHT_START to size the HP loss.
     @type('number') rerollsThisRound: number = 0;
     // Fortune's Fool (talent 403, aura): true while owned — makes DraftRoom.refreshShop free
-    // (no gold cost, doesn't consume a Haggler charge). Re-seeded to false each aura tick
-    // alongside refreshShopCostMultiplier (see DraftAuraTriggerCommand) so it can't survive
-    // dropping/replacing the talent.
+    // (no gold cost, doesn't consume a free-reroll charge). Re-seeded to false each aura tick
+    // (see DraftAuraTriggerCommand) so it can't survive dropping/replacing the talent.
     @type('boolean') freeRerolls: boolean = false;
     // Cooldown reduction: shortens active-skill intervals (see common/cooldown.ts and
     // commands/triggers/ActiveTriggerCommand.ts). Recomputed from scratch every tick by
@@ -482,8 +480,11 @@ export class Player extends Schema implements IStats {
         } as DamageMessage);
     }
 
-    getDamageAfterDefense(initialDamage: number): number {
-        const afterPct = initialDamage * (100 / (100 + this.defense));
+    // defenseMultiplier scales the effective defense used for this hit only — e.g. Stab passes
+    // 0.5 to ignore half the defender's defense. Defaults to 1 (no change) for every other caller.
+    getDamageAfterDefense(initialDamage: number, defenseMultiplier: number = 1): number {
+        const effectiveDefense = this.defense * defenseMultiplier;
+        const afterPct = initialDamage * (100 / (100 + effectiveDefense));
         if (initialDamage > 0 && !this.invincible) {
             this.fightStats.damageReducedByDefense += initialDamage - afterPct;
         }

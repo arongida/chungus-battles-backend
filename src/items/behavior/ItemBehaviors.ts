@@ -4,6 +4,7 @@ import { EquipSlot, ItemRarity } from '../types/ItemTypes';
 import { CombatLogMessage, RewardGainMessage, fmt } from '../../common/MessageTypes';
 import { grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT } from '../../commands/ShopUpgradeUtils';
 import {
+    chillStacks,
     chungiHpDamageFraction,
     diceDescription,
     diceLossGold,
@@ -11,6 +12,10 @@ import {
     floweringStaffCooldownReduction,
     floweringStaffRegenSteal,
     FLOWERING_STAFF_MAX_STEAL,
+    frostbiteChillThreshold,
+    frostbiteFreezeMs,
+    frostbiteLastProcMs,
+    FROSTBITE_PROC_COOLDOWN_MS,
     magicRingCooldownReduction,
     magicWandCooldownReduction,
     rerollMagicRingStats,
@@ -146,10 +151,11 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
         if (trigger !== TriggerType.AURA || !attacker || !item) return;
         blockPairedSlot(attacker, item);
     },
-    // Dagger of Poison (18) — applies (rarity + 1) poison stacks on hit (Common 2 … Mythic 6).
+    // Dagger of Poison (18) — applies `rarity` poison stacks on hit (Common 1 … Mythic 5).
+    // Season 26: reverted the extra stack (item.rarity + 1) added by the Season 25 poison buffs.
     18: ({ defender, client, clock, item }) => {
         if (!defender || !client || !clock || !item) return;
-        defender.addPoisonStacks(clock, client, item.rarity + 1);
+        defender.addPoisonStacks(clock, client, item.rarity);
     },
 
     // Soulstealer's Scythe (59) — 2-handed reaper. AURA: takes both hands (see blockPairedSlot).
@@ -173,6 +179,38 @@ export const ItemBehaviors: Record<number | string, (context: ItemBehaviorContex
             attackerId: attacker.playerId,
             defenderId: defender?.playerId,
             itemId: item.itemId,
+        } as CombatLogMessage);
+    },
+
+    // Frostbite Edge (82) — new Season 26 unique, single-hand rogue dagger. Every landed hit
+    // builds a deterministic chill stack (no roll, unlike a chance proc); at
+    // frostbiteChillThreshold(rarity) stacks the target would freeze solid (setStunned) for
+    // frostbiteFreezeMs(rarity) — but capped at FROSTBITE_PROC_COOLDOWN_MS between freezes (a
+    // high-attack-speed roll could otherwise reach threshold, refreeze, and reach it again inside
+    // one stun window, chain-locking the target). While on cooldown at threshold, stacks hold at
+    // the cap rather than being consumed or reset, so the very next landed hit once the cooldown
+    // clears freezes immediately instead of needing a fresh full stack cycle. Stays silent
+    // hit-to-hit (see UNIQUE_ITEM_STATUS for the passive stack-count readout, same idiom as the
+    // Scythe's souls) and only announces loudly at the freeze moment itself.
+    82: ({ attacker, defender, trigger, client, clock, item }) => {
+        if (trigger !== TriggerType.ON_ATTACK || !attacker || !defender || !client || !clock || !item) return;
+        const threshold = frostbiteChillThreshold(item.rarity);
+        const stacks = Math.min((chillStacks.get(item) ?? 0) + 1, threshold);
+        chillStacks.set(item, stacks);
+        if (stacks < threshold) return;
+        const last = frostbiteLastProcMs.get(item);
+        if (last !== undefined && clock.elapsedTime - last < FROSTBITE_PROC_COOLDOWN_MS) return;
+        frostbiteLastProcMs.set(item, clock.elapsedTime);
+        chillStacks.set(item, 0);
+        const freezeMs = frostbiteFreezeMs(item.rarity);
+        defender.setStunned(clock, freezeMs, client);
+        client.send('combat_log', {
+            text: `${defender.name} is frozen solid by ${attacker.name}'s ${item.name} for ${(freezeMs / 1000).toFixed(2)}s!`,
+            kind: 'stun',
+            attackerId: attacker.playerId,
+            defenderId: defender.playerId,
+            itemId: item.itemId,
+            stunnedPlayerId: defender.playerId,
         } as CombatLogMessage);
     },
 

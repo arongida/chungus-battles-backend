@@ -272,10 +272,11 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     const { attacker, item, trigger, shop } = context;
     if (trigger !== TriggerType.AURA || !attacker || !item || !shop) return;
     const { count } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    // hagglerRerollsUsed is a per-shop-PHASE counter (reset in DraftRoom.onJoin, not per shop
-    // build) — re-seeding the synced remaining-count from it each tick means a paid refresh
-    // can't accidentally refund an already-spent free reroll.
-    attacker.hagglerFreeRerolls = Math.max(0, count - attacker.hagglerRerollsUsed);
+    // Contributes into the shared free-reroll grant pool (Player.freeRerollGrant) rather than
+    // writing freeRerollCharges directly, so this stacks additively with the Bargain Hunter talent
+    // regardless of which runs first — freeRerollCharges is derived from the pool's total once
+    // every source has run (see DraftAuraTriggerCommand's post-pass).
+    attacker.freeRerollGrant += count;
   },
 
   [ItemSkillType.STORE_CREDIT]: (context) => {

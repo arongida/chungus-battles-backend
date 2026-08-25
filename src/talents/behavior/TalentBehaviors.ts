@@ -10,7 +10,7 @@ import { ArraySchema } from "@colyseus/schema";
 import { cloneItem, getItemById, getRandomWeaponsByTier } from "../../items/db/Item";
 import { rollItemStats } from "../../items/stats/itemStatRoller";
 import { clampTier } from "../../items/stats/itemStatPool";
-import { applyRarityUpgrade, applyLuckyShopUpgrades, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem, hasMisconductUpgrade, BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER, VIP_PASS_REROLL_SURCHARGE } from "../../commands/ShopUpgradeUtils";
+import { applyRarityUpgrade, applyLuckyShopUpgrades, findOwnedUpgradeTarget, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, stealShopItem, BARGAIN_HUNTER_FREE_REROLLS, VIP_PASS_REROLL_SURCHARGE } from "../../commands/ShopUpgradeUtils";
 import { ensurePotionEffect, ensureShieldSkill, rollItemSkill, grantItemSkill2 } from "../../items/skills/itemSkillRoller";
 import { CombatLogMessage, RewardGainMessage, DamageMessage, fmt } from "../../common/MessageTypes";
 import { Client } from "colyseus";
@@ -55,11 +55,6 @@ export function track(
 // A fresh Player join rebuilds Talent instances, so no per-fight reset is needed.
 const pickpocketLastProcMs = new WeakMap<Talent, number>();
 const PICKPOCKET_COOLDOWN_MS = 1000;
-
-// Just a Scratch: same last-proc-time WeakMap idiom as ROGUE_1 above, so rapid attack-speed
-// stacking can't fire this every hit.
-const justAScratchLastProcMs = new WeakMap<Talent, number>();
-const JUST_A_SCRATCH_COOLDOWN_MS = 1000;
 
 // Stab (reworked into an ACTIVE talent, Season 24): blood-price fraction of the attacker's OWN
 // current HP paid every activation, on top of the enemy-facing hit. Clamped in the behavior so
@@ -129,7 +124,7 @@ export const TalentBehaviors = {
     [TalentType.STAB]: (context: TalentBehaviorContext) => {
         const { talent, attacker, defender, client, commandDispatcher } = context;
         const stabDamage = defender.maxHp * talent.scaling;
-        const calculatedStabDamage = defender.getDamageAfterDefense(stabDamage);
+        const calculatedStabDamage = defender.getDamageAfterDefense(stabDamage, 0.5);
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
             defender: defender,
             damage: calculatedStabDamage,
@@ -200,12 +195,12 @@ export const TalentBehaviors = {
                 client.send('combat_log', { text: `${attacker.name}'s wit brings in +3 income!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
                 break;
             case PlayerAvatar.WARRIOR:
-                goldGained = 12;
+                goldGained = 10;
                 attacker.gold += goldGained;
                 client.send('combat_log', { text: `${attacker.name} earns ${goldGained} gold for outwitting the warrior!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: goldGained } as CombatLogMessage);
                 break;
             case PlayerAvatar.THIEF:
-                xpGained = 18;
+                xpGained = 16;
                 attacker.xp += xpGained;
                 client.send('combat_log', { text: `${attacker.name} gains ${xpGained} xp for outwitting the rogue!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: xpGained } as CombatLogMessage);
                 break;
@@ -328,7 +323,7 @@ export const TalentBehaviors = {
 
     [TalentType.THROW_MONEY]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, commandDispatcher } = context;
-        const initialDamage = attacker.income;
+        const initialDamage = attacker.income * 1.2;
         const damage = defender.getDamageAfterDefense(initialDamage);
 
         commandDispatcher.dispatch(new OnDamageTriggerCommand(), {
@@ -650,9 +645,7 @@ export const TalentBehaviors = {
         attacker.xp += extraXp;
         track(talent, 1, 0, 0, 0, extraXp, { client, playerId: attacker.playerId });
 
-        talent.affectedStats.income += 1;
-
-        client.send('combat_log', { text: `FUTURE NOW! +${extraXp} XP, income grows an extra +1!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: extraXp } as CombatLogMessage);
+        client.send('combat_log', { text: `FUTURE NOW! +${extraXp} XP!`, kind: 'xp', talentId: talent.talentId, attackerId: attacker.playerId, xpDelta: extraXp } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: talent.talentId,
@@ -719,18 +712,13 @@ export const TalentBehaviors = {
         const available = shop.filter((item) => !item.sold);
         const randomItem = available[Math.floor(Math.random() * available.length)];
         if (randomItem) {
-            const { steps, becameMythic } = stealShopItem(randomItem, attacker, hasMisconductUpgrade(attacker));
+            stealShopItem(randomItem, attacker, false);
             track(talent, 1);
             client.send('trigger_talent', {
                 playerId: attacker.playerId,
                 talentId: TalentType.ROBBERY,
             });
-            client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}${steps > 0 ? ' (rarity up!)' : ''}!`);
-            if (becameMythic) {
-                grantLuckyFindMythicBonus(attacker);
-                client.send('draft_log', `Mythic forged! Permanent +${LUCKY_FIND_MYTHIC_BONUS_PERCENT}% Lucky Find chance!`);
-                client.send('reward_gain', { playerId: attacker.playerId, luckyFind: true } as RewardGainMessage);
-            }
+            client.send('draft_log', `Robbery talent activated! Gained ${randomItem.name}!`);
         }
     },
 
@@ -1154,13 +1142,22 @@ export const TalentBehaviors = {
             attacker.refreshShopCost += VIP_PASS_REROLL_SURCHARGE;
         },
 
-    // Bargain Hunter — AURA trigger; contributes a reroll-cost multiplier rather than mutating
-    // refreshShopCost directly, so the halving lands after Comrade's +income no matter the order
-    // aura talents run in (see DraftAuraTriggerCommand's post-pass).
+    // Bargain Hunter (reworked, Season 26) — AURA trigger. Grants BARGAIN_HUNTER_FREE_REROLLS free
+    // shop rerolls per round, contributed into the shared free-reroll grant pool
+    // (Player.freeRerollGrant) rather than writing freeRerollCharges directly, so it stacks
+    // additively with the Haggler item skill regardless of which runs first (see
+    // DraftAuraTriggerCommand's post-pass). `if (!shop) return` scopes it to the draft room — AURA
+    // also runs in fights, where free rerolls are meaningless (same guard Gold Genie/VIP Pass use).
+    // Live-rewrites its own description so the remaining charges are visible on the card — same
+    // self-describing idiom as Fortune's Fool — which also heals any stale description embedded in
+    // an in-progress run from before this rework.
     [TalentType.BARGAIN_HUNTER]:
         (context: TalentBehaviorContext) => {
-            const { attacker } = context;
-            attacker.refreshShopCostMultiplier *= BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER;
+            const { attacker, shop, talent } = context;
+            if (!shop) return;
+            attacker.freeRerollGrant += BARGAIN_HUNTER_FREE_REROLLS;
+            const left = Math.max(0, BARGAIN_HUNTER_FREE_REROLLS - attacker.freeRerollChargesUsed);
+            talent.description = `Your first ${BARGAIN_HUNTER_FREE_REROLLS} shop rerolls each round are free. ${left} left this round.`;
         },
 
     [TalentType.POISON_2]:
@@ -1349,15 +1346,23 @@ export const TalentBehaviors = {
         },
 
     [TalentType.JUST_A_SCRATCH]:
+        // Reworked (Season 26) into a Mercenary-style dual-trigger accumulator: statDamageDealt
+        // is repurposed here to hold "total damage taken this fight" (not a literal damage-dealt
+        // sum), reset every fight via TalentSchema.resetCombatStats(), paid out once at fight end.
         (context: TalentBehaviorContext) => {
-            const { defender, client, talent, clock } = context;
-            const last = justAScratchLastProcMs.get(talent);
-            if (clock && last !== undefined && clock.elapsedTime - last < JUST_A_SCRATCH_COOLDOWN_MS) return;
-            if (Math.random() < talent.activationRate) {
-                if (clock) justAScratchLastProcMs.set(talent, clock.elapsedTime);
-                defender.gold += 1;
-                track(talent, 1, 0, 0, 1, 0, { client, playerId: defender.playerId });
-                client.send('combat_log', { text: `${defender.name} profits from pain, gaining 1 gold!`, kind: 'reward', talentId: talent.talentId, attackerId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
+            const { defender, client, damage, talent, trigger } = context;
+            if (trigger === TriggerType.ON_DAMAGE) {
+                // Migrate pre-rework per-player talent copies that only listen on on-damage.
+                if (!talent.triggerTypes.includes(TriggerType.FIGHT_END)) {
+                    talent.triggerTypes.push(TriggerType.FIGHT_END);
+                }
+                talent.statDamageDealt += damage;
+            } else if (trigger === TriggerType.FIGHT_END) {
+                if (talent.statDamageDealt <= 0) return;
+                const gold = Math.floor(talent.statDamageDealt * 0.2);
+                defender.gold += gold;
+                track(talent, 1, 0, 0, gold, 0, { client, playerId: defender.playerId });
+                client.send('combat_log', { text: `${defender.name} profits from pain, gaining ${gold} gold for ${fmt(talent.statDamageDealt)} damage taken!`, kind: 'reward', talentId: talent.talentId, attackerId: defender.playerId, goldDelta: gold } as CombatLogMessage);
                 client.send('trigger_talent', {
                     playerId: defender.playerId,
                     talentId: TalentType.JUST_A_SCRATCH,
