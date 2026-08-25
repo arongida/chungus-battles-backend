@@ -21,7 +21,7 @@ export const SEASONS: SeasonInfo[] = [
     number: 26,
     name: 'Cold Snap',
     changes: [
-      'Frostbite Edge: freezes can no longer trigger more than once per second — chill stacks hold at the threshold instead of being lost while on cooldown',
+      'Frostbite Edge: freezes can no longer trigger more than once per second per enemy, even when dual-wielding two — chill stacks hold at the threshold instead of being lost while on cooldown',
       'Dagger of Poison and Frostbite Edge no longer additionally roll a random rogue item skill at Legendary/Mythic',
       'Bargain Hunter: reworked — no longer halves the reroll cost, now gives 2 free shop rerolls each round (stacks with Haggler)',
       'Just a Scratch: reworked — no longer a per-hit proc, now pays 10% of total damage taken as gold at fight end',

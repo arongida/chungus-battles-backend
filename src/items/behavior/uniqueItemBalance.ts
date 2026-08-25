@@ -6,6 +6,7 @@ import { RollableStat, STAT_RANGES } from '../stats/itemStatPool';
 import { EquipSlot } from '../types/ItemTypes';
 import { fmt } from '../../common/MessageTypes';
 import type { Item } from '../schema/ItemSchema';
+import type { Player } from '../../players/schema/PlayerSchema';
 
 /** Chungi (7): fraction of the wielder's max HP used as max damage.
  *  Lowered ~20% in Season 25 (base HP doubled) to hold late-game output roughly steady. */
@@ -194,9 +195,16 @@ export const chillStacks = new WeakMap<Item, number>();
  *  freezes and resets the stacks, rather than needing a fresh full stack cycle. */
 export const FROSTBITE_PROC_COOLDOWN_MS = 1000;
 
-/** Frostbite Edge: last freeze time (clock-elapsed ms), keyed by item instance — same
- *  last-proc-time idiom as protectionMoneyLastProcMs/shieldBashLastProcMs (itemSkillState.ts). */
-export const frostbiteLastProcMs = new WeakMap<Item, number>();
+/** Frostbite Edge: last freeze time (clock-elapsed ms), keyed by the DEFENDER being frozen —
+ *  deliberately not per item instance (unlike chillStacks above). Dual-wielding two Frostbite
+ *  Edges gives each weapon its own independent chill-stack counter, but a per-weapon cooldown
+ *  would let the two staggered timers hand off freezes to each other with no gap — and since
+ *  setStunned EXTENDS an already-active stun rather than resetting it, that stagger chains into a
+ *  near-permanent lock instead of the intended "at most one freeze per second." Keying on the
+ *  defender makes both weapons share one gate, so only one freeze total can land on that player
+ *  per second no matter how many Frostbite Edges are attacking them. Same last-proc-time idiom as
+ *  protectionMoneyLastProcMs/shieldBashLastProcMs (itemSkillState.ts) otherwise. */
+export const frostbiteLastProcMs = new WeakMap<Player, number>();
 
 /** Live status line shown under an equipped item's description (mirrors ITEM_SKILLS' status()
  *  functions in itemSkillBalance.ts, but for uniques that carry no skillId — see
