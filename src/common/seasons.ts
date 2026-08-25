@@ -24,7 +24,7 @@ export const SEASONS: SeasonInfo[] = [
       'Frostbite Edge: freezes can no longer trigger more than once per second — chill stacks hold at the threshold instead of being lost while on cooldown',
       'Dagger of Poison and Frostbite Edge no longer additionally roll a random rogue item skill at Legendary/Mythic',
       'Bargain Hunter: reworked — no longer halves the reroll cost, now gives 2 free shop rerolls each round (stacks with Haggler)',
-      'Just a Scratch: reworked — no longer a per-hit proc, now pays 20% of total damage taken as gold at fight end',
+      'Just a Scratch: reworked — no longer a per-hit proc, now pays 10% of total damage taken as gold at fight end',
       'Bully: stun duration 1s → 1.2s',
       'The Future is Now: no longer doubles income and now blocks buying XP directly — xp-double only',
       'Band of Vigor: heal and invulnerability duration both -20%',
