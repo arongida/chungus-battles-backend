@@ -1350,7 +1350,7 @@ export const TalentBehaviors = {
         // is repurposed here to hold "total damage taken this fight" (not a literal damage-dealt
         // sum), reset every fight via TalentSchema.resetCombatStats(), paid out once at fight end.
         (context: TalentBehaviorContext) => {
-            const { defender, client, damage, talent, trigger } = context;
+            const { attacker, client, damage, talent, trigger } = context;
             if (trigger === TriggerType.ON_DAMAGE) {
                 // Migrate pre-rework per-player talent copies that only listen on on-damage.
                 if (!talent.triggerTypes.includes(TriggerType.FIGHT_END)) {
@@ -1359,12 +1359,12 @@ export const TalentBehaviors = {
                 talent.statDamageDealt += damage;
             } else if (trigger === TriggerType.FIGHT_END) {
                 if (talent.statDamageDealt <= 0) return;
-                const gold = Math.floor(talent.statDamageDealt * 0.2);
-                defender.gold += gold;
-                track(talent, 1, 0, 0, gold, 0, { client, playerId: defender.playerId });
-                client.send('combat_log', { text: `${defender.name} profits from pain, gaining ${gold} gold for ${fmt(talent.statDamageDealt)} damage taken!`, kind: 'reward', talentId: talent.talentId, attackerId: defender.playerId, goldDelta: gold } as CombatLogMessage);
+                const gold = Math.floor(talent.statDamageDealt * 0.1);
+                attacker.gold += gold;
+                track(talent, 1, 0, 0, gold, 0, { client, playerId: attacker.playerId });
+                client.send('combat_log', { text: `${attacker.name} profits from pain, gaining ${gold} gold for ${fmt(talent.statDamageDealt)} damage taken!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: gold } as CombatLogMessage);
                 client.send('trigger_talent', {
-                    playerId: defender.playerId,
+                    playerId: attacker.playerId,
                     talentId: TalentType.JUST_A_SCRATCH,
                 });
             }
