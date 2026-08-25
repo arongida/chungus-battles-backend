@@ -9,6 +9,7 @@ import {
     getTournamentBySeason,
     markTournamentFailed,
     saveTournamentProgress,
+    PlayoffStage,
     TournamentGameResult,
     TournamentMatch,
     TournamentPairing,
@@ -24,6 +25,9 @@ const TARGET_FIGHTS_PER_CHARACTER = 60;
 const MIN_GAMES_PER_PAIRING = 2;
 const MAX_GAMES_PER_PAIRING = 20;
 const PLAYOFF_BEST_OF = 5;
+// How many gauntlet finishers make the playoff — see buildPlayoffBracket for the bye structure
+// this implies (6 isn't a power of 2, so seeds 1-2 get a bye to the semifinal).
+const PLAYOFF_FIELD_SIZE = 6;
 // Hard cap on games played in a single playoff match — only reachable if repeated draws keep a
 // best-of-5 from resolving normally; see runMatch's decider-game comment.
 const PLAYOFF_GAME_CAP = 8;
@@ -55,9 +59,65 @@ export function computeGamesPerPairing(n: number, target = TARGET_FIGHTS_PER_CHA
 }
 
 function estimatePlayoffGames(n: number, bestOf = PLAYOFF_BEST_OF): number {
-    if (n < 2) return 0;
-    const matches = n === 2 ? 1 : n === 3 ? 2 : 3;
-    return matches * bestOf;
+    return buildPlayoffBracket(Math.min(PLAYOFF_FIELD_SIZE, n)).length * bestOf;
+}
+
+export interface PlayoffBracketSlot {
+    stage: PlayoffStage;
+    // Index into the seed-sorted `top[]` standings array this side comes from — or null when this
+    // side is instead the winner of an earlier stage (see aDependsOn/bDependsOn).
+    aSeedIndex: number | null;
+    bSeedIndex: number | null;
+    aDependsOn?: PlayoffStage;
+    bDependsOn?: PlayoffStage;
+}
+
+/**
+ * Describes the playoff bracket for a field of `topCount` gauntlet finishers, as a flat list of
+ * match slots in play order. Pure and synchronous — runPlayoffStage below just executes this
+ * table, so adding a new field size (or reshaping an existing one) never touches the execution
+ * loop, only this function.
+ *
+ * topCount 2-4 are the direct case: everyone is seeded straight into a match. 5 and 6 aren't a
+ * power of 2, so they get the standard tournament-seeding fix — bye the top seed(s) straight to
+ * the semifinal while the bottom seeds play an extra round first:
+ *   5: PI  4v5              -> SF1 1 v winner(PI), SF2 2v3           -> FIN
+ *   6: QF1 3v6, QF2 4v5     -> SF1 1 v winner(QF2), SF2 2 v winner(QF1) -> FIN
+ * (topCount > 6 never reaches here — callers slice standings to PLAYOFF_FIELD_SIZE first.)
+ */
+export function buildPlayoffBracket(topCount: number): PlayoffBracketSlot[] {
+    switch (topCount) {
+        case 2:
+            return [{ stage: 'FIN', aSeedIndex: 0, bSeedIndex: 1 }];
+        case 3:
+            return [
+                { stage: 'SF2', aSeedIndex: 1, bSeedIndex: 2 },
+                { stage: 'FIN', aSeedIndex: 0, bSeedIndex: null, bDependsOn: 'SF2' },
+            ];
+        case 4:
+            return [
+                { stage: 'SF1', aSeedIndex: 0, bSeedIndex: 3 },
+                { stage: 'SF2', aSeedIndex: 1, bSeedIndex: 2 },
+                { stage: 'FIN', aSeedIndex: null, bSeedIndex: null, aDependsOn: 'SF1', bDependsOn: 'SF2' },
+            ];
+        case 5:
+            return [
+                { stage: 'PI', aSeedIndex: 3, bSeedIndex: 4 },
+                { stage: 'SF1', aSeedIndex: 0, bSeedIndex: null, bDependsOn: 'PI' },
+                { stage: 'SF2', aSeedIndex: 1, bSeedIndex: 2 },
+                { stage: 'FIN', aSeedIndex: null, bSeedIndex: null, aDependsOn: 'SF1', bDependsOn: 'SF2' },
+            ];
+        case 6:
+            return [
+                { stage: 'QF1', aSeedIndex: 2, bSeedIndex: 5 },
+                { stage: 'QF2', aSeedIndex: 3, bSeedIndex: 4 },
+                { stage: 'SF1', aSeedIndex: 0, bSeedIndex: null, bDependsOn: 'QF2' },
+                { stage: 'SF2', aSeedIndex: 1, bSeedIndex: null, bDependsOn: 'QF1' },
+                { stage: 'FIN', aSeedIndex: null, bSeedIndex: null, aDependsOn: 'SF1', bDependsOn: 'SF2' },
+            ];
+        default:
+            return []; // 0 or 1 entrants — no bracket possible
+    }
 }
 
 /** Gauntlet games alternate sides evenly across an even gamesPerPairing: A occupies state.player
@@ -407,16 +467,17 @@ async function runMatch(
 
 async function runPlayoffStage(room: TournamentFightRoom, doc: Record<string, any>): Promise<void> {
     const standings: TournamentStandingRow[] = doc.gauntlet.table;
-    const top = standings.slice(0, Math.min(4, standings.length));
+    const top = standings.slice(0, Math.min(PLAYOFF_FIELD_SIZE, standings.length));
+    const bracket = buildPlayoffBracket(top.length);
 
-    if (top.length < 2) {
+    if (bracket.length === 0) {
         await saveTournamentProgress(doc.season, { status: 'complete', completedAt: new Date(), 'progress.stage': 'done' });
         return;
     }
 
     const findEntry = (id: number): TournamentRosterEntry => doc.roster.find((r: TournamentRosterEntry) => r.originalPlayerId === id);
 
-    async function playMatch(matchIndex: number, stage: 'SF1' | 'SF2' | 'FIN', rowA: TournamentStandingRow, rowB: TournamentStandingRow): Promise<TournamentStandingRow> {
+    async function playMatch(matchIndex: number, stage: PlayoffStage, rowA: TournamentStandingRow, rowB: TournamentStandingRow): Promise<TournamentStandingRow> {
         // `a` is always the better (numerically lower) seed — sideForPlayoffGame's decider rule
         // depends on this.
         const [better, worse] = rowB.seed < rowA.seed ? [rowB, rowA] : [rowA, rowB];
@@ -436,25 +497,25 @@ async function runPlayoffStage(room: TournamentFightRoom, doc: Record<string, an
         return match.winnerId === better.originalPlayerId ? better : worse;
     }
 
-    let championRow: TournamentStandingRow;
-    let runnerUpRow: TournamentStandingRow;
+    // Executes buildPlayoffBracket's table in order — a slot's side is either a fixed seed or the
+    // winner of an earlier stage (already resolved by the time we reach it, since every
+    // dependsOn stage appears earlier in the returned array). Resumability is unaffected by
+    // genericizing this: the loop always starts at i=0, but playMatch/runMatch are already
+    // idempotent — a stage whose match previously finished returns instantly without playing
+    // games, same as the old hand-written 2/3/4 branches relied on.
+    const winners: Partial<Record<PlayoffStage, TournamentStandingRow>> = {};
+    let finalists: [TournamentStandingRow, TournamentStandingRow] | null = null;
 
-    if (top.length === 2) {
-        const winner = await playMatch(0, 'FIN', top[0], top[1]);
-        championRow = winner;
-        runnerUpRow = winner === top[0] ? top[1] : top[0];
-    } else if (top.length === 3) {
-        const sf2Winner = await playMatch(0, 'SF2', top[1], top[2]);
-        const finWinner = await playMatch(1, 'FIN', top[0], sf2Winner);
-        championRow = finWinner;
-        runnerUpRow = finWinner === top[0] ? sf2Winner : top[0];
-    } else {
-        const sf1Winner = await playMatch(0, 'SF1', top[0], top[3]);
-        const sf2Winner = await playMatch(1, 'SF2', top[1], top[2]);
-        const finWinner = await playMatch(2, 'FIN', sf1Winner, sf2Winner);
-        championRow = finWinner;
-        runnerUpRow = finWinner === sf1Winner ? sf2Winner : sf1Winner;
+    for (let i = 0; i < bracket.length; i++) {
+        const slot = bracket[i];
+        const rowA = slot.aSeedIndex !== null ? top[slot.aSeedIndex] : winners[slot.aDependsOn!]!;
+        const rowB = slot.bSeedIndex !== null ? top[slot.bSeedIndex] : winners[slot.bDependsOn!]!;
+        if (slot.stage === 'FIN') finalists = [rowA, rowB];
+        winners[slot.stage] = await playMatch(i, slot.stage, rowA, rowB);
     }
+
+    const championRow = winners['FIN']!;
+    const runnerUpRow = finalists![0] === championRow ? finalists![1] : finalists![0];
 
     await saveTournamentProgress(doc.season, {
         championId: championRow.originalPlayerId,

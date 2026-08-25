@@ -3,12 +3,13 @@ import { server } from '../src/app.config';
 import { getNextPlayerId, getPlayer, playerModel, snapshotPlayer } from '../src/players/db/Player';
 import { TournamentFightRoom } from '../src/tournament/TournamentFightRoom';
 import {
+    buildPlayoffBracket,
     buildStandings,
     computeGamesPerPairing,
     sideForGauntletGame,
     sideForPlayoffGame,
 } from '../src/tournament/TournamentRunner';
-import { TournamentPairing } from '../src/tournament/db/Tournament';
+import { PlayoffStage, TournamentPairing } from '../src/tournament/db/Tournament';
 import mongoose from 'mongoose';
 
 // ---------------------------------------------------------------------------------------------
@@ -56,6 +57,77 @@ describe('side assignment', () => {
         expect(sideForPlayoffGame(3)).toBe(false);
         expect(sideForPlayoffGame(4)).toBe(false); // decider: A is NOT state.player
         expect(sideForPlayoffGame(5)).toBe(false);
+    });
+});
+
+describe('buildPlayoffBracket', () => {
+    it('returns no matches for 0 or 1 entrants', () => {
+        expect(buildPlayoffBracket(0)).toEqual([]);
+        expect(buildPlayoffBracket(1)).toEqual([]);
+    });
+
+    it('2 entrants: a straight final', () => {
+        expect(buildPlayoffBracket(2)).toEqual([
+            { stage: 'FIN', aSeedIndex: 0, bSeedIndex: 1 },
+        ]);
+    });
+
+    it('3 entrants: seed 1 byes to the final, 2v3 play in', () => {
+        expect(buildPlayoffBracket(3)).toEqual([
+            { stage: 'SF2', aSeedIndex: 1, bSeedIndex: 2 },
+            { stage: 'FIN', aSeedIndex: 0, bSeedIndex: null, bDependsOn: 'SF2' },
+        ]);
+    });
+
+    it('4 entrants: today\'s unchanged bracket (1v4, 2v3, final)', () => {
+        expect(buildPlayoffBracket(4)).toEqual([
+            { stage: 'SF1', aSeedIndex: 0, bSeedIndex: 3 },
+            { stage: 'SF2', aSeedIndex: 1, bSeedIndex: 2 },
+            { stage: 'FIN', aSeedIndex: null, bSeedIndex: null, aDependsOn: 'SF1', bDependsOn: 'SF2' },
+        ]);
+    });
+
+    it('5 entrants: seed 1 byes to SF1, 4v5 play in, 2v3 is a normal semi', () => {
+        expect(buildPlayoffBracket(5)).toEqual([
+            { stage: 'PI', aSeedIndex: 3, bSeedIndex: 4 },
+            { stage: 'SF1', aSeedIndex: 0, bSeedIndex: null, bDependsOn: 'PI' },
+            { stage: 'SF2', aSeedIndex: 1, bSeedIndex: 2 },
+            { stage: 'FIN', aSeedIndex: null, bSeedIndex: null, aDependsOn: 'SF1', bDependsOn: 'SF2' },
+        ]);
+    });
+
+    it('6 entrants: seeds 1-2 bye to the semis, 3v6 and 4v5 play in', () => {
+        expect(buildPlayoffBracket(6)).toEqual([
+            { stage: 'QF1', aSeedIndex: 2, bSeedIndex: 5 },
+            { stage: 'QF2', aSeedIndex: 3, bSeedIndex: 4 },
+            { stage: 'SF1', aSeedIndex: 0, bSeedIndex: null, bDependsOn: 'QF2' },
+            { stage: 'SF2', aSeedIndex: 1, bSeedIndex: null, bDependsOn: 'QF1' },
+            { stage: 'FIN', aSeedIndex: null, bSeedIndex: null, aDependsOn: 'SF1', bDependsOn: 'SF2' },
+        ]);
+    });
+
+    // Structural sanity check across every real bracket shape: runPlayoffStage executes slots in
+    // array order and resolves a null seed index by reading `winners[dependsOn]`, populated by an
+    // earlier iteration. If a dependsOn ever pointed at a stage that hadn't run yet, that read
+    // would be undefined at runtime — this catches that class of bug at the data-table level,
+    // without needing to run an actual tournament.
+    it.each([2, 3, 4, 5, 6])('every dependsOn stage appears earlier in the array (N=%i)', (n) => {
+        const bracket = buildPlayoffBracket(n);
+        const seenStages = new Set<PlayoffStage>();
+        for (const slot of bracket) {
+            if (slot.aDependsOn) expect(seenStages.has(slot.aDependsOn)).toBe(true);
+            if (slot.bDependsOn) expect(seenStages.has(slot.bDependsOn)).toBe(true);
+            seenStages.add(slot.stage);
+        }
+    });
+
+    it.each([2, 3, 4, 5, 6])('every slot has exactly one seed/dependsOn source per side (N=%i)', (n) => {
+        for (const slot of buildPlayoffBracket(n)) {
+            expect(slot.aSeedIndex !== null || slot.aDependsOn !== undefined).toBe(true);
+            expect(slot.aSeedIndex !== null && slot.aDependsOn !== undefined).toBe(false);
+            expect(slot.bSeedIndex !== null || slot.bDependsOn !== undefined).toBe(true);
+            expect(slot.bSeedIndex !== null && slot.bDependsOn !== undefined).toBe(false);
+        }
     });
 });
 

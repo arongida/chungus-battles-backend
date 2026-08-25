@@ -2,7 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 
 export type TournamentStatus = 'running' | 'complete' | 'failed' | 'skipped';
 export type TournamentStage = 'gauntlet' | 'playoff' | 'done';
-export type PlayoffStage = 'SF1' | 'SF2' | 'FIN';
+export type PlayoffStage = 'PI' | 'QF1' | 'QF2' | 'SF1' | 'SF2' | 'FIN';
 
 export interface TournamentGameResult {
     gameIndex: number;
