@@ -189,8 +189,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // ItemSkillBehaviors.ts — this is one of the rare skills that writes -= instead of =).
     triggerTypes: [TriggerType.ON_DODGE, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.LEGENDARY]: { healRatio: 0.02, dodgeCost: 3 },
-      [ItemRarity.MYTHIC]: { healRatio: 0.04, dodgeCost: 2 },
+      [ItemRarity.LEGENDARY]: { healRatio: 0.02, dodgeCost: 4 },
+      [ItemRarity.MYTHIC]: { healRatio: 0.04, dodgeCost: 3 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHADOWSTEP], r);
@@ -230,8 +230,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // resets the latch and any lingering stat output.
     triggerTypes: [TriggerType.AURA, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.LEGENDARY]: { hpThreshold: 0.5, durationMs: 3000, dodgeRate: 1000 },
-      [ItemRarity.MYTHIC]: { hpThreshold: 0.5, durationMs: 5000, dodgeRate: 1000 },
+      [ItemRarity.LEGENDARY]: { hpThreshold: 0.5, durationMs: 2000, dodgeRate: 1000 },
+      [ItemRarity.MYTHIC]: { hpThreshold: 0.5, durationMs: 4000, dodgeRate: 1000 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SMOKE_BOMB], r);
@@ -275,8 +275,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.15 },
-      [ItemRarity.MYTHIC]: { ratio: 0.3 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.2 },
+      [ItemRarity.MYTHIC]: { ratio: 0.4 },
     },
     describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], r).ratio)} of your strength.`,
     status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.accuracy)} accuracy`,
@@ -289,8 +289,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.2 },
-      [ItemRarity.MYTHIC]: { ratio: 0.4 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.25 },
+      [ItemRarity.MYTHIC]: { ratio: 0.5 },
     },
     describe: (r) => `Reduce enemy attack speed by ${pct(skillValues(ITEM_SKILLS[ItemSkillType.INTIMIDATING_PRESENCE], r).ratio)}.`,
     status: (ctx) => {
@@ -440,7 +440,9 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     },
     status: (ctx) => {
       if (ctx.inFight) return '';
-      const left = ctx.player.hagglerFreeRerolls;
+      // Shared pool (see PlayerSchema.freeRerollCharges) — may include charges contributed by
+      // Bargain Hunter too if the player also owns that talent.
+      const left = ctx.player.freeRerollCharges;
       return `${left} free reroll${left === 1 ? '' : 's'} left`;
     },
   },
@@ -630,11 +632,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: SHIELD_SLOTS,
     triggerTypes: [TriggerType.ON_ATTACKED, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.COMMON]: { ratio: 0.04, defenseCost: 1 },
-      [ItemRarity.RARE]: { ratio: 0.08, defenseCost: 2 },
-      [ItemRarity.EPIC]: { ratio: 0.12, defenseCost: 3 },
-      [ItemRarity.LEGENDARY]: { ratio: 0.16, defenseCost: 4 },
-      [ItemRarity.MYTHIC]: { ratio: 0.20, defenseCost: 5 },
+      [ItemRarity.COMMON]: { ratio: 0.06, defenseCost: 1 },
+      [ItemRarity.RARE]: { ratio: 0.10, defenseCost: 1 },
+      [ItemRarity.EPIC]: { ratio: 0.16, defenseCost: 2 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.18, defenseCost: 3 },
+      [ItemRarity.MYTHIC]: { ratio: 0.22, defenseCost: 4 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.RIPOSTE], r);
@@ -655,11 +657,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // skillAffectedStats because they touch disjoint fields. FIGHT_END resets the defense stack.
     triggerTypes: [TriggerType.ON_ATTACKED, TriggerType.AURA, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.COMMON]: { defensePerHit: 4, maxDefense: 50, attackSpeedPenalty: 0.20 },
-      [ItemRarity.RARE]: { defensePerHit: 5, maxDefense: 75, attackSpeedPenalty: 0.20 },
-      [ItemRarity.EPIC]: { defensePerHit: 6, maxDefense: 100, attackSpeedPenalty: 0.25 },
-      [ItemRarity.LEGENDARY]: { defensePerHit: 7, maxDefense: 150, attackSpeedPenalty: 0.25 },
-      [ItemRarity.MYTHIC]: { defensePerHit: 8, maxDefense: 200, attackSpeedPenalty: 0.30 },
+      [ItemRarity.COMMON]: { defensePerHit: 5, maxDefense: 75, attackSpeedPenalty: 0.20 },
+      [ItemRarity.RARE]: { defensePerHit: 6, maxDefense: 100, attackSpeedPenalty: 0.20 },
+      [ItemRarity.EPIC]: { defensePerHit: 7, maxDefense: 150, attackSpeedPenalty: 0.25 },
+      [ItemRarity.LEGENDARY]: { defensePerHit: 8, maxDefense: 200, attackSpeedPenalty: 0.25 },
+      [ItemRarity.MYTHIC]: { defensePerHit: 10, maxDefense: 300, attackSpeedPenalty: 0.30 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_WALL], r);
@@ -681,11 +683,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // A real stun (Player.setStunned) is strictly stronger than the old attack-speed slow it
     // replaces, so the cooldown is longer across the board — see PlayerSchema.setStunned.
     values: {
-      [ItemRarity.COMMON]: { stunMs: 700, cooldownMs: 5000 },
-      [ItemRarity.RARE]: { stunMs: 900, cooldownMs: 5000 },
-      [ItemRarity.EPIC]: { stunMs: 1100, cooldownMs: 5000 },
-      [ItemRarity.LEGENDARY]: { stunMs: 1300, cooldownMs: 5000 },
-      [ItemRarity.MYTHIC]: { stunMs: 1600, cooldownMs: 5000 },
+      [ItemRarity.COMMON]: { stunMs: 1000, cooldownMs: 4600 },
+      [ItemRarity.RARE]: { stunMs: 1100, cooldownMs: 4400 },
+      [ItemRarity.EPIC]: { stunMs: 1200, cooldownMs: 4200 },
+      [ItemRarity.LEGENDARY]: { stunMs: 1300, cooldownMs: 4000 },
+      [ItemRarity.MYTHIC]: { stunMs: 1400, cooldownMs: 3800 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_BASH], r);
@@ -711,9 +713,9 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     values: {
       [ItemRarity.COMMON]: { every: 6 },
       [ItemRarity.RARE]: { every: 5 },
-      [ItemRarity.EPIC]: { every: 5 },
-      [ItemRarity.LEGENDARY]: { every: 4 },
-      [ItemRarity.MYTHIC]: { every: 3 },
+      [ItemRarity.EPIC]: { every: 4 },
+      [ItemRarity.LEGENDARY]: { every: 3 },
+      [ItemRarity.MYTHIC]: { every: 2 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.BRACE], r);
@@ -809,7 +811,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: 'Liquid Courage',
     slots: [],
     triggerTypes: [],
-    values: { [ItemRarity.COMMON]: { invulnMs: 2500 } },
+    values: { [ItemRarity.COMMON]: { invulnMs: 2000 } },
     describe: (r) => `Invulnerable for the first ${(skillValues(ITEM_SKILLS[ItemSkillType.LIQUID_COURAGE], r).invulnMs / 1000).toFixed(1)}s of your next fight.`,
   },
 };

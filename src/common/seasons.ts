@@ -18,6 +18,36 @@ export interface SeasonInfo {
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
   {
+    number: 26,
+    name: 'Cold Snap',
+    changes: [
+      'Frostbite Edge: freezes can no longer trigger more than once per second — chill stacks hold at the threshold instead of being lost while on cooldown',
+      'Dagger of Poison and Frostbite Edge no longer additionally roll a random rogue item skill at Legendary/Mythic',
+      'Bargain Hunter: reworked — no longer halves the reroll cost, now gives 2 free shop rerolls each round (stacks with Haggler)',
+      'Just a Scratch: reworked — no longer a per-hit proc, now pays 20% of total damage taken as gold at fight end',
+      'Bully: stun duration 1s → 1.2s',
+      'The Future is Now: no longer doubles income and now blocks buying XP directly — xp-double only',
+      'Band of Vigor: heal and invulnerability duration both -20%',
+      'Dagger of Poison: reverted the extra poison stack from last patch',
+      "Soulstealer's Scythe: strength scaling 300% → 200%, base attack speed 0.9 → 0.7, swings can be dodged again (still ignores block and shatters invulnerability)",
+      'Stab: 35% → 40% max HP damage, now ignores 50% of enemy defense',
+      'New unique: Frostbite Edge (tier 5 rogue weapon) — stacking chill on hit, freezes the enemy at max stacks',
+      'Fixed: Ring of Immortality could re-roll into another Ring of Immortality',
+      'Misconduct: no longer bumps the taken item\'s rarity — just a free steal',
+      'Potion price 12 → 10 gold',
+      'Liquid Courage potion invulnerability 2.5s → 2.0s',
+      'Shield skills increased power, except Aegis (invulnerability)',
+      'Shadowstep: slight increase in dodge cost, Smoke bomb: reduced duration by 1 second',
+      'Battle focus: increased accuracy gained, Intimidating presence: increased attack speed reduced',
+      'Throw money: increased income scaling to 120%',
+      'Snitch: moved to level 1',
+      'Robbery: moved to level 2',
+      'Zealot: moved to level 3',
+      'Rage: moved to level 2',
+      'Wit\'s End: reduced gold to +10, xp to +16, income unchanged',
+    ]
+  },
+  {
     number: 25,
     name: 'Second Wind',
     changes: [

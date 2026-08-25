@@ -105,10 +105,10 @@ export const STAT_RANGES: Record<RollableStat, Record<number, StatRange>> = {
     },
     dodgeRate: {
         1: { min: 10,  max: 18   },
-        2: { min: 14,  max: 24  },
-        3: { min: 20, max: 36  },
-        4: { min: 30, max: 60  },
-        5: { min: 48, max: 86  },
+        2: { min: 14,  max: 22  },
+        3: { min: 20, max: 34  },
+        4: { min: 30, max: 50  },
+        5: { min: 40, max: 80  },
     },
     hpRegen: {
         1: { min: 1, max: 2, isFloat: true },

@@ -151,11 +151,11 @@ export const TWO_HANDED_PAIRED_SLOT: Record<EquipSlot, EquipSlot> = {
 export const SOULSTEALER_SCYTHE_ITEM_ID = 59;
 
 /**
- * Weapons whose swings bypass dodge, Brace's one-shot block, and invulnerability entirely (see
- * FightRoom.tryWeaponAttack) — defense still mitigates. Distinct from TWO_HANDED_WEAPON_IDS
- * above, which is only about affix rolling.
+ * Weapons whose swings bypass Brace's one-shot block and shatter invulnerability outright (see
+ * FightRoom.tryWeaponAttack) — defense still mitigates, and (Season 26) dodge works normally
+ * again. Distinct from TWO_HANDED_WEAPON_IDS above, which is only about affix rolling.
  */
-export const UNAVOIDABLE_WEAPON_IDS = new Set([SOULSTEALER_SCYTHE_ITEM_ID]);
+export const UNBLOCKABLE_WEAPON_IDS = new Set([SOULSTEALER_SCYTHE_ITEM_ID]);
 
 /** Soulstealer's Scythe: max damage permanently added per soul reaped (one per hit landed). */
 export function scytheSoulValue(rarity: number): number {
@@ -167,6 +167,37 @@ export function scytheSoulValue(rarity: number): number {
  *  reset. */
 export const scytheSouls = new WeakMap<Item, number>();
 
+/** Frostbite Edge (82) — new Season 26 unique, uses the previously-unused Frozen_blade_B art. */
+export const FROSTBITE_EDGE_ITEM_ID = 82;
+
+/** Frostbite Edge: landed hits needed to trigger a freeze — higher rarity freezes faster. */
+export function frostbiteChillThreshold(rarity: number): number {
+    return 8 - rarity; // Common 7 .. Mythic 3
+}
+
+/** Frostbite Edge: freeze (stun) duration once the chill threshold is reached. */
+export function frostbiteFreezeMs(rarity: number): number {
+    return 200 + 100 * rarity; // Common 750ms .. Mythic 1350ms
+}
+
+/** Frostbite Edge: chill stacks built up this fight, keyed by item instance. Deliberately does
+ *  not decay — only landed hits build it and a freeze resets it. Capped at the threshold while a
+ *  freeze is on cooldown (see frostbiteLastProcMs) rather than uncapped, so a fast attacker can't
+ *  bank stacks past the threshold — the moment the cooldown clears, the very next landed hit
+ *  freezes and resets to 0. FightRoom builds fresh Item instances every fight, so this needs no
+ *  explicit FIGHT_START reset, same idiom as scytheSouls above. */
+export const chillStacks = new WeakMap<Item, number>();
+
+/** Frostbite Edge: minimum time between freezes, so a high-attack-speed roll can't lock the enemy
+ *  in a near-permanent stun-lock. Chill stacks still build normally while on cooldown (capped at
+ *  the threshold, not consumed) — the first landed hit once the cooldown clears immediately
+ *  freezes and resets the stacks, rather than needing a fresh full stack cycle. */
+export const FROSTBITE_PROC_COOLDOWN_MS = 1000;
+
+/** Frostbite Edge: last freeze time (clock-elapsed ms), keyed by item instance — same
+ *  last-proc-time idiom as protectionMoneyLastProcMs/shieldBashLastProcMs (itemSkillState.ts). */
+export const frostbiteLastProcMs = new WeakMap<Item, number>();
+
 /** Live status line shown under an equipped item's description (mirrors ITEM_SKILLS' status()
  *  functions in itemSkillBalance.ts, but for uniques that carry no skillId — see
  *  itemSkillStatus.ts's fallback). Empty until the item has actually procced. */
@@ -175,6 +206,11 @@ export const UNIQUE_ITEM_STATUS: Partial<Record<number, (item: Item) => string>>
         const souls = scytheSouls.get(item) ?? 0;
         if (souls <= 0) return '';
         return `${souls} soul${souls === 1 ? '' : 's'} reaped (+${fmt(item.bonusMaxDamage)} max damage)`;
+    },
+    [FROSTBITE_EDGE_ITEM_ID]: (item) => {
+        const stacks = chillStacks.get(item) ?? 0;
+        if (stacks <= 0) return '';
+        return `${stacks}/${frostbiteChillThreshold(item.rarity)} chill stacks`;
     },
 };
 
@@ -186,6 +222,14 @@ export const UNIQUE_ITEM_STATUS: Partial<Record<number, (item: Item) => string>>
  * SHOP_START transform, so upgrading it would only be confusing.
  */
 export const NON_UPGRADEABLE_ITEM_IDS = new Set([6, 47]); // Health Flask, Ring of Immortality
+
+/**
+ * Class-unique weapons that already carry a hardcoded, always-on signature effect (see
+ * ItemBehaviors.ts) — Dagger of Poison's on-hit poison stack and Frostbite Edge's chill/freeze.
+ * Excluded from rollItemSkill (itemSkillRoller.ts) so a Legendary/Mythic roll can't additionally
+ * bolt a random class skill onto an item whose whole identity is its unique effect.
+ */
+export const NO_CLASS_SKILL_ITEM_IDS = new Set([18, 82]); // Dagger of Poison, Frostbite Edge
 
 /**
  * Wand of Fire (14) / Flowering Staff (8) / Magic Ring (702): cooldownReduction granted per
@@ -238,7 +282,7 @@ export const FIRE_WITH_FIRE_MAX_STACKS = 10;
  * Documentation only — the authoritative value is Item(6).price in Mongo (see
  * scripts/increaseItemPrices.ts); this constant is never imported.
  */
-export const HEALTH_FLASK_PRICE = 12;
+export const HEALTH_FLASK_PRICE = 10;
 
 /** Item id of the Health Flask — the item Flash Sale (MERCHANT_1) grants for free, both on-pick
  *  and every round after (see TalentBehaviors.ts's grantFlashSaleFlask). */
@@ -247,14 +291,16 @@ export const HEALTH_FLASK_ITEM_ID = 6;
 /** Band of Vigor (27): HP fraction below which "Second Wind" can proc, once per fight. */
 export const SECOND_WIND_THRESHOLD = 0.3;
 
-/** Band of Vigor (27): burst heal on proc, as a fraction of the wearer's max HP. */
+/** Band of Vigor (27): burst heal on proc, as a fraction of the wearer's max HP.
+ *  Lowered ~20% in Season 26. */
 export function secondWindHealFraction(rarity: number): number {
-    return 0.1 + 0.1 * rarity;
+    return 0.08 + 0.08 * rarity;
 }
 
-/** Band of Vigor (27): invulnerability window granted on proc. */
+/** Band of Vigor (27): invulnerability window granted on proc.
+ *  Lowered ~20% in Season 26. */
 export function secondWindInvulnMs(rarity: number): number {
-    return 300 + 350 * rarity;
+    return 240 + 280 * rarity;
 }
 
 export const GAMBLERS_DICE_ITEM_ID = 703;

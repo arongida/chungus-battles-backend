@@ -31,7 +31,7 @@ import { crushingBlowCounters, openingActCounters } from '../items/behavior/item
 import { Talent } from '../talents/schema/TalentSchema';
 import { CombatLogMessage, FightSideStats, FightStatsMessage, GameOverMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
 import { track } from '../talents/behavior/TalentBehaviors';
-import { BURN_DAMAGE_PER_STACK, UNAVOIDABLE_WEAPON_IDS } from '../items/behavior/uniqueItemBalance';
+import { BURN_DAMAGE_PER_STACK, UNBLOCKABLE_WEAPON_IDS } from '../items/behavior/uniqueItemBalance';
 import { creditDotDamage } from '../common/dotSources';
 import {
     FESTERING_WOUNDS_INTERVAL_MULTIPLIER,
@@ -669,10 +669,11 @@ export class FightRoom extends Room {
         const maxDmg = weapon.baseMaxDamage + weapon.bonusMaxDamage + attacker.strength * strengthMultiplier;
         const attackRoll = Math.random() * (maxDmg - minDmg) + minDmg;
 
-        // Soulstealer's Scythe (see uniqueItemBalance.ts): its swings cannot be dodged, cannot be
-        // blocked by Brace, and shatter invulnerability outright — deliberately NOT the same thing
-        // as `empowered` below (Unstoppable Force/Crushing Blow/Opening Act only ever bypass dodge).
-        const unavoidable = UNAVOIDABLE_WEAPON_IDS.has(weapon.itemId);
+        // Soulstealer's Scythe (see uniqueItemBalance.ts): its swings can be dodged normally
+        // (Season 26), but still cannot be blocked by Brace and still shatter invulnerability
+        // outright — deliberately NOT the same thing as `empowered` below (Unstoppable
+        // Force/Crushing Blow/Opening Act only ever bypass dodge).
+        const unblockable = UNBLOCKABLE_WEAPON_IDS.has(weapon.itemId);
 
         // Unstoppable Force (WARRIOR_3): consumes a flag pre-charged on an earlier tick — skips
         // the dodge roll entirely and boosts the final damage below.
@@ -709,20 +710,14 @@ export class FightRoom extends Room {
             const dodgeChance = defender.getDodgeChance();
 
             if (Math.random() < dodgeChance) {
-                if (unavoidable) {
-                    // Still rolls the dice (so the log only fires when it actually mattered), but
-                    // a would-be dodge doesn't stop the swing — no attacksDodged credit, no ON_DODGE.
-                    this.logCombat(this.state.playerClient, { text: `${defender.name} tries to dodge — ${attacker.name}'s ${weapon.name} reaps through it anyway!`, kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId });
-                } else {
-                    defender.fightStats.attacksDodged++;
-                    this.logCombat(this.state.playerClient, { text: `${defender.name} dodged ${attacker.name}'s ${weapon.name}!`, kind: 'dodge', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId });
-                    this.dispatcher.dispatch(new OnDodgeTriggerCommand(), {
-                        attacker: attacker,
-                        defender: defender,
-                        isCounter: isCounter,
-                    });
-                    return 0;
-                }
+                defender.fightStats.attacksDodged++;
+                this.logCombat(this.state.playerClient, { text: `${defender.name} dodged ${attacker.name}'s ${weapon.name}!`, kind: 'dodge', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId });
+                this.dispatcher.dispatch(new OnDodgeTriggerCommand(), {
+                    attacker: attacker,
+                    defender: defender,
+                    isCounter: isCounter,
+                });
+                return 0;
             }
         }
 
@@ -747,9 +742,9 @@ export class FightRoom extends Room {
         // invulnerability window did at high attack speed.
         const blockSource = defender.consumePendingBlock();
         if (blockSource) {
-            if (unavoidable) {
+            if (unblockable) {
                 // Brace is still consumed (consumePendingBlock already cleared it above) — an
-                // unavoidable weapon just has no future swing left for it to have saved.
+                // unblockable weapon just has no future swing left for it to have saved.
                 this.logCombat(this.state.playerClient, {
                     text: `${attacker.name}'s ${weapon.name} cleaves straight through ${defender.name}'s ${blockSource.name}!`,
                     kind: 'item', attackerId: attacker.playerId, defenderId: defender.playerId,
@@ -783,7 +778,7 @@ export class FightRoom extends Room {
         // Shatters invulnerability outright rather than silently ignoring it — including a guard
         // just raised by this very hit's ON_DAMAGE dispatch above (Band of Vigor / Guardian
         // Angel), so a last-second save doesn't quietly no-op the scythe's swing.
-        if (unavoidable && defender.invincible) {
+        if (unblockable && defender.invincible) {
             defender.breakInvincibility(this.state.playerClient);
             this.logCombat(this.state.playerClient, {
                 text: `${attacker.name}'s ${weapon.name} shatters ${defender.name}'s guard!`,

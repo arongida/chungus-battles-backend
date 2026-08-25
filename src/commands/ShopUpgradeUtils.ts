@@ -13,6 +13,8 @@ import {
   floweringStaffCooldownReduction,
   floweringStaffRegenSteal,
   FLOWERING_STAFF_MAX_STEAL,
+  frostbiteChillThreshold,
+  frostbiteFreezeMs,
   magicRingCooldownReduction,
   magicWandCooldownReduction,
   NON_UPGRADEABLE_ITEM_IDS,
@@ -42,11 +44,11 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
   },
   702: (item) => `Every 1s during battle: Gains bonus stats. Evolves on level up.`,
   18: (item) => {
-    const stacks = item.rarity + 1;
+    const stacks = item.rarity;
     const totalHpPct = parseFloat((POISON_DAMAGE_PER_STACK_FRACTION * 100 * (POISON_DURATION_MS / 1000)).toFixed(2));
-    return `Applies ${stacks} poison stacks on hit. Each stack deals ${totalHpPct}% max HP over ${POISON_DURATION_MS / 1000}s. Any poison halves healing.`;
+    return `Applies ${stacks} poison stack${stacks > 1 ? 's' : ''} on hit. Each stack deals ${totalHpPct}% max HP over ${POISON_DURATION_MS / 1000}s. Any poison halves healing.`;
   },
-  59: (item) => `2-handed — Cannot be dodged, blocked or absorbed. Each hit reaps a soul: +${scytheSoulValue(item.rarity)} max damage for the rest of the fight.`,
+  59: (item) => `2-handed — Cannot be blocked or absorbed. Each hit reaps a soul: +${scytheSoulValue(item.rarity)} max damage for the rest of the fight.`,
   703: (item) => {
     const multiplier = item.rarity / 2;
     return multiplier === 1
@@ -57,6 +59,11 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
     const healPct = Math.round(secondWindHealFraction(item.rarity) * 100);
     const invulnSec = (secondWindInvulnMs(item.rarity) / 1000).toFixed(2);
     return `The first time you fall below ${Math.round(SECOND_WIND_THRESHOLD * 100)}% HP in a fight, heal ${healPct}% of your max HP and become invulnerable for ${invulnSec}s. Once per fight.`;
+  },
+  82: (item) => {
+    const stacks = frostbiteChillThreshold(item.rarity);
+    const freezeSec = (frostbiteFreezeMs(item.rarity) / 1000).toFixed(2);
+    return `Every landed hit chills the enemy. At ${stacks} stacks, freeze them solid for ${freezeSec}s and reset the stacks. Freezes at most once per second.`;
   },
 };
 
@@ -151,21 +158,18 @@ export function baseLuckyFindChance(level: number): number {
 }
 
 /** Base (un-modified) shop reroll cost, seeded onto Player.refreshShopCost each draft
- *  aura tick and at draft setup; talents (Comrade +income, Bargain Hunter x0.5) then adjust it. */
+ *  aura tick and at draft setup; talents (Comrade +income, VIP Pass surcharge) then adjust it. */
 export const BASE_REFRESH_SHOP_COST = 2;
 
-/** Bargain Hunter's reroll-cost multiplier (halved). */
-export const BARGAIN_HUNTER_REFRESH_COST_MULTIPLIER = 0.5;
+/** Bargain Hunter's free shop rerolls granted per round (contributed into
+ *  Player.freeRerollGrant, stacking additively with the Haggler item skill — see
+ *  TalentBehaviors.ts and DraftAuraTriggerCommand). */
+export const BARGAIN_HUNTER_FREE_REROLLS = 2;
 
 /** Base (un-modified) active-potion capacity, seeded onto Player.potionCapacity each draft aura
  *  tick before aura talents run; Flash Sale (MERCHANT_1) adds to it while owned — see
  *  DraftRoom.drinkItem for where the cap is actually enforced. */
 export const BASE_POTION_CAPACITY = 1;
-
-/** Reroll cost after multipliers: floored, never below 1 (no free/negative-cost rerolls). */
-export function applyRefreshCostMultiplier(cost: number, multiplier: number): number {
-    return Math.max(1, Math.floor(cost * multiplier));
-}
 
 /**
  * Lucky shop rolls: each shop slot has a chance — Player.luckyFindChance, seeded from
@@ -249,14 +253,8 @@ export function totalRemainingRaritySteps(player: Player): number {
     .reduce((sum, { item }) => sum + (ItemRarity.MYTHIC - item.rarity), 0);
 }
 
-/** True when the player owns Misconduct (402), which upgrades every stolen item by one rarity. */
-export function hasMisconductUpgrade(player: Player): boolean {
-  return player.talents?.some((t) => t.talentId === TalentType.MISCONDUCT) ?? false;
-}
-
 /** Gold added to Player.refreshShopCost per reroll while VIP Pass is owned — its membership fee.
- *  Applied as a delta (like Comrade's +income) so Bargain Hunter's halving still lands on the
- *  fully-adjusted cost. */
+ *  Applied as a delta, like Comrade's +income. */
 export const VIP_PASS_REROLL_SURCHARGE = 1;
 
 /** True when the player owns VIP Pass (202), which guarantees at least one shop slot is an item

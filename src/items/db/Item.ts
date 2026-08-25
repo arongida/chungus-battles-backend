@@ -159,7 +159,9 @@ function getItemSchemaObject(itemFromDb: any): Item {
  */
 export async function getRandomItemsByTier(tier: number, count: number): Promise<Item[]> {
     const itemArrayFromDb = await itemModel.aggregate([
-        {$match: {tier, tags: {$ne: 'quest'}}},
+        // Excludes ring-tagged items too (Season 26 fix) — otherwise Ring of Immortality's own
+        // SHOP_START "transform into a random item of this tier" roll could re-select itself.
+        {$match: {tier, tags: {$nin: ['quest', 'transforming']}}},
         {$sample: {size: count}},
     ]);
 
