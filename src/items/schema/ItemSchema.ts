@@ -100,6 +100,14 @@ export class Item extends Schema {
   // Server-only, not synced: Gold Genie (TalentBehaviors.ts) rolls its post-Legendary lucky-find
   // chance exactly once per shop slot — this latches that so repeat aura ticks don't re-roll it.
   goldGenieLuckyRolled: boolean = false;
+  // Store Credit (item skill): true once THIS specific copy's free claim has been spent this shop
+  // phase. Tracked per item, not on Player, so selling this item and buying/equipping a fresh
+  // copy of the skill grants a brand-new claim instead of inheriting the sold item's spent state
+  // (a player-level pool keyed only by cap value can't tell two same-cap copies apart, and can't
+  // tell "this item's claim was already spent" from "a different item just happens to grant the
+  // same cap"). Reset in DraftRoom.onJoin, same per-shop-phase timing as the various *ClaimUsed
+  // flags on Player. See PlayerSchema.storeCreditClaims / ItemSkillBehaviors.ts STORE_CREDIT.
+  storeCreditClaimUsed: boolean = false;
 
   executeBehavior(context: BehaviorContext): void | Promise<void> {
     const itemContext: ItemBehaviorContext = { ...context, item: this };

@@ -21,6 +21,11 @@ export const SEASONS: SeasonInfo[] = [
     number: 26,
     name: 'Cold Snap',
     changes: [
+      'Just a Scratch: reduced gold gained to 5%',
+      'Cash Back: increased reward',
+      'Fixed: Store Credit did not stack — two equipped copies now each grant their own free claim, and a Legendary copy no longer overrides a Mythic copy\'s price cap',
+      'Battle Focus reworked: no longer grants accuracy — every 3rd (Mythic: 2nd) time the enemy dodges your attack, your next attack is empowered: unavoidable, +50% bonus damage',
+      'Light Fingers reworked: no longer steals for free at shop start — now triggers when you sell an item, stealing a random shop item of equal or lower price for free (Mythic: the stolen item also gains a rarity), at the cost of 1 income. Must be equipped to trigger',
       'Frostbite Edge: freezes can no longer trigger more than once per second per enemy, even when dual-wielding two — chill stacks hold at the threshold instead of being lost while on cooldown',
       'Dagger of Poison and Frostbite Edge no longer additionally roll a random rogue item skill at Legendary/Mythic',
       'Bargain Hunter: reworked — no longer halves the reroll cost, now gives 2 free shop rerolls each round (stacks with Haggler)',

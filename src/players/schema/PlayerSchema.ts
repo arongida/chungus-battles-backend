@@ -114,10 +114,15 @@ export class Player extends Schema implements IStats {
     // claimed this way also gets the rarity-upgrade steal treatment (see ShopUpgradeUtils.
     // stealShopItem / DraftRoom.buyItem).
     misconductClaimUsed: boolean = false;
-    // Store Credit (item skill): one free item per shop PHASE, not per shop build — same
-    // per-phase reset reasoning as freeRerollChargesUsed below (DraftRoom.onJoin), unlike
-    // comradeClaimUsed which refreshes on every reroll.
-    storeCreditClaimUsed: boolean = false;
+    // Store Credit (item skill): this tick's unspent claims, keyed by the granting Item instance
+    // so DraftRoom.buyItem can mark the exact copy's own storeCreditClaimUsed flag spent
+    // (ItemSchema.ts) instead of matching by cap value — a value-keyed pool can't tell two
+    // same-cap copies apart, and can't grant a fresh claim to a copy that replaces an
+    // already-spent one. Re-seeded to empty every draft aura tick (DraftAuraTriggerCommand); each
+    // unspent equipped copy re-adds itself during that tick's triggerEquippedItems pass
+    // (ItemSkillBehaviors.ts STORE_CREDIT) — same "seed, accumulate, finalize" idiom as
+    // freeRerollGrant below, but keyed by item rather than summed.
+    storeCreditClaims: Map<Item, number> = new Map();
     // Free shop rerolls (Haggler item skill + Bargain Hunter talent): how many of this shop-phase's
     // free rerolls have already been spent (DraftRoom.refreshShop). Reset once per shop PHASE
     // (DraftRoom.onJoin), not per shop build — a paid/free reroll rebuilds the shop itself, so
@@ -263,9 +268,13 @@ export class Player extends Schema implements IStats {
     // which is a hidden derived stat re-seeded from scratch each tick, this persists for the
     // whole run (see Player Copy Mechanism in CLAUDE.md — mirrors pendingRegenBuff's pattern).
     @type('number') luckyFindMythicBonus: number = 0;
-    // Store Credit (item skill): same latch as comradeFreeClaim, but the client only honors it on
-    // shop items priced at or below storeCreditFreeClaimCap (see ItemSkillBehaviors.ts
-    // STORE_CREDIT). Declared here (end of the @type block) so existing field indices stay stable.
+    // Store Credit (item skill): derived from storeCreditClaims above by
+    // ItemSkillBehaviors.recomputeStoreCreditClaim — true/nonzero whenever ANY equipped copy still
+    // has an unspent claim this shop phase, storeCreditFreeClaimCap is the largest such cap. The
+    // client only honors the claim on shop items priced at or below this cap; DraftRoom.buyItem
+    // then picks the specific copy whose own cap most tightly covers the purchase, so a wider
+    // claim from another copy survives for a pricier buy. Declared here (end of the @type block)
+    // so existing field indices stay stable.
     @type('boolean') storeCreditFreeClaim: boolean = false;
     @type('number') storeCreditFreeClaimCap: number = 0;
     // Free shop rerolls (Haggler item skill + Bargain Hunter talent): remaining free rerolls for

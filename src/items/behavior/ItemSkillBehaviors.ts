@@ -24,7 +24,7 @@ import type { Item } from '../schema/ItemSchema';
 // refresher can read the same state these behaviors write, see itemSkillState.ts's header comment.
 import {
   coatedEdgeCounters, openingActCounters, crushingBlowCounters, protectionMoneyLastProcMs,
-  shieldBashLastProcMs, braceCounters, bulkDiscountBasePrices, smokeBombUsed,
+  shieldBashLastProcMs, braceCounters, bulkDiscountBasePrices, smokeBombUsed, battleFocusCounters,
 } from './itemSkillState';
 
 export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) => void> = {
@@ -147,34 +147,57 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     }, durationMs);
   },
 
+  // Reworked (Season 26): from an unconditional shop-start freebie (which just grabbed whatever
+  // was cheapest — usually junk, no choice, no cost) into a sell-triggered steal: you must give
+  // up an item to get one, priced at or under what you sold, and it costs 1 income (same tax as
+  // Misconduct/Robbery). ON_SELL only reaches equipped items via triggerEquippedItems (unlike the
+  // old SHOP_START, which also swept inventory copies) — see itemSkillBalance.ts's describe().
   [ItemSkillType.LIGHT_FINGERS]: (context) => {
-    const { attacker, shop, item, client, trigger } = context;
-    if (trigger !== TriggerType.SHOP_START || !attacker || !shop || !item) return;
-    const { count } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const unsold = Array.from(shop).filter((i) => !i.sold);
-    unsold.sort((a, b) => a.price - b.price);
-    unsold.slice(0, count).forEach((i) => {
-      const originalPrice = i.price;
-      // upgrade=false (steal as-is, no rarity step), reduceIncome=false (this isn't Misconduct's
-      // income-for-power trade) — nets to free and drops straight into inventory/equip via
-      // player.getItem inside stealShopItem.
-      stealShopItem(i, attacker, false, false);
-      // Stolen goods aren't quite as clean as a real purchase: sell for the normal 70% cut
-      // instead of stealShopItem's default "sells for full price" (that default suits Misconduct,
-      // which pays for the steal with lost income).
-      i.sellPrice = Math.floor(originalPrice * 0.7);
-      client?.send('draft_log', `${item.name} lifts ${i.name} from the shop — yours for free!`);
-    });
+    const { attacker, shop, item, client, trigger, soldItem } = context;
+    if (trigger !== TriggerType.ON_SELL || !attacker || !shop || !item || !soldItem) return;
+    const { upgrade } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    const candidates = Array.from(shop).filter((i) => !i.sold && i.price <= soldItem.price);
+    if (candidates.length === 0) return;
+    const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+    const originalPrice = chosen.price;
+    // upgrade (1 at Mythic, 0 at Legendary) steps the stolen item's rarity up once; reduceIncome
+    // is the theft's real cost — guarded there against going below 0, same as Misconduct/Robbery.
+    stealShopItem(chosen, attacker, upgrade > 0, true);
+    // Stolen goods aren't quite as clean as a real purchase: sell for the normal 70% cut instead
+    // of stealShopItem's default "sells for full price" — otherwise sell -> steal -> sell would be
+    // a value-neutral loop instead of one that bleeds value (on top of the income cost) each pass.
+    chosen.sellPrice = Math.floor(originalPrice * 0.7);
+    client?.send('draft_log', `${item.name} lifts ${chosen.name} from the shop after selling ${soldItem.name} — free, but costs 1 income!`);
   },
 
   // -------------------------------------------------------------- WARRIOR ----
 
+  // Reworked (Season 26): from a flat accuracy drip into a conditional anti-dodge comeback — every
+  // `every`th time this player's attack is dodged, their next weapon attack is charged empowered
+  // (unavoidable, +50% damage). Shares the same empoweredAttackSource flag as Unstoppable Force
+  // (TalentBehaviors.ts WARRIOR_3), consumed in FightRoom.tryWeaponAttack. FIGHT_START resets the
+  // per-item dodge counter (same idiom as Coated Edge/Brace); ON_ATTACK_DODGED
+  // (OnDodgeTriggerCommand's attacker-side pass) increments it and charges on the Nth dodge.
   [ItemSkillType.BATTLE_FOCUS]: (context) => {
-    const { attacker, item, trigger, attackerSnapshot } = context;
-    if (trigger !== TriggerType.AURA || !attacker || !item) return;
-    const { ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const base = attackerSnapshot ?? attacker;
-    item.skillAffectedStats.accuracy = Math.ceil(Math.max(0, base.strength) * ratio);
+    const { attacker, item, client, trigger } = context;
+    if (!item) return;
+    if (trigger === TriggerType.FIGHT_START) {
+      battleFocusCounters.set(item, 0);
+      return;
+    }
+    if (trigger !== TriggerType.ON_ATTACK_DODGED || !attacker) return;
+    const { every } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    const count = (battleFocusCounters.get(item) ?? 0) + 1;
+    battleFocusCounters.set(item, count);
+    if (count % every !== 0) return;
+    // Guarded like Unstoppable Force — don't clobber an attack another source already charged;
+    // the dodge is still counted above either way, so the next Nth dodge tries again.
+    if (attacker.empoweredAttackSource) return;
+    attacker.empoweredAttackSource = item;
+    client?.send('combat_log', {
+      text: `${attacker.name}'s ${item.name} reads the dodge — the next attack won't miss!`,
+      kind: 'item', attackerId: attacker.playerId, itemId: item.itemId,
+    } as CombatLogMessage);
   },
 
   [ItemSkillType.INTIMIDATING_PRESENCE]: (context) => {
@@ -282,9 +305,16 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   [ItemSkillType.STORE_CREDIT]: (context) => {
     const { attacker, item, trigger, shop } = context;
     if (trigger !== TriggerType.AURA || !attacker || !item || !shop) return;
+    // This specific copy's claim was already spent this shop phase — don't re-offer it. Tracked
+    // on the item itself (ItemSchema.ts), not a player-level flag, so selling this item and
+    // buying/equipping a fresh copy of the skill grants a brand-new claim.
+    if (item.storeCreditClaimUsed) return;
     const { cap } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    attacker.storeCreditFreeClaim = !attacker.storeCreditClaimUsed;
-    attacker.storeCreditFreeClaimCap = cap;
+    // Contributes into the shared claims map (Player.storeCreditClaims), keyed by this item
+    // instance — see recomputeStoreCreditClaim below for how multiple equipped copies (at
+    // possibly different rarities) each grant an independent claim instead of one overwriting
+    // another in this tick's equippedItems iteration.
+    attacker.storeCreditClaims.set(item, cap);
   },
 
   [ItemSkillType.CASH_BACK]: (context) => {
@@ -489,6 +519,21 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
  *  runs. Reuses bulkDiscountBasePrices so repeatedly discounting the live (already-discounted)
  *  price can't compound toward 0. The fraction is capped at BULK_DISCOUNT_MAX_DISCOUNT_FRACTION
  *  so even extreme stacked luck can't make the shop free. */
+/** Derives Store Credit's two synced fields (storeCreditFreeClaim / storeCreditFreeClaimCap) from
+ *  this tick's claims map (Player.storeCreditClaims, one entry per equipped copy that hasn't
+ *  already spent its own claim this shop phase — see the AURA behavior above). Called once per
+ *  draft aura tick (DraftAuraTriggerCommand, after triggerEquippedItems so every copy has
+ *  contributed) and again immediately after a purchase (DraftRoom.buyItem), so the shop UI
+ *  reflects a spend without waiting up to 1s for the next tick. */
+export function recomputeStoreCreditClaim(player: {
+  storeCreditClaims: Map<unknown, number>;
+  storeCreditFreeClaim: boolean; storeCreditFreeClaimCap: number;
+}): void {
+  const caps = Array.from(player.storeCreditClaims.values());
+  player.storeCreditFreeClaim = caps.length > 0;
+  player.storeCreditFreeClaimCap = caps.length ? Math.max(...caps) : 0;
+}
+
 export function applyBulkDiscount(player: { luckyFindChance: number; bulkDiscountPercentPerLuckPercent: number }, shop: Iterable<Item>): void {
   const discountFraction = Math.min(BULK_DISCOUNT_MAX_DISCOUNT_FRACTION, player.luckyFindChance * 100 * player.bulkDiscountPercentPerLuckPercent);
   for (const shopItem of shop) {

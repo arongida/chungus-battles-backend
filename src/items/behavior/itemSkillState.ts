@@ -28,3 +28,6 @@ export const bulkDiscountBasePrices = new WeakMap<Item, { price: number; sellPri
 // a once-per-fight conditional, not a repeating proc), reset on FIGHT_END — same per-fight-scoped
 // idiom as coatedEdgeCounters above.
 export const smokeBombUsed = new WeakMap<Item, boolean>();
+// Battle Focus: dodges-taken counter (this player's attack being dodged, not this item's own
+// dodges), reset on FIGHT_START — same idiom as coatedEdgeCounters above.
+export const battleFocusCounters = new WeakMap<Item, number>();

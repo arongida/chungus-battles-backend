@@ -22,6 +22,9 @@ export interface BehaviorContext {
     /** Source of the damage on ON_DAMAGE triggers — 'burn'/'poison' for DoT ticks, undefined for direct hits. */
     damageType?: DamageType;
     shop?: ArraySchema<Item>;
+    /** The item that was just sold — set on ON_SELL so a behavior can react to what was given up
+     *  (e.g. Light Fingers uses it as the price ceiling for what it steals). */
+    soldItem?: Item;
     availableTalents?: Talent[];
     questItems?: ArraySchema<Item>;
     commandDispatcher?: Dispatcher<FightRoom | DraftRoom>
