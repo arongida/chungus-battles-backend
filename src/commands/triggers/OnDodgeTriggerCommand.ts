@@ -33,5 +33,11 @@ export class OnDodgeTriggerCommand extends Command<
         });
 
         triggerEquippedItems(defender, attackContext, TriggerType.ON_DODGE);
+
+        // Battle Focus (item skill): the mirror case — fires on the player whose attack WAS
+        // dodged (attacker), not the dodger (defender). Context field names are unchanged:
+        // `attacker` stays the skill owner who missed, `defender` stays the dodger. Items only
+        // for now — add a talent filter here too if a talent ever needs this trigger.
+        triggerEquippedItems(attacker, { ...attackContext, trigger: TriggerType.ON_ATTACK_DODGED }, TriggerType.ON_ATTACK_DODGED);
     }
 }

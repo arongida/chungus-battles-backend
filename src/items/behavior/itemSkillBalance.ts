@@ -9,7 +9,7 @@ import { ItemSkillType } from '../types/ItemSkillTypes';
 import { fmt } from '../../common/MessageTypes';
 import {
   coatedEdgeCounters, openingActCounters, crushingBlowCounters, protectionMoneyLastProcMs,
-  shieldBashLastProcMs, braceCounters, smokeBombUsed,
+  shieldBashLastProcMs, braceCounters, smokeBombUsed, battleFocusCounters,
 } from './itemSkillState';
 // Type-only — see itemSkillState.ts's header comment on why this doesn't create a runtime cycle
 // with ItemSchema.ts (which imports ItemSkillBehaviors.ts, which imports this file).
@@ -250,20 +250,20 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.ROGUE,
     name: 'Light Fingers',
     slots: ANY_SLOT,
-    // Once per shop phase only — deliberately NOT AFTER_REFRESH, so rerolling doesn't let this
-    // proc again.
-    triggerTypes: [TriggerType.SHOP_START],
+    // ON_SELL only reaches equipped items (triggerEquippedItems), so this must stay equipped to
+    // fire — unlike the old SHOP_START version, which also swept inventory copies.
+    triggerTypes: [TriggerType.ON_SELL],
     values: {
-      [ItemRarity.LEGENDARY]: { count: 1 },
-      [ItemRarity.MYTHIC]: { count: 2 },
+      [ItemRarity.LEGENDARY]: { upgrade: 0 },
+      [ItemRarity.MYTHIC]: { upgrade: 1 },
     },
     describe: (r) => {
-      const v = skillValues(ITEM_SKILLS[ItemSkillType.LIGHT_FINGERS], r);
-      return v.count > 1
-        ? 'Shop start: steal the cheapest two shop items — free, straight into your inventory.'
-        : 'Shop start: steal the cheapest shop item — free, straight into your inventory.';
+      const { upgrade } = skillValues(ITEM_SKILLS[ItemSkillType.LIGHT_FINGERS], r);
+      return upgrade > 0
+        ? 'When you sell an item: steal a random shop item of equal or lower price — free, and it gains one rarity. Costs 1 income.'
+        : 'When you sell an item: steal a random shop item of equal or lower price — free. Costs 1 income.';
     },
-    status: (ctx) => (ctx.inFight ? '' : 'triggers once per shop phase'),
+    status: (ctx) => (ctx.inFight ? '' : "steals on sell, up to the sold item's price"),
   },
 
   // -------------------------------------------------------------- WARRIOR ----
@@ -273,13 +273,23 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.WARRIOR,
     name: 'Battle Focus',
     slots: ANY_SLOT,
-    triggerTypes: [TriggerType.AURA],
+    // ON_ATTACK_DODGED charges the empowerment; FIGHT_START resets the per-item dodge counter.
+    triggerTypes: [TriggerType.ON_ATTACK_DODGED, TriggerType.FIGHT_START],
     values: {
-      [ItemRarity.LEGENDARY]: { ratio: 0.2 },
-      [ItemRarity.MYTHIC]: { ratio: 0.4 },
+      [ItemRarity.LEGENDARY]: { every: 3 },
+      [ItemRarity.MYTHIC]: { every: 2 },
     },
-    describe: (r) => `Gain accuracy equal to ${pct(skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], r).ratio)} of your strength.`,
-    status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.accuracy)} accuracy`,
+    describe: (r) => {
+      const { every } = skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], r);
+      const ordinal = every === 2 ? '2nd' : every === 3 ? '3rd' : `${every}th`;
+      return `Every ${ordinal} time the enemy dodges your attack, your next attack is empowered: unavoidable, +50% bonus damage.`;
+    },
+    status: (ctx) => {
+      if (!ctx.inFight) return '';
+      const { every } = skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], ctx.item.rarity);
+      const count = battleFocusCounters.get(ctx.item) ?? 0;
+      return `${count % every}/${every} dodges charged`;
+    },
   },
 
   [ItemSkillType.INTIMIDATING_PRESENCE]: {
@@ -463,7 +473,12 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
         ? 'Shop phase: claim one free item, any price.'
         : `Shop phase: claim one free item priced ${v.cap} gold or less.`;
     },
-    status: (ctx) => (ctx.inFight ? '' : (ctx.player.storeCreditFreeClaim ? 'free claim available' : 'claim used this round')),
+    status: (ctx) => {
+      if (ctx.inFight) return '';
+      if (ctx.item.storeCreditClaimUsed) return 'claim used this round';
+      const { cap } = skillValues(ITEM_SKILLS[ItemSkillType.STORE_CREDIT], ctx.item.rarity);
+      return cap >= Number.MAX_SAFE_INTEGER ? 'free claim available (any price)' : `free claim available (up to ${cap} gold)`;
+    },
   },
 
   [ItemSkillType.CASH_BACK]: {
@@ -473,8 +488,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.ON_SELL],
     values: {
-      [ItemRarity.LEGENDARY]: { gold: 1, xp: 2 },
-      [ItemRarity.MYTHIC]: { gold: 2, xp: 4 },
+      [ItemRarity.LEGENDARY]: { gold: 2, xp: 4 },
+      [ItemRarity.MYTHIC]: { gold: 3, xp: 6 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.CASH_BACK], r);

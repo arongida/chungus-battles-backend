@@ -4,14 +4,16 @@ import {Talent} from '../../talents/schema/TalentSchema';
 import {TriggerType} from '../../common/types';
 import {BehaviorContext} from '../../common/BehaviorContext';
 import {triggerEquippedItems} from '../../common/triggerUtils';
+import {Item} from '../../items/schema/ItemSchema';
 
-export class OnSellTriggerCommand extends Command<DraftRoom> {
-    execute() {
+export class OnSellTriggerCommand extends Command<DraftRoom, { soldItem: Item }> {
+    execute({ soldItem } = this.payload) {
         const context: BehaviorContext = {
             client: this.state.playerClient,
             attacker: this.state.player,
             shop: this.state.shop,
             trigger: TriggerType.ON_SELL,
+            soldItem,
         };
 
         const onSellTalents: Talent[] = this.state.player.talents.filter((talent) =>

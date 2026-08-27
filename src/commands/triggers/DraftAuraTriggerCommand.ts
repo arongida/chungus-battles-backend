@@ -7,7 +7,7 @@ import {triggerEquippedItems} from '../../common/triggerUtils';
 import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
 import {baseLuckyFindChance, BASE_POTION_CAPACITY, BASE_REFRESH_SHOP_COST} from '../ShopUpgradeUtils';
 import {ensurePotionEffect, ensureShieldSkill, refreshFutureItemSkill} from '../../items/skills/itemSkillRoller';
-import {applyBulkDiscount} from '../../items/behavior/ItemSkillBehaviors';
+import {applyBulkDiscount, recomputeStoreCreditClaim} from '../../items/behavior/ItemSkillBehaviors';
 
 export class DraftAuraTriggerCommand extends Command<DraftRoom> {
     execute() {
@@ -37,8 +37,12 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         // its own contribution back in during this tick's passes; freeRerollCharges is derived from
         // the total further down, once every source has run.
         player.freeRerollGrant = 0;
-        player.storeCreditFreeClaim = false;
-        player.storeCreditFreeClaimCap = 0;
+        // Store Credit (item skill): re-seeded to empty before the equipped-item aura pass so a
+        // claim can't survive dropping/unequipping/selling the item — each unspent copy re-adds
+        // itself, keyed by its own item instance, during this tick's pass (see
+        // ItemSkillBehaviors.ts STORE_CREDIT); recomputeStoreCreditClaim below derives the two
+        // synced fields from the map once every source has run.
+        player.storeCreditClaims = new Map();
         // Bulk Discount (item skill): same reasoning — re-seeded before the equipped-item aura
         // pass so the rate can't survive dropping/selling the item.
         player.bulkDiscountPercentPerLuckPercent = 0;
@@ -111,5 +115,10 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
         // (reset in DraftRoom.onJoin, not per shop build) — re-deriving from it each tick means a
         // paid refresh can't refund an already-spent charge.
         player.freeRerollCharges = Math.max(0, player.freeRerollGrant - player.freeRerollChargesUsed);
+
+        // Store Credit: derive storeCreditFreeClaim/storeCreditFreeClaimCap from this tick's cap
+        // grants (accumulated by triggerEquippedItems above) minus this shop phase's spent caps —
+        // same "finalize after every source has run" placement as freeRerollCharges above.
+        recomputeStoreCreditClaim(player);
     }
 }

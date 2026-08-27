@@ -21,6 +21,7 @@ import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
 import { RewardGainMessage } from '../common/MessageTypes';
 import { ITEM_SKILLS } from '../items/behavior/itemSkillBalance';
+import { recomputeStoreCreditClaim } from '../items/behavior/ItemSkillBehaviors';
 import { ItemSkillType } from '../items/types/ItemSkillTypes';
 import { TalentType } from '../talents/types/TalentTypes';
 import { grantFlashSaleFlask, track } from '../talents/behavior/TalentBehaviors';
@@ -156,9 +157,12 @@ export class DraftRoom extends Room {
         // Black Market Contact: same per-shop-phase reset reasoning as misconductClaimUsed above —
         // one free lucky-find item per round, not one per reroll.
         this.state.player.luckyFindClaimUsed = false;
-        // Store Credit (item skill): same per-shop-phase reset reasoning as misconductClaimUsed
-        // above — one free claim per round, not one per reroll.
-        this.state.player.storeCreditClaimUsed = false;
+        // Store Credit (item skill): per-item claim-used flag (ItemSchema.ts), reset once per
+        // shop phase for every item the player owns — same per-phase reset timing as the various
+        // *ClaimUsed flags above, but per item instead of per player since each copy's claim is
+        // independent (see PlayerSchema.storeCreditClaims / ItemSkillBehaviors.ts STORE_CREDIT).
+        this.state.player.equippedItems.forEach((item) => { item.storeCreditClaimUsed = false; });
+        this.state.player.inventory.forEach((item) => { item.storeCreditClaimUsed = false; });
         // Free shop rerolls (Haggler item skill + Bargain Hunter talent): same per-shop-phase
         // reset reasoning as misconductClaimUsed above.
         this.state.player.freeRerollChargesUsed = 0;
@@ -520,8 +524,20 @@ export class DraftRoom extends Room {
             this.creditTalentGold(TalentType.GOLD_GENIE, originalPrice);
         }
         if (storeCreditFree) {
-            this.state.player.storeCreditClaimUsed = true;
-            this.state.player.storeCreditFreeClaim = false;
+            // Spend the specific copy whose own cap most tightly covers this purchase (smallest
+            // cap still >= price), so a wider (e.g. an uncapped Mythic) copy's claim survives for
+            // a pricier buy later this round instead of being spent first just because it
+            // happened to run last in this tick's equippedItems iteration.
+            let coveringItem: Item | null = null;
+            this.state.player.storeCreditClaims.forEach((cap, sourceItem) => {
+                if (cap < originalPrice) return;
+                if (!coveringItem || cap < this.state.player.storeCreditClaims.get(coveringItem)) coveringItem = sourceItem;
+            });
+            if (coveringItem) {
+                coveringItem.storeCreditClaimUsed = true;
+                this.state.player.storeCreditClaims.delete(coveringItem);
+            }
+            recomputeStoreCreditClaim(this.state.player);
         }
         if (comradeFree) {
             this.state.player.comradeClaimUsed = true;
@@ -555,19 +571,25 @@ export class DraftRoom extends Room {
         const goldBeforeTrigger = this.state.player.gold;
         const xpBeforeTrigger = this.state.player.xp;
         const levelBeforeTrigger = this.state.player.level;
-        this.dispatcher.dispatch(new OnSellTriggerCommand());
-        // An ON_SELL bonus (e.g. the Cash Back item skill) pays gold/xp on top of the sell
-        // price, but undoSell only ever refunds item.sellPrice. Allowing undo after a bonus
-        // payout would let sell->undo be repeated for infinite gold/xp (and, via xp, infinite
-        // levels/talent points) with the item unchanged. So a sale that paid out any bonus is
-        // not undoable at all. Checks gold, xp AND level: levelUp() resets xp to the leftover
-        // amount, so a bonus that pushes a level-up can leave xp lower than before even though
-        // a bonus was paid. Assumes ON_SELL behaviors are synchronous (true today) — an async
-        // ON_SELL behavior would need this revisited.
+        // Light Fingers (item skill): ON_SELL can grant an item (steal from the shop) rather than
+        // gold/xp — capture the owned-item count here (after the sale already removed `item`) so
+        // the bonusPaid check below also catches that case.
+        const ownedItemCountBeforeTrigger = this.state.player.inventory.length + this.state.player.equippedItems.size;
+        this.dispatcher.dispatch(new OnSellTriggerCommand(), { soldItem: item });
+        // An ON_SELL bonus (e.g. Cash Back's gold/xp, or Light Fingers' stolen item) pays out on
+        // top of the sell price, but undoSell only ever refunds item.sellPrice. Allowing undo
+        // after a bonus payout would let sell->undo be repeated for infinite gold/xp (and, via xp,
+        // infinite levels/talent points) or a free stolen item, with the sold item unchanged. So a
+        // sale that paid out any bonus is not undoable at all. Checks gold, xp, level AND owned
+        // item count: levelUp() resets xp to the leftover amount, so a bonus that pushes a
+        // level-up can leave xp lower than before even though a bonus was paid. Assumes ON_SELL
+        // behaviors are synchronous (true today) — an async ON_SELL behavior would need this
+        // revisited.
         const bonusPaid =
             this.state.player.gold > goldBeforeTrigger ||
             this.state.player.xp > xpBeforeTrigger ||
-            this.state.player.level > levelBeforeTrigger;
+            this.state.player.level > levelBeforeTrigger ||
+            (this.state.player.inventory.length + this.state.player.equippedItems.size) > ownedItemCountBeforeTrigger;
         if (bonusPaid) {
             this.invalidateUndoSell();
         } else {
