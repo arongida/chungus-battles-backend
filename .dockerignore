@@ -1,6 +1,21 @@
-/.env.development
-/.env.production
-/node_modules
-/build
+# IMPORTANT: this is a denylist — anything not listed here still gets baked into the production
+# image (Dockerfile does `COPY --link . .`). Before adding a new file/dir with credentials or
+# local-only state to the repo root, add it here too.
+.env
+.env.development
+.env.production
+.env.test
+.env*.local
+config*.yaml
+.devmode.json
+dump/
+node_modules
+build
 .git
 .github
+.idea
+.vscode
+.worktrees
+.claude
+*.log
+.DS_Store

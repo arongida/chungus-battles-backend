@@ -21,7 +21,7 @@ const ReplaySchema = new Schema({
     result: String,
     gameVersion: Number,
     durationMs: Number,
-    createdAt: { type: Date, default: Date.now, index: true },
+    createdAt: { type: Date, default: Date.now },
     initialState: Schema.Types.Mixed,
     events: [ReplayEventSchema],
     truncated: { type: Boolean, default: false },
@@ -41,6 +41,23 @@ const ReplaySchema = new Schema({
 
 ReplaySchema.index({ originalPlayerId: 1, round: 1 });
 ReplaySchema.index({ gameVersion: 1, kind: 1 });
+// Backstop for pruneSeasonReplays() (app.config.ts's /admin/pruneReplays), which strips the
+// heavy events/initialState fields but is a manual, once-per-season step someone has to
+// remember to call (see CLAUDE.md's season-rollover procedure) — if it's ever forgotten, this
+// TTL index deletes the whole document outright after 90 days instead of leaving it un-pruned
+// forever. Scoped with partialFilterExpression to never touch:
+//  - kind: 'tournament' replays (permanent, by design — see pruneSeasonReplays' own exclusion)
+//  - already-pruned replays (pruned: true) — those are already down to ~1% of their original
+//    size and their lightweight metadata is kept intentionally: /replays/:id returns 410 (not
+//    404) for a pruned-but-still-existing replay, which the frontend renders as "archived"
+//    rather than retrying (see replay/db/Replay.ts's getReplayById and app.config.ts's route
+//    comment) — deleting the document instead would turn that into a 404 and break that UX.
+// Verified against production (2026-08-28) before adding this: every current kind:'run' replay
+// is well under 90 days old (oldest is 3 days old), so this does not delete anything on deploy.
+ReplaySchema.index(
+    { createdAt: 1 },
+    { expireAfterSeconds: 90 * 24 * 60 * 60, partialFilterExpression: { kind: { $ne: 'tournament' }, pruned: { $ne: true } } },
+);
 
 export const replayModel = mongoose.model('Replay', ReplaySchema);
 

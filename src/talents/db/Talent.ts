@@ -54,6 +54,20 @@ function getTalentSchemaObject(talentObjectFromDb: any): Talent {
   return newTalent;
 }
 
+// Short-TTL cache — getAllTalents only ever backs the public, read-only /talents catalog route
+// (app.config.ts), returned as plain JSON with no per-call mutation needed, so (unlike
+// getRandomTalents/getQuestItems/getAllItems) the raw result itself is safe to hand back
+// directly on a cache hit. TTL rather than caching forever preserves the existing "edit a talent
+// doc directly in Mongo, see it live shortly after" workflow (see CLAUDE.md) instead of requiring
+// a redeploy to pick up a balance change.
+const ALL_TALENTS_CACHE_TTL_MS = 5 * 60_000;
+let allTalentsCache: { docs: {}[]; expiresAt: number } | null = null;
+
 export async function getAllTalents(): Promise<{}[]> {
-  return talentModel.find().lean();
+  const now = Date.now();
+  if (!allTalentsCache || allTalentsCache.expiresAt <= now) {
+    const docs = await talentModel.find().lean();
+    allTalentsCache = { docs, expiresAt: now + ALL_TALENTS_CACHE_TTL_MS };
+  }
+  return allTalentsCache.docs;
 }

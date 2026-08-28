@@ -198,18 +198,37 @@ export async function getItemById(itemId: number): Promise<Item | null> {
     return itemFromDb ? getItemSchemaObject(itemFromDb) : null;
 }
 
-export async function getQuestItems(): Promise<Item[]> {
-    const itemArrayFromDb = await itemModel
-        .find({tags: "quest"})
-        .lean()
-        .select({_id: 0, __v: 0});
+// Short-TTL cache for the RAW db rows behind getQuestItems/getAllItems — NOT for the constructed
+// Item Schema objects. Each call must still build fresh Item instances: getItemSchemaObject
+// assigns a new unique `uid` per call (see its own comment), and a Colyseus Schema object can
+// only ever be parented into one room's state tree at a time — getQuestItems in particular is
+// called on every single DraftRoom/FightRoom join (the game's single highest-frequency DB read
+// pattern) and its result is pushed straight into that room's own questItems ArraySchema, so the
+// same Item instances can never be reused across rooms. Caching the plain raw array and
+// re-running the cheap, pure (no I/O) getItemSchemaObject construction on every call keeps that
+// per-call freshness while cutting the repeated DB round trip. TTL (rather than caching forever)
+// preserves the existing "edit an item doc directly in Mongo, see it live shortly after" workflow
+// (see CLAUDE.md) instead of requiring a redeploy to pick up a balance change.
+const CATALOG_CACHE_TTL_MS = 5 * 60_000;
+let questItemsRawCache: { docs: any[]; expiresAt: number } | null = null;
+let allItemsRawCache: { docs: any[]; expiresAt: number } | null = null;
 
-    return itemArrayFromDb.map(item => getItemSchemaObject(item));
+export async function getQuestItems(): Promise<Item[]> {
+    const now = Date.now();
+    if (!questItemsRawCache || questItemsRawCache.expiresAt <= now) {
+        const docs = await itemModel.find({tags: "quest"}).lean().select({_id: 0, __v: 0});
+        questItemsRawCache = { docs, expiresAt: now + CATALOG_CACHE_TTL_MS };
+    }
+    return questItemsRawCache.docs.map(item => getItemSchemaObject(item));
 }
 
 export async function getAllItems(): Promise<Item[]>{
-    const allItemsFromDb = await itemModel.find({}).lean();
-    return allItemsFromDb.map(item => getItemSchemaObject(item));
+    const now = Date.now();
+    if (!allItemsRawCache || allItemsRawCache.expiresAt <= now) {
+        const docs = await itemModel.find({}).lean();
+        allItemsRawCache = { docs, expiresAt: now + CATALOG_CACHE_TTL_MS };
+    }
+    return allItemsRawCache.docs.map(item => getItemSchemaObject(item));
 }
 
 /**

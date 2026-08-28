@@ -1,6 +1,7 @@
 import { ColyseusTestServer, boot } from '@colyseus/testing';
 import { server } from '../src/app.config';
 import { getNextPlayerId, getPlayer, playerModel, snapshotPlayer } from '../src/players/db/Player';
+import { generatePlayerToken, reservePlayerId } from '../src/players/db/PlayerToken';
 import { TournamentFightRoom } from '../src/tournament/TournamentFightRoom';
 import {
     buildPlayoffBracket,
@@ -226,8 +227,12 @@ describe('TournamentFightRoom (headless fights)', () => {
 
     async function createThrowawayCharacter(name: string): Promise<number> {
         const playerId = await getNextPlayerId();
+        // Required by DraftRoom.onAuth — see PlayerToken.ts and room.test.ts's
+        // mintPlayerIdAndToken, which does the same thing (mirrors the real /playerid route).
+        const playerToken = generatePlayerToken();
+        await reservePlayerId(playerId, playerToken);
         const room = await colyseus.createRoom('draft_room', {});
-        const client = await colyseus.connectTo(room, { playerId, name, avatarUrl: 'test_avatar' });
+        const client = await colyseus.connectTo(room, { playerId, playerToken, name, avatarUrl: 'test_avatar' });
         await new Promise<void>(r => setTimeout(r, 2500));
         await client.leave(true);
         // DraftRoom.onLeave (copyPlayer + updatePlayer) isn't awaited by the leave call — poll
@@ -246,9 +251,9 @@ describe('TournamentFightRoom (headless fights)', () => {
     }
 
     it('runs a fight headlessly and never mutates either character\'s players document', async () => {
-        // Sequential, not Promise.all: getNextPlayerId() (players/db/Player.ts) isn't
-        // concurrency-safe — two parallel calls can both read the same "last player" before
-        // either insert lands and collide on one playerId.
+        // Sequential, not Promise.all: getNextPlayerId() is now atomic (see Counter.ts), so this
+        // is no longer required for correctness — kept sequential anyway since these two throwaway
+        // characters don't need to be created concurrently and it keeps the test's timing simple.
         const playerIdA = await createThrowawayCharacter('TourneyA');
         const playerIdB = await createThrowawayCharacter('TourneyB');
 

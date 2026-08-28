@@ -1,6 +1,7 @@
 import { ColyseusTestServer, boot } from "@colyseus/testing";
 import { server } from '../src/app.config';
 import { getNextPlayerId, getPlayer } from "../src/players/db/Player";
+import { generatePlayerToken, reservePlayerId } from "../src/players/db/PlayerToken";
 import { FightResultType } from "../src/common/types";
 import { Item } from "../src/items/schema/ItemSchema";
 import mongoose from 'mongoose';
@@ -29,7 +30,18 @@ describe("testing your Colyseus app", () => {
         'trigger_item', 'end_battle', 'game_over', 'draft_log', 'error',
     ];
 
-    async function createAndJoinFightRoom(playerId: number) {
+    // Mirrors what the real /playerid HTTP route does (app.config.ts) — mints a playerId and
+    // reserves a matching token, required by onAuth on both rooms (see PlayerToken.ts). Tests
+    // connect straight to the Colyseus test server rather than through Express, so there's no
+    // HTTP round trip to reuse; this calls the same underlying functions the route does.
+    async function mintPlayerIdAndToken() {
+        const playerId = await getNextPlayerId();
+        const playerToken = generatePlayerToken();
+        await reservePlayerId(playerId, playerToken);
+        return { playerId, playerToken };
+    }
+
+    async function createAndJoinFightRoom(playerId: number, playerToken: string) {
         // DraftRoom.onLeave is not awaited by callers — poll until the player's sessionId
         // is cleared in DB before joining, otherwise FightRoom.onJoin throws "Player already playing!"
         await new Promise<void>((resolve, reject) => {
@@ -43,16 +55,16 @@ describe("testing your Colyseus app", () => {
             setTimeout(() => { clearInterval(poll); reject(new Error('Timed out waiting for player session to clear')); }, 15000);
         });
         const fightRoom = await colyseus.createRoom("fight_room", {});
-        const fightClient = await colyseus.connectTo(fightRoom, { playerId });
+        const fightClient = await colyseus.connectTo(fightRoom, { playerId, playerToken });
         ROOM_SERVER_MESSAGES.forEach(type => fightClient.onMessage(type, () => {}));
         await new Promise<void>(r => setTimeout(r, 500));
         return { fightRoom, fightClient };
     }
 
     async function createAndJoinDraftRoom(name = "Test Player") {
-        const playerId = await getNextPlayerId();
+        const { playerId, playerToken } = await mintPlayerIdAndToken();
         const room = await colyseus.createRoom("draft_room", {});
-        const client = await colyseus.connectTo(room, { playerId, name, avatarUrl: "test_avatar" });
+        const client = await colyseus.connectTo(room, { playerId, playerToken, name, avatarUrl: "test_avatar" });
         // Wait for onJoin to complete: DraftRoom has a 1000ms clock delay before any DB work,
         // so 500ms was always insufficient. 2500ms covers the delay + DB round trips in CI.
         ROOM_SERVER_MESSAGES.forEach(type => client.onMessage(type, () => {}));
@@ -63,7 +75,7 @@ describe("testing your Colyseus app", () => {
             await client.leave(true);
         }
 
-        return { room, client, playerId, cleanExit };
+        return { room, client, playerId, playerToken, cleanExit };
     }
 
     // Buying gear now auto-equips it into the first empty valid slot (Player.getItem →
@@ -260,14 +272,14 @@ describe("testing your Colyseus app", () => {
 
     it("fight room: player and enemy load, battle starts after countdown, and a fight result is produced", async () => {
         // 1. Create a player through the draft room
-        const { room: draftRoom, client: draftClient, playerId } = await createAndJoinDraftRoom("Fighter");
+        const { room: draftRoom, client: draftClient, playerId, playerToken } = await createAndJoinDraftRoom("Fighter");
         const initialRound = draftRoom.state.player.round;
 
         // 2. Leave draft room — triggers copyPlayer + updatePlayer (saves to DB with sessionId='')
         draftClient.leave(true);
 
         //3. Join fight room
-        const { fightRoom, fightClient } = await createAndJoinFightRoom(playerId);
+        const { fightRoom, fightClient } = await createAndJoinFightRoom(playerId, playerToken);
 
         // 4. Verify initial state: player and enemy are loaded
         expect(fightRoom.state.player.playerId).toBe(playerId);
@@ -313,11 +325,11 @@ describe("testing your Colyseus app", () => {
     }, 90000);
 
     it("fight room: player HP decreases during combat", async () => {
-        const { client: draftClient, playerId } = await createAndJoinDraftRoom("HPChecker");
+        const { client: draftClient, playerId, playerToken } = await createAndJoinDraftRoom("HPChecker");
 
         draftClient.leave(true);
 
-        const { fightRoom } = await createAndJoinFightRoom(playerId);
+        const { fightRoom } = await createAndJoinFightRoom(playerId, playerToken);
 
         const playerMaxHp = fightRoom.state.player.maxHp;
         const enemyMaxHp = fightRoom.state.enemy.maxHp;
@@ -333,11 +345,11 @@ describe("testing your Colyseus app", () => {
     }, 90000);
 
     it("fight room: win increments player wins, lose decrements player lives", async () => {
-        const { client: draftClient, playerId } = await createAndJoinDraftRoom("WinLoseChecker");
+        const { client: draftClient, playerId, playerToken } = await createAndJoinDraftRoom("WinLoseChecker");
 
         draftClient.leave(true);
 
-        const { fightRoom } = await createAndJoinFightRoom(playerId);
+        const { fightRoom } = await createAndJoinFightRoom(playerId, playerToken);
 
         const winsAtStart = fightRoom.state.player.wins;
         const livesAtStart = fightRoom.state.player.lives;
