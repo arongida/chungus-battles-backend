@@ -14,6 +14,7 @@ import {PlayerAvatar} from "../types/PlayerTypes";
 import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 import {recalculatePlayerStats} from "../../common/statsUtils";
 import {migrateLegacyItem, migrateLegacyTalent} from "../../common/reworkMigrations";
+import {getNextSequence} from "../../common/db/Counter";
 
 
 const PlayerSchema = new Schema({
@@ -82,6 +83,11 @@ PlayerSchema.index({ playerId: -1 });
 // projection is fully covered by this index, so the per-round pool is read straight from the
 // index instead of scanning and materializing every player document in the collection.
 PlayerSchema.index({ round: 1, gameVersion: 1, originalPlayerId: 1, playerId: 1 });
+// Backs getLeaderboard's per-user rank lookup ({$match:{originalPlayerId}}, sorted by playerId)
+// — previously had no supporting index (none of the above start with originalPlayerId), so every
+// post-fight leaderboard fetch (the game's single highest-frequency /leaderboard call pattern —
+// see end.component.ts, which always passes rankForOriginalPlayerId) full-scanned the collection.
+PlayerSchema.index({ originalPlayerId: 1, playerId: -1 });
 
 export const playerModel = mongoose.model('Player', PlayerSchema);
 
@@ -329,10 +335,14 @@ export async function incrementRunsEnded(killerOriginalPlayerId: number): Promis
 }
 
 export async function getNextPlayerId(): Promise<number> {
-    const lastPlayer = await playerModel.findOne().sort({playerId: -1}).limit(1).lean().catch((e) => {
-        console.error(e);
+    // Atomic ($inc via findOneAndUpdate) — the previous read-then-return-plus-one had no write
+    // component at all, so two concurrent callers (two /playerid requests, or two overlapping
+    // copyPlayer() snapshot inserts on round transitions) could return the same id. Seeded from
+    // the historical max(playerId) on first use so it picks up exactly where that scheme left off.
+    return getNextSequence('playerId', async () => {
+        const lastPlayer = await playerModel.findOne().sort({playerId: -1}).limit(1).lean();
+        return lastPlayer?.playerId ?? 0;
     });
-    return lastPlayer ? lastPlayer.playerId + 1 : 1;
 }
 
 function cleanRawObj(obj: any): Record<string, any> {
@@ -463,6 +473,45 @@ export function snapshotPlayer(player: Player): Record<string, any> {
     };
 }
 
+// The leaderboard/Wall of Fame only ever render a handful of summary fields (see
+// end.component.html) — the rest of a player doc (inventory, equippedItems, talents,
+// lockedShop, baseStats, ...) is multi-KB of embedded arrays that made the default
+// /leaderboard page ~170KB and a limit=100 page ~890KB. The full build is available on demand
+// via /playerBuild (see end.component.ts's row-expand fetch), so leaderboard rows don't need it.
+const LEADERBOARD_PROJECTION = {
+    playerId: 1, originalPlayerId: 1, name: 1, avatarUrl: 1, level: 1, round: 1,
+    wins: 1, losses: 1, gameVersion: 1, runsEnded: 1, lastPlayedAt: 1, latestPlayerId: 1,
+} as const;
+
+// Short-TTL cache for the leaderboard/Wall-of-Fame ranked lists — see cachedAggregate below.
+// Keyed by a JSON fingerprint of the pipeline's own $match conditions, so every distinct filter
+// combination (including a name search) gets its own cached entry rather than sharing one.
+const rankedListCache = new Map<string, { docs: Record<string, any>[]; expiresAt: number }>();
+const RANKED_LIST_CACHE_TTL_MS = 15_000;
+
+/** Runs `buildPipeline()`'s aggregation and caches the full result array (unpaginated — the
+ *  pipeline should do its own $skip/$limit-free dedupe+sort+project) for RANKED_LIST_CACHE_TTL_MS,
+ *  keyed by `cacheKey`. getLeaderboard/getWallOfFame then slice/search this in memory instead of
+ *  re-querying Mongo for every page turn or per-user rank lookup — collapsing what used to be up
+ *  to 3 full-collection aggregations per request (see getLeaderboard's rankForOriginalPlayerId
+ *  path) into at most 1 per cacheKey per TTL window, shared across every concurrent requester.
+ *  Trades up to RANKED_LIST_CACHE_TTL_MS of staleness (a just-finished run's new rank may not
+ *  show up immediately) for that — acceptable for a leaderboard display. */
+async function cachedRankedList(cacheKey: string, buildPipeline: () => PipelineStage[]): Promise<Record<string, any>[]> {
+    const now = Date.now();
+    const cached = rankedListCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) return cached.docs;
+
+    const docs = await playerModel.aggregate(buildPipeline()).allowDiskUse(true).exec();
+    rankedListCache.set(cacheKey, { docs, expiresAt: now + RANKED_LIST_CACHE_TTL_MS });
+    // Self-bounding under normal traffic (one entry per distinct filter combo actually
+    // requested within a TTL window) — this is just a backstop against a scripted caller
+    // varying e.g. `name` on every request to grow the cache unbounded.
+    if (rankedListCache.size > 500) rankedListCache.clear();
+
+    return docs;
+}
+
 // $top instead of $sort + $first: a pre-group sort has no supporting index, and the
 // prod Atlas shared tier caps in-memory sorts at 32MB and ignores allowDiskUse.
 const TOP_PLAYERS_AGGREGATION: PipelineStage[] = [
@@ -518,42 +567,27 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
     const matchConditions = buildMatchConditions(filters);
     const matchStage = Object.keys(matchConditions).length ? [{ $match: matchConditions }] : [];
 
-    const pipeline: any[] = [
+    // The full deduped, sorted (most-recently-active first — same order the old $facet.players
+    // page returned) list for this exact filter combination. Cached — see cachedRankedList.
+    const docs = await cachedRankedList(`leaderboard:${JSON.stringify(matchConditions)}`, () => [
         ...matchStage,
         ...TOP_PLAYERS_AGGREGATION,
-        { $facet: {
-            players: [{ $skip: skip }, { $limit: clampedLimit }],
-            totalCount: [{ $count: 'n' }],
-        }},
-    ];
-
-    const [result] = await playerModel.aggregate(pipeline).allowDiskUse(true).exec();
+        { $project: LEADERBOARD_PROJECTION },
+    ]);
 
     let userRank: number | null = null;
     if (rankForOriginalPlayerId) {
-        // Find this player's latest snapshot in the filtered set (its playerId = the dedupe's latestPlayerId recency key)
-        const [userDoc] = await playerModel.aggregate([
-            ...matchStage,
-            { $match: { originalPlayerId: rankForOriginalPlayerId } },
-            { $sort: { playerId: -1 } },
-            { $limit: 1 },
-        ]).allowDiskUse(true).exec();
-
-        if (userDoc) {
-            // Count deduped players that sort strictly above this player (more recently active = higher latestPlayerId)
-            const [countResult] = await playerModel.aggregate([
-                ...matchStage,
-                ...TOP_PLAYERS_AGGREGATION,
-                { $match: { latestPlayerId: { $gt: userDoc.playerId } } },
-                { $count: 'n' },
-            ]).allowDiskUse(true).exec();
-            userRank = (countResult?.n ?? 0) + 1;
-        }
+        // docs is sorted by latestPlayerId desc with unique values (playerId is a unique,
+        // monotonic sequence — see PlayerToken.ts/getNextSequence), so a character's index in
+        // this array is exactly "how many characters have a strictly greater latestPlayerId",
+        // i.e. the same rank the old two-extra-aggregations version computed by re-querying Mongo.
+        const idx = docs.findIndex((d) => d.originalPlayerId === rankForOriginalPlayerId);
+        if (idx !== -1) userRank = idx + 1;
     }
 
     return {
-        players: (result?.players ?? []).map(cleanRawPlayerDoc),
-        total: result?.totalCount?.[0]?.n ?? 0,
+        players: docs.slice(skip, skip + clampedLimit).map(cleanRawPlayerDoc),
+        total: docs.length,
         userRank,
     };
 }
@@ -572,9 +606,10 @@ export async function getPlayerRank(playerId: number): Promise<number> {
 export async function getWallOfFame({ limit = 20, skip = 0, season }: { limit?: number; skip?: number; season?: number } = {}):
     Promise<{ players: Record<string, any>[]; total: number }> {
     const clampedLimit = Math.min(Math.max(1, limit), 100);
+    const gameVersionMatch = season !== undefined ? season : { $gte: 16 };
 
-    const pipeline: PipelineStage[] = [
-        { $match: { gameVersion: season !== undefined ? season : { $gte: 16 }, wins: { $gte: WINS_TO_WIN }, losses: { $exists: true } } },
+    const docs = await cachedRankedList(`wallOfFame:${JSON.stringify(gameVersionMatch)}`, () => [
+        { $match: { gameVersion: gameVersionMatch, wins: { $gte: WINS_TO_WIN }, losses: { $exists: true } } },
         // Dedupe insurance: exactly one >=12-win doc per character is expected, but keep
         // the best (fewest-losses) doc per originalPlayerId in case of a double-save.
         { $sort: { losses: 1, wins: -1, playerId: 1 } },
@@ -591,17 +626,12 @@ export async function getWallOfFame({ limit = 20, skip = 0, season }: { limit?: 
         { $addFields: { 'doc.runsEnded': { $ifNull: ['$runsEnded', 0] }, 'doc.lastPlayedAt': '$lastPlayedAt' } },
         { $replaceRoot: { newRoot: '$doc' } },
         { $sort: { runsEnded: -1, lastPlayedAt: -1, originalPlayerId: -1 } },
-        { $facet: {
-            players: [{ $skip: skip }, { $limit: clampedLimit }],
-            totalCount: [{ $count: 'n' }],
-        }},
-    ];
-
-    const [result] = await playerModel.aggregate(pipeline).allowDiskUse(true).exec();
+        { $project: LEADERBOARD_PROJECTION },
+    ]);
 
     return {
-        players: (result?.players ?? []).map(cleanRawPlayerDoc),
-        total: result?.totalCount?.[0]?.n ?? 0,
+        players: docs.slice(skip, skip + clampedLimit).map(cleanRawPlayerDoc),
+        total: docs.length,
     };
 }
 

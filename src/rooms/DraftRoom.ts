@@ -1,4 +1,5 @@
-import { Client, Room } from '@colyseus/core';
+import { Client } from '@colyseus/core';
+import { BaseRoom } from './BaseRoom';
 import { DraftState } from './schema/DraftState';
 import { buildJoe, copyPlayer, createNewPlayer, getPlayer, getSameRoundPlayer, JOE_PLAYER_ID, setNextFightEnemy, updatePlayer } from '../players/db/Player';
 import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentClasses } from '../players/EnemyPreview';
@@ -26,8 +27,9 @@ import { ItemSkillType } from '../items/types/ItemSkillTypes';
 import { TalentType } from '../talents/types/TalentTypes';
 import { grantFlashSaleFlask, track } from '../talents/behavior/TalentBehaviors';
 import { addJokerTotal, clearJokerPendingCards, parseJokerPendingCards, rebuildJokerAffectedStats } from '../talents/behavior/jokerState';
+import { authenticatePlayerId } from '../players/db/PlayerToken';
 
-export class DraftRoom extends Room {
+export class DraftRoom extends BaseRoom {
     declare state: DraftState;
     maxClients = 1;
 
@@ -114,6 +116,16 @@ export class DraftRoom extends Room {
         }
     }
 
+    // Runs before onJoin — see PlayerToken.ts's authenticatePlayerId for the full auth model
+    // (token match, or a grandfathered pre-auth character, or reject). Without this, playerId
+    // was a bare client-supplied integer: anyone who knew (or enumerated, since /leaderboard
+    // returns them) another player's id could join as them whenever that player wasn't currently
+    // connected — sessionId was the only guard, and it's cleared on every clean logout.
+    async onAuth(client: Client, options: any) {
+        await authenticatePlayerId(options.playerId, options.playerToken);
+        return true;
+    }
+
     async onJoin(client: Client, options: any) {
         console.log('[DraftRoom]', client.sessionId, 'joined!');
         console.log('[DraftRoom]', 'name: ', options.name);
@@ -121,6 +133,16 @@ export class DraftRoom extends Room {
 
         if (!options.name) throw new Error('Name is required!');
         if (!options.playerId) throw new Error('Player ID is required!');
+
+        // Player-supplied display data — name renders on the public leaderboard/Wall of Fame
+        // and in combat_log/replay text (an unbounded string also bloats every future snapshot
+        // doc); avatarUrl is rendered as a bare <img src> on those same public pages, so an
+        // arbitrary URL there would log the IP/user-agent of everyone who views the leaderboard.
+        // Neither was previously validated — only used (below) when creating a brand-new
+        // character, so this only ever applies once, at creation time.
+        const name = String(options.name).replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 24);
+        if (!name) throw new Error('Name is required!');
+        const avatarUrl = (Object.values(PlayerAvatar) as string[]).includes(options.avatarUrl) ? options.avatarUrl : PlayerAvatar.MERCHANT;
 
         await delay(1000, this.clock);
         const foundPlayer = await getPlayer(options.playerId);
@@ -137,8 +159,8 @@ export class DraftRoom extends Room {
             //check levelup after battle
             await this.checkLevelUp();
         } else {
-            const newPlayer = await createNewPlayer(options.playerId, options.name, client.sessionId, options.avatarUrl);
-            this.state.remainingTalentPoints = options.avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
+            const newPlayer = await createNewPlayer(options.playerId, name, client.sessionId, avatarUrl);
+            this.state.remainingTalentPoints = avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
             await this.setUpState(newPlayer, client);
             loadedPlayer = newPlayer;
         }
@@ -185,8 +207,11 @@ export class DraftRoom extends Room {
             this.dispatcher.dispatch(new DraftAuraTriggerCommand());
             // Catch-all for anything that changed an owned item's rarity without going through
             // buy/sell/drink (Weapon Whisperer, talent/item-granted duplicates, etc.) — see
-            // revalidateUpgradePreviews.
-            void this.revalidateUpgradePreviews();
+            // revalidateUpgradePreviews. Not awaited (the interval callback isn't async), so a
+            // rejection here (e.g. a transient DB error from rebuildShopSlot) is its own
+            // detached promise chain that Colyseus's onUncaughtException wrapping can't observe
+            // — catch it explicitly rather than let it become an unhandled rejection.
+            this.revalidateUpgradePreviews().catch((err) => console.error('[DraftRoom] revalidateUpgradePreviews failed:', err));
         }, 1000)
 
         //shop start trigger - deferred (not awaited) so onJoin returns and the
@@ -237,15 +262,29 @@ export class DraftRoom extends Room {
     }
 
     onDrop(client: Client) {
-        this.allowReconnection(client, 30)
+        // onDrop also runs when onJoin itself throws (e.g. "Player already playing!",
+        // a routine race on duplicate tabs / fast reconnects) — in that case the client
+        // never actually joined, and allowReconnection() rejects synchronously with
+        // "not joined". That rejection was previously unhandled, which — absent the
+        // onUncaughtException handler now defined on BaseRoom — used to crash the whole
+        // process. Swallow it here; there's nothing to reconnect to.
+        this.allowReconnection(client, 30).catch(() => {});
     }
 
     async onLeave(client: Client, code: number) {
         console.log(`[DraftRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
-        this.state.player.sessionId = '';
-        await copyPlayer(this.state.player);
-        await updatePlayer(this.state.player);
-        console.log(`[DraftRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
+        // this.state.player defaults to a bare `new Player()` (DraftState.ts) and only gets
+        // populated by setUpState inside onJoin — a client whose onJoin threw before reaching
+        // that (bad/duplicate playerId, no lives left, ...) still reaches onLeave once its
+        // reconnection window (onDrop) expires. Without this guard, that unpopulated player
+        // (playerId undefined) went through copyPlayer/updatePlayer anyway, inserting a junk
+        // snapshot document and burning a playerId for nothing.
+        if (this.state.player.playerId) {
+            this.state.player.sessionId = '';
+            await copyPlayer(this.state.player);
+            await updatePlayer(this.state.player);
+            console.log(`[DraftRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
+        }
         this.clock.setTimeout(() => {
             this.disconnect();
         }, 5000);
@@ -820,18 +859,24 @@ export class DraftRoom extends Room {
     }
 
     private async selectTalent(talentId: number, client: Client) {
+        // Checked and decremented synchronously, before the talent lookup/push and before any
+        // await below (in particular grantFlashSaleFlask's DB read) — Colyseus does not
+        // serialize async onMessage handlers, and JS's run-to-completion semantics mean this
+        // synchronous prefix always finishes before a second, concurrently-arriving
+        // select_talent is even started, so this alone is enough to stop a client bursting two
+        // messages back-to-back from getting two talents accepted for a single point.
+        if (this.state.remainingTalentPoints <= 0) return;
         const talent = this.state.availableTalents.find((talent) => talent.talentId === talentId);
-        if (talent) {
-            this.state.player.talents.push(talent);
-            this.state.remainingTalentPoints--;
-            // Flash Sale (MERCHANT_1): grants its first free flask the instant it's picked, not
-            // just on the SHOP_START trigger every round after — see grantFlashSaleFlask's own
-            // comment for why this can never double up with that round's SHOP_START firing.
-            if (talent.talentId === TalentType.MERCHANT_1) {
-                await grantFlashSaleFlask(this.state.player, client);
-            }
-            await this.updateTalentSelection();
+        if (!talent) return;
+        this.state.remainingTalentPoints--;
+        this.state.player.talents.push(talent);
+        // Flash Sale (MERCHANT_1): grants its first free flask the instant it's picked, not
+        // just on the SHOP_START trigger every round after — see grantFlashSaleFlask's own
+        // comment for why this can never double up with that round's SHOP_START firing.
+        if (talent.talentId === TalentType.MERCHANT_1) {
+            await grantFlashSaleFlask(this.state.player, client);
         }
+        await this.updateTalentSelection();
     }
 
     /** Joker (talentId 41): every fight (win or lose, same value either way) deals two cards

@@ -1,4 +1,5 @@
-import { Client, Room } from '@colyseus/core';
+import { Client } from '@colyseus/core';
+import { BaseRoom } from './BaseRoom';
 import { FightState } from './schema/FightState';
 import { buildJoe, getPlayer, getSameRoundPlayer, incrementRunsEnded, JOE_PLAYER_ID, setNextFightEnemy, snapshotPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
@@ -18,6 +19,7 @@ import { OnAttackTriggerCommand } from '../commands/triggers/OnAttackTriggerComm
 import { TalentType } from '../talents/types/TalentTypes';
 import { migrateLegacyMartialFists } from '../talents/behavior/TalentBehaviors';
 import { cloneItem, getItemById, getQuestItems } from '../items/db/Item';
+import { authenticatePlayerId } from '../players/db/PlayerToken';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { applyRarityUpgrade, getEquippedUpgradeableItems, grantLuckyFindMythicBonus, LUCKY_FIND_MYTHIC_BONUS_PERCENT, totalRemainingRaritySteps } from '../commands/ShopUpgradeUtils';
 import { FightAuraTriggerCommand } from '../commands/triggers/FightAuraTriggerCommand';
@@ -46,7 +48,7 @@ const ALLOWED_FIGHT_SPEEDS = [0.5, 1, 2];
 // nerf.
 const EMPOWERED_DAMAGE_MULTIPLIER = 1.5;
 
-export class FightRoom extends Room {
+export class FightRoom extends BaseRoom {
     declare state: FightState;
     maxClients = 1;
 
@@ -84,9 +86,12 @@ export class FightRoom extends Room {
             return origBroadcast(type, message, options);
         };
 
-        this.onMessage('chat', (client, message) => {
-            this.broadcast('messages', `${client.sessionId}: ${message}`);
-        });
+        // (Removed: an unvalidated, unbounded 'chat' echo handler used to live here. Nothing in
+        // the frontend ever sent it, and broadcast() above is replay-wrapped — every message it
+        // echoed was recorded into ReplayRecorder.events and persisted to Mongo via saveReplay,
+        // so a scripted client sending an oversized payload repeatedly could bloat replay
+        // documents. Delete stays deleted unless real chat is actually built, with real
+        // validation.)
 
         this.onMessage('abandon_run', async (client) => {
             this.state.player.lives = 0;
@@ -165,6 +170,13 @@ export class FightRoom extends Room {
     protected applySimulationResolution(scale: number) {
         const wallMs = scale > 1 ? Math.round(100 / scale) : 100;
         this.setSimulationInterval(() => this.update(), wallMs);
+    }
+
+    // See DraftRoom.onAuth's doc comment — same auth model, same reason it's needed here too:
+    // a fight_room join was just as hijackable via a bare client-supplied playerId.
+    async onAuth(client: Client, options: any) {
+        await authenticatePlayerId(options.playerId, options.playerToken);
+        return true;
     }
 
     async onJoin(client: Client, options: any) {
@@ -272,9 +284,23 @@ export class FightRoom extends Room {
     }
 
     onDrop(client: Client) {
-        console.log(`[FightRoom] allowReconnection(60) started  sid=${client.sessionId}`);
-        // allow disconnected client to reconnect into this room until 60 seconds
-        this.allowReconnection(client, 30);
+        // onDrop also runs when onJoin itself throws (bad/missing playerId, no lives left,
+        // "Player already playing!" on a duplicate tab/fast reconnect, ...) — in that case the
+        // client never actually finished joining, this.state.player/enemy may not even be set
+        // up yet, and allowReconnection() rejects synchronously with "not joined". Guard on our
+        // own room state (only a client this room actually finished joining gets assigned as
+        // state.player's sessionId) before treating this as a genuine mid-fight drop.
+        if (!this.state.player || this.state.player.sessionId !== client.sessionId) {
+            this.allowReconnection(client, 30).catch(() => {});
+            return;
+        }
+
+        console.log(`[FightRoom] allowReconnection(30) started  sid=${client.sessionId}`);
+        // Allow the disconnected client to reconnect into this room for 30 seconds. The
+        // returned promise rejects if that window elapses without a reconnect (the normal
+        // "player closed the tab and didn't come back" case) — that must be caught, or the
+        // resulting unhandled rejection crashes the whole process (see BaseRoom).
+        this.allowReconnection(client, 30).catch(() => {});
         console.log(`[FightRoom] reconnected  sid=${client.sessionId} fightResult=${!!this.state.fightResult}`);
         // Re-wrap the reconnected client so sendFightEndToClient events are still captured.
         this.state.playerClient = client;
@@ -315,19 +341,29 @@ export class FightRoom extends Room {
 
     async onLeave(client: Client, code: number) {
         console.log(`[FightRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
-        // Let an in-flight item upgrade finish before saving, and default to the
-        // gold option if the player left without choosing a loss reward.
-        if (this.state.lossRewardApplication) await this.state.lossRewardApplication;
-        if (this.state.lossRewardPending && this.state.lossRewardOptions) {
-            this.state.lossRewardPending = false;
-            this.state.player.gold += this.state.lossRewardOptions.goldAmount;
+        // this.state.player defaults to a bare `new Player()` (FightState.ts) and only gets
+        // populated by setUpState inside onJoin — a client whose onJoin threw before reaching
+        // that (missing/unowned playerId, no lives left, ...) still reaches onLeave once its
+        // reconnection window (onDrop) expires. Without this guard, updatePlayer(this.state.player)
+        // ran with playerId undefined — see Player.ts's updatePlayer, which does
+        // findOne({playerId: player.playerId}); depending on how that undefined value gets
+        // serialized, that risks silently overwriting an arbitrary real player's document
+        // instead of just no-op'ing.
+        if (this.state.player.playerId) {
+            // Let an in-flight item upgrade finish before saving, and default to the
+            // gold option if the player left without choosing a loss reward.
+            if (this.state.lossRewardApplication) await this.state.lossRewardApplication;
+            if (this.state.lossRewardPending && this.state.lossRewardOptions) {
+                this.state.lossRewardPending = false;
+                this.state.player.gold += this.state.lossRewardOptions.goldAmount;
+            }
+            //save player state to db
+            this.state.player.sessionId = '';
+            //set player for next round
+            this.state.player.round++;
+            await updatePlayer(this.state.player);
+            console.log(`[FightRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
         }
-        //save player state to db
-        this.state.player.sessionId = '';
-        //set player for next round
-        this.state.player.round++;
-        await updatePlayer(this.state.player);
-        console.log(`[FightRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
         this.clock.setTimeout(() => {
             this.disconnect();
         }, 5000);
