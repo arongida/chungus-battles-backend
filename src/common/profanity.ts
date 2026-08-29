@@ -14,6 +14,33 @@ import {
 // enforcement call site — the next time a new case slips through.
 const supplementaryDataset = new DataSet<{ originalWord: string }>()
     .addAll(englishDataset)
+    // englishDataset's built-in 'anus' phrase already whitelists 'tetanus'/'uranus'/'janus'/
+    // 'manus' but not 'hadrianus' (Hadrianus/Hadrian — the Roman emperor); drop it and re-add
+    // with that term included, rather than leave a separate 'anus' phrase that would just
+    // re-flag the same match.
+    .removePhrasesIf((phrase) => phrase.metadata?.originalWord === 'anus')
+    .addPhrase((phrase) => phrase
+        .setMetadata({ originalWord: 'anus' })
+        .addPattern(pattern`anus`)
+        .addWhitelistedTerm('an us')
+        .addWhitelistedTerm('tetanus')
+        .addWhitelistedTerm('uranus')
+        .addWhitelistedTerm('janus')
+        .addWhitelistedTerm('manus')
+        .addWhitelistedTerm('hadrianus'))
+    // Same treatment for 'fuck': drop its `|fu|` pattern, which blacklists the bare two-letter
+    // word "fu" on its own — that's the one flagging "king fu" and would keep catching the next
+    // "___ fu" wordplay too. "fuck" itself still matches via `f[?]ck` (f + any char + ck) below,
+    // so this only stops standalone "fu" from being flagged.
+    .removePhrasesIf((phrase) => phrase.metadata?.originalWord === 'fuck')
+    .addPhrase((phrase) => phrase
+        .setMetadata({ originalWord: 'fuck' })
+        .addPattern(pattern`f[?]ck`)
+        .addPattern(pattern`|fk`)
+        .addPattern(pattern`|fuk`)
+        .addWhitelistedTerm('fick')
+        .addWhitelistedTerm('kung-fu')
+        .addWhitelistedTerm('kung fu'))
     .addPhrase((phrase) => phrase.setMetadata({ originalWord: 'spic' }).addPattern(pattern`|spic[k]`))
     .addPhrase((phrase) => phrase.setMetadata({ originalWord: 'wetback' }).addPattern(pattern`wetback`))
     .addPhrase((phrase) => phrase.setMetadata({ originalWord: 'beaner' }).addPattern(pattern`beaner`))
