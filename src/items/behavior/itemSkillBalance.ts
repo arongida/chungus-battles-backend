@@ -260,10 +260,10 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     describe: (r) => {
       const { upgrade } = skillValues(ITEM_SKILLS[ItemSkillType.LIGHT_FINGERS], r);
       return upgrade > 0
-        ? 'When you sell an item: steal a random shop item of equal or lower price — free, and it gains one rarity. Costs 1 income.'
-        : 'When you sell an item: steal a random shop item of equal or lower price — free. Costs 1 income.';
+        ? 'When you sell an item: steal a random shop item — free, and it gains one rarity. Costs 1 income.'
+        : 'When you sell an item: steal a random shop item — free. Costs 1 income.';
     },
-    status: (ctx) => (ctx.inFight ? '' : "steals on sell, up to the sold item's price"),
+    status: (ctx) => (ctx.inFight ? '' : 'steals a random shop item on sell'),
   },
 
   // -------------------------------------------------------------- WARRIOR ----
@@ -637,9 +637,12 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     },
   },
 
-  // Riposte keeps a downside (like Shield Wall): each counter permanently burns a slice of your
-  // own defense for the rest of the fight (reset on FIGHT_END), so it decays with use rather than
-  // being pure upside like Aegis/Brace.
+  // Reworked (Season 26): from a percentage of the shield owner's own defense (then reduced AGAIN
+  // by the attacker's defense — a tanky attacker barely felt it) into a straight reflect of a
+  // percentage of the damage just taken, dealt back as-is. Keeps its downside (like Shield Wall):
+  // each counter permanently burns a slice of your own defense for the rest of the fight (reset
+  // on FIGHT_END) — and now that's self-escalating rather than just decaying, since less defense
+  // means bigger hits taken, which means bigger reflects.
   [ItemSkillType.RIPOSTE]: {
     id: ItemSkillType.RIPOSTE,
     class: 'shield',
@@ -647,15 +650,15 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: SHIELD_SLOTS,
     triggerTypes: [TriggerType.ON_ATTACKED, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.COMMON]: { ratio: 0.06, defenseCost: 1 },
-      [ItemRarity.RARE]: { ratio: 0.10, defenseCost: 1 },
-      [ItemRarity.EPIC]: { ratio: 0.16, defenseCost: 2 },
-      [ItemRarity.LEGENDARY]: { ratio: 0.18, defenseCost: 3 },
-      [ItemRarity.MYTHIC]: { ratio: 0.22, defenseCost: 4 },
+      [ItemRarity.COMMON]: { ratio: 0.15, defenseCost: 1 },
+      [ItemRarity.RARE]: { ratio: 0.20, defenseCost: 1 },
+      [ItemRarity.EPIC]: { ratio: 0.25, defenseCost: 2 },
+      [ItemRarity.LEGENDARY]: { ratio: 0.30, defenseCost: 3 },
+      [ItemRarity.MYTHIC]: { ratio: 0.40, defenseCost: 4 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.RIPOSTE], r);
-      return `On being attacked: counter for damage equal to ${pct(v.ratio)} of your defense, but lose ${v.defenseCost}% defense for the rest of the fight.`;
+      return `On being attacked: reflect ${pct(v.ratio)} of the damage you just took back at the attacker, but lose ${v.defenseCost}% defense for the rest of the fight.`;
     },
     status: (ctx) => (ctx.inFight ? `${fmt(-ctx.item.skillAffectedStats.defense)} defense spent this fight` : ''),
   },
@@ -836,6 +839,11 @@ export const SKILLS_BY_CLASS: Record<ItemClass, ItemSkillDefinition[]> = {
   [ItemClass.WARRIOR]: Object.values(ITEM_SKILLS).filter((d) => d.class === ItemClass.WARRIOR),
   [ItemClass.MERCHANT]: Object.values(ITEM_SKILLS).filter((d) => d.class === ItemClass.MERCHANT),
 };
+
+/** Every class skill in one pool — Weapon Whisperer's fallback for a weapon that carries no
+ *  `class` of its own (Wand of Fire, Chungi, Zwei-hander, …), so a unique still has something
+ *  to roll from. Shields keep their own SHIELD_SKILLS pool. */
+export const ALL_CLASS_SKILLS: ItemSkillDefinition[] = Object.values(SKILLS_BY_CLASS).flat();
 
 /** Shield-only skill pool — rolled onto any shield (ItemType.SHIELD) regardless of `class`,
  *  see itemSkillRoller.ts's type-based branch. */
