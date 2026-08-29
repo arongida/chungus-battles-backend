@@ -149,14 +149,16 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
 
   // Reworked (Season 26): from an unconditional shop-start freebie (which just grabbed whatever
   // was cheapest — usually junk, no choice, no cost) into a sell-triggered steal: you must give
-  // up an item to get one, priced at or under what you sold, and it costs 1 income (same tax as
-  // Misconduct/Robbery). ON_SELL only reaches equipped items via triggerEquippedItems (unlike the
-  // old SHOP_START, which also swept inventory copies) — see itemSkillBalance.ts's describe().
+  // up an item to get one, and it costs 1 income (same tax as Misconduct/Robbery). No longer
+  // capped at the sold item's price — any shop item is fair game, so the income drain is the only
+  // brake left on the value gained. ON_SELL only reaches equipped items via triggerEquippedItems
+  // (unlike the old SHOP_START, which also swept inventory copies) — see itemSkillBalance.ts's
+  // describe().
   [ItemSkillType.LIGHT_FINGERS]: (context) => {
     const { attacker, shop, item, client, trigger, soldItem } = context;
     if (trigger !== TriggerType.ON_SELL || !attacker || !shop || !item || !soldItem) return;
     const { upgrade } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const candidates = Array.from(shop).filter((i) => !i.sold && i.price <= soldItem.price);
+    const candidates = Array.from(shop).filter((i) => !i.sold);
     if (candidates.length === 0) return;
     const chosen = candidates[Math.floor(Math.random() * candidates.length)];
     const originalPrice = chosen.price;
@@ -419,8 +421,13 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     } as CombatLogMessage);
   },
 
+  // Reworked (Season 26): from a percentage of the shield owner's own defense (further reduced by
+  // the attacker's defense, so a tanky attacker barely felt it) into a straight reflect — a
+  // percentage of the damage just taken, dealt back as-is. Self-escalating with use: the defense
+  // burn below means less defense -> bigger hits taken -> bigger reflects, so the downside pays
+  // for itself instead of just decaying the skill.
   [ItemSkillType.RIPOSTE]: (context) => {
-    const { attacker, defender, item, client, commandDispatcher, trigger } = context;
+    const { attacker, defender, item, client, commandDispatcher, trigger, damage } = context;
     if (!item) return;
     if (trigger === TriggerType.FIGHT_END) {
       item.skillAffectedStats.defense = 0;
@@ -428,16 +435,15 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     }
     if (trigger !== TriggerType.ON_ATTACKED || !attacker || !defender) return;
     const { ratio, defenseCost } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const rawCounter = defender.defense * ratio;
-    if (rawCounter <= 0) return;
-    const counterDamage = attacker.getDamageAfterDefense(rawCounter);
+    const counterDamage = (damage ?? 0) * ratio;
+    if (counterDamage <= 0) return;
     commandDispatcher?.dispatch(new OnDamageTriggerCommand(), { defender: attacker, damage: counterDamage, attacker: defender });
     attacker.takeDamage(counterDamage, client, 'normal', 'skill');
     const defCost = defenseCost * defender.defense * 0.01;
     const consumed = Math.min(defCost, Math.max(0, defender.defense));
     if (consumed > 0) item.skillAffectedStats.defense -= consumed;
     client?.send('combat_log', {
-      text: `${defender.name}'s ${item.name} ripostes ${attacker.name} for ${fmt(counterDamage)} damage${consumed > 0 ? ` — ${consumed} defense spent!` : '!'}`,
+      text: `${defender.name}'s ${item.name} ripostes ${attacker.name} for ${fmt(counterDamage)} damage${consumed > 0 ? ` — ${fmt(consumed)} defense spent!` : '!'}`,
       kind: 'item', attackerId: defender.playerId, defenderId: attacker.playerId, itemId: item.itemId, damage: counterDamage,
     } as CombatLogMessage);
   },

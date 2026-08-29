@@ -4,7 +4,7 @@
 import { Item } from '../schema/ItemSchema';
 import { Player } from '../../players/schema/PlayerSchema';
 import { ItemClass, ItemRarity, ItemType } from '../types/ItemTypes';
-import { ITEM_SKILLS, ItemSkillDefinition, POTION_SKILLS, SHIELD_SKILLS, SKILLS_BY_CLASS } from '../behavior/itemSkillBalance';
+import { ALL_CLASS_SKILLS, ITEM_SKILLS, ItemSkillDefinition, POTION_SKILLS, SHIELD_SKILLS, SKILLS_BY_CLASS } from '../behavior/itemSkillBalance';
 import { NO_CLASS_SKILL_ITEM_IDS } from '../behavior/uniqueItemBalance';
 
 /** True when `def` is still a legal roll for `item` — i.e. it's in `item`'s pool (class/shield)
@@ -29,18 +29,28 @@ export function isSkillEligibleForItem(def: ItemSkillDefinition, item: Item): bo
  *  items. Two items (or two copies of the same item) can land on the same skill; that's by design.
  *  Safe to call with `Math.random()` rather than a seeded hash because every caller latches the
  *  result the moment it's rolled (refreshFutureItemSkill for the preview, applyRarityUpgrade for
- *  the real grant) instead of re-rolling on every tick — see refreshFutureItemSkill's doc comment. */
-export function rollItemSkill(item: Item, player: Player, options?: { exclude?: number }): ItemSkillDefinition | null {
+ *  the real grant) instead of re-rolling on every tick — see refreshFutureItemSkill's doc comment.
+ *
+ *  `options.anyPool` is Weapon Whisperer's override (TalentBehaviors.ts's
+ *  grantWeaponWhispererSecondSkill): it lets a NO_CLASS_SKILL_ITEM_IDS weapon (Dagger of Poison,
+ *  Frostbite Edge) roll on top of its hardcoded signature effect instead of being blocked outright,
+ *  and falls back to ALL_CLASS_SKILLS for a classless unique (Wand of Fire, Chungi, Zwei-hander,
+ *  …) that has no class pool of its own. Every other caller — the real Legendary grant and the
+ *  futureSkill preview — omits it and keeps the normal restrictions. */
+export function rollItemSkill(item: Item, player: Player, options?: { exclude?: number; anyPool?: boolean }): ItemSkillDefinition | null {
   // Quest items (e.g. Gambler's Dice, tagged 'merchant' for set-bonus purposes only) run their
   // own bespoke rarity/behavior progression outside applyRarityUpgrade's Legendary gate — same
   // reasoning as Weapon Whisperer's quest-tag guard (TalentBehaviors.ts) — so they must never
   // enter the class-skill pool, whether for a real grant or a futureSkill preview.
   if (item.tags?.includes('quest')) return null;
   // Class-unique weapons (Dagger of Poison, Frostbite Edge) already carry a hardcoded signature
-  // effect (ItemBehaviors.ts) — see NO_CLASS_SKILL_ITEM_IDS — so they never additionally roll a
-  // random class skill on top of it, for the real grant or the futureSkill preview.
-  if (NO_CLASS_SKILL_ITEM_IDS.has(item.itemId)) return null;
-  const pool = item.type === ItemType.SHIELD ? SHIELD_SKILLS : SKILLS_BY_CLASS[item.class as ItemClass];
+  // effect (ItemBehaviors.ts) — see NO_CLASS_SKILL_ITEM_IDS — so the normal Legendary-upgrade
+  // grant and the futureSkill preview never additionally roll a random class skill on top of it.
+  // Weapon Whisperer (anyPool) deliberately overrides this block — see the doc comment above.
+  if (!options?.anyPool && NO_CLASS_SKILL_ITEM_IDS.has(item.itemId)) return null;
+  const pool = item.type === ItemType.SHIELD
+    ? SHIELD_SKILLS
+    : SKILLS_BY_CLASS[item.class as ItemClass] ?? (options?.anyPool ? ALL_CLASS_SKILLS : undefined);
   if (!pool || pool.length === 0) return null;
 
   const equipOptions = new Set(Array.from(item.equipOptions));
@@ -131,6 +141,9 @@ export function reconcileItemSkill(item: Item): void {
   // off skillId (see triggerBehavior), so clearing it fully disables the extra effect even
   // though the triggerTypes it added along the way are left in place (harmless: nothing reads
   // skillId to re-derive them, and they may overlap the item's own hardcoded ON_ATTACK trigger).
+  // Deliberately does NOT touch skillId2 — Weapon Whisperer (rollItemSkill's anyPool override)
+  // is now the legitimate granter of a slot-2 skill on these two items, on top of their signature
+  // effect, so that slot must survive reconcile untouched.
   if (item.skillId && NO_CLASS_SKILL_ITEM_IDS.has(item.itemId)) {
     item.skillId = 0;
     item.skillName = '';

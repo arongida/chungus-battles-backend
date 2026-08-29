@@ -69,7 +69,11 @@ const STAB_SELF_COST_FRACTION = 0.05;
 // callers can decide their own trigger_talent/log timing around it.
 function grantWeaponWhispererSecondSkill(weapon: Item, attacker: Player, client: Client, defender?: Player): boolean {
     if (weapon.skillId2) return false;
-    const def = rollItemSkill(weapon, attacker, { exclude: weapon.skillId });
+    // anyPool: overrides NO_CLASS_SKILL_ITEM_IDS (Dagger of Poison, Frostbite Edge) and falls
+    // back to ALL_CLASS_SKILLS for a classless unique (Wand of Fire, Chungi, Zwei-hander, …) —
+    // see rollItemSkill's doc comment. Every unique weapon should end up with its signature
+    // effect plus exactly one rolled skill from this talent.
+    const def = rollItemSkill(weapon, attacker, { exclude: weapon.skillId, anyPool: true });
     if (!def) return false;
     grantItemSkill2(weapon, def);
     const text = `${attacker.name}'s ${weapon.name} learns ${def.name}!`;

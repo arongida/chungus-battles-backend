@@ -21,6 +21,11 @@ export const SEASONS: SeasonInfo[] = [
     number: 26,
     name: 'Cold Snap',
     changes: [
+      'Added profanity filter for character names',
+      'Weapon Whisperer: now also grants a rolled item skill to unique weapons — a unique ends up with its signature effect plus one rolled skill, a normal weapon still gets two',
+      "Fixed: a bonus item skill granted mid-fight (e.g. Weapon Whisperer's second skill landing on an already-Mythic weapon) could sit granted but never actually tick for the rest of that fight",
+      "Light Fingers: no longer capped at the sold item's price — steals any random shop item",
+      "Riposte: reworked — now reflects a percentage of the damage you just took (15% at Common → 40% at Mythic) instead of a percentage of your defense, and is no longer reduced again by the attacker's defense",
       'Just a Scratch: reduced gold gained to 5%',
       'Cash Back: increased reward',
       'Fixed: Store Credit did not stack — two equipped copies now each grant their own free claim, and a Legendary copy no longer overrides a Mythic copy\'s price cap',
