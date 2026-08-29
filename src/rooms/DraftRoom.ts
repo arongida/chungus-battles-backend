@@ -10,6 +10,7 @@ import { ensurePotionEffect, ensureShieldSkill, reconcileItemSkill, refreshFutur
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
+import { isNameClean } from '../common/profanity';
 import { getRandomTalents } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
 import { ShopStartTriggerCommand } from '../commands/triggers/ShopStartTriggerCommand';
@@ -128,7 +129,6 @@ export class DraftRoom extends BaseRoom {
 
     async onJoin(client: Client, options: any) {
         console.log('[DraftRoom]', client.sessionId, 'joined!');
-        console.log('[DraftRoom]', 'name: ', options.name);
         console.log('[DraftRoom]', 'player id: ', options.playerId);
 
         if (!options.name) throw new Error('Name is required!');
@@ -139,9 +139,13 @@ export class DraftRoom extends BaseRoom {
         // doc); avatarUrl is rendered as a bare <img src> on those same public pages, so an
         // arbitrary URL there would log the IP/user-agent of everyone who views the leaderboard.
         // Neither was previously validated — only used (below) when creating a brand-new
-        // character, so this only ever applies once, at creation time.
+        // character, so this (and the isNameClean profanity check below) only ever applies once,
+        // at creation time. A returning player's `foundPlayer` branch ignores options.name
+        // entirely, so an existing character's name can't be re-checked/blocked here — there's no
+        // rename flow; see scripts/cleanProfaneNames.ts for cleaning up an already-created name.
         const name = String(options.name).replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 24);
         if (!name) throw new Error('Name is required!');
+        console.log('[DraftRoom]', 'name: ', name);
         const avatarUrl = (Object.values(PlayerAvatar) as string[]).includes(options.avatarUrl) ? options.avatarUrl : PlayerAvatar.MERCHANT;
 
         await delay(1000, this.clock);
@@ -159,6 +163,7 @@ export class DraftRoom extends BaseRoom {
             //check levelup after battle
             await this.checkLevelUp();
         } else {
+            if (!isNameClean(name)) throw new Error('Please choose a different name.');
             const newPlayer = await createNewPlayer(options.playerId, name, client.sessionId, avatarUrl);
             this.state.remainingTalentPoints = avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
             await this.setUpState(newPlayer, client);
