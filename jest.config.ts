@@ -1,5 +1,4 @@
 export default {
-    preset: 'ts-jest',
     testEnvironment: 'node',
     testTimeout: 120000,
     transform: {

@@ -12,6 +12,7 @@ import {
 } from '../src/tournament/TournamentRunner';
 import { PlayoffStage, TournamentPairing } from '../src/tournament/db/Tournament';
 import mongoose from 'mongoose';
+import { waitFor } from './helpers/waitFor';
 
 // ---------------------------------------------------------------------------------------------
 // Pure logic — no live MongoDB required (same reasoning as matchmaking.test.ts).
@@ -233,20 +234,17 @@ describe('TournamentFightRoom (headless fights)', () => {
         await reservePlayerId(playerId, playerToken);
         const room = await colyseus.createRoom('draft_room', {});
         const client = await colyseus.connectTo(room, { playerId, playerToken, name, avatarUrl: 'test_avatar' });
-        await new Promise<void>(r => setTimeout(r, 2500));
+        // onJoin has a 1000ms clock delay before any DB work, then builds the shop — waiting for
+        // a populated shop is the concrete signal setup actually finished (same pattern
+        // room.test.ts's createAndJoinDraftRoom uses), rather than a flat guess.
+        await waitFor(() => room.state.shop.length > 0, { timeout: 5000, message: 'draft room shop to populate' });
         await client.leave(true);
         // DraftRoom.onLeave (copyPlayer + updatePlayer) isn't awaited by the leave call — poll
         // until the session clears, same pattern room.test.ts uses before joining a fight room.
-        await new Promise<void>((resolve, reject) => {
-            const poll = setInterval(async () => {
-                const player = await getPlayer(playerId);
-                if (player && player.sessionId === '') {
-                    clearInterval(poll);
-                    resolve();
-                }
-            }, 200);
-            setTimeout(() => { clearInterval(poll); reject(new Error('Timed out waiting for player session to clear')); }, 15000);
-        });
+        await waitFor(async () => {
+            const player = await getPlayer(playerId);
+            return !!player && player.sessionId === '';
+        }, { timeout: 15000, interval: 100, message: `player ${playerId}'s session to clear` });
         return playerId;
     }
 
