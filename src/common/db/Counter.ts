@@ -47,7 +47,7 @@ export async function getNextSequence(name: string, seedFn: () => Promise<number
     const counter = await counterModel.findOneAndUpdate(
         { _id: name },
         { $inc: { seq: 1 } },
-        { new: true, upsert: true },
+        { returnDocument: 'after', upsert: true },
     );
     return counter.seq;
 }

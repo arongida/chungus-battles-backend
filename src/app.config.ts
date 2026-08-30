@@ -129,11 +129,16 @@ function asyncHandler(fn: (req: Request, res: Response) => Promise<any>) {
 
 export const server = defineServer({
 
-    // devMode caches every live room's state to disk (JSON.stringify of the whole room) on every
-    // shutdown and restores it on boot — useful for local dev restarts, but on a production
-    // fly.io machine with auto_stop_machines it runs on every stop, and it changes crash exit
-    // codes to 0 (masking failures from fly/monitoring). Only ever intended for local dev.
-    devMode: process.env.NODE_ENV !== 'production',
+    // devMode is deliberately left unset (falsy). It used to mean only "cache every live room's
+    // state to disk on shutdown and restore it on boot" (a local-dev restart convenience) — as
+    // of Colyseus 0.18 it's a Server constructor-level side effect (setDevMode(), Server.ts) that
+    // ALSO switches the whole server into Vite-dev-server-integration mode: matchMaker room
+    // registration is skipped entirely (defineServer's own `if (!isDevMode) registerRoomDefinitions`
+    // check) and DevServer#listen() becomes a no-op that just warns and never actually listens.
+    // We don't use Vite. Passing devMode: true (as this used to, for the old reason) silently
+    // breaks room registration in every non-production environment, local `npm start` included —
+    // not just tests. Losing the disk-state-caching-on-restart convenience is an acceptable
+    // trade for the server actually booting.
 
     rooms: {
         draft_room: defineRoom(DraftRoom),
