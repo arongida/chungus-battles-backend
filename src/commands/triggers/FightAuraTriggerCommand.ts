@@ -1,12 +1,12 @@
 import {Command} from '@colyseus/command';
 import {TriggerType} from '../../common/types';
 import {FightRoom} from '../../rooms/FightRoom';
-import {Talent} from '../../talents/schema/TalentSchema';
 import {BehaviorContext} from '../../common/BehaviorContext';
 import {Player} from '../../players/schema/PlayerSchema';
-import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
+import {buildFloorSnapshot} from '../../common/statsUtils';
 import {baseLuckyFindChance} from '../ShopUpgradeUtils';
-import {triggerEquippedItems} from '../../common/triggerUtils';
+import {triggerEquippedItems, runScalingSources} from '../../common/triggerUtils';
+import {SCALING_TALENT_IDS, SCALING_SKILL_IDS} from '../../common/scalingRegistry';
 
 export class FightAuraTriggerCommand extends Command<FightRoom> {
     execute() {
@@ -14,66 +14,65 @@ export class FightAuraTriggerCommand extends Command<FightRoom> {
         this.startAuraEffectsLoop(this.state.enemy, this.state.player);
     }
 
+    /**
+     * Single interval per player runs the full ordered scaling pass, then every non-scaling
+     * AURA talent/item — replaces the old per-talent `clock.setInterval` list (whose shared
+     * `attackerSnapshot` was built ONCE at fight start and never refreshed) plus a separate item
+     * interval, and the lucky-find re-seed's dependence on ClockTimer's reverse registration
+     * order to run before them. The snapshot is now rebuilt fresh every tick, matching
+     * DraftAuraTriggerCommand.
+     */
     startAuraEffectsLoop(player: Player, enemy?: Player) {
-
-        const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes.includes(TriggerType.AURA));
-
-        const attackerSnapshot = buildBaseAndItemsSnapshot(player);
-
-        let behaviorContext: BehaviorContext = {
-            client: this.state.playerClient,
-            attacker: player,
-            defender: enemy,
-            clock: this.clock,
-            questItems: this.state.questItems,
-            commandDispatcher: this.room.dispatcher,
-            trigger: TriggerType.AURA,
-            attackerSnapshot,
-        };
-
-        auraTalents.forEach((talent) => {
-            this.state.skillsTimers.push(
-                this.clock.setInterval(() => {
-                    try {
-                        talent.executeBehavior(behaviorContext);
-                    } catch (e) {
-                        console.error(e);
-                    }
-                }, 1000)
-            );
-        });
-
-        // Re-checked every tick via triggerEquippedItems rather than snapshotted once per item —
-        // an item can gain a new AURA-triggered skill mid-fight (Weapon Whisperer granting its
-        // bonus item skill to an already-Mythic weapon the first time its own talent aura ticks
-        // happens to land inside FightRoom rather than during the preceding draft), and that skill
-        // must start ticking the moment it's granted rather than being silently skipped for the
-        // rest of the fight because the per-item interval list was already built before it existed.
-        // Mirrors DraftAuraTriggerCommand's identical triggerEquippedItems(..., AURA) call, which
-        // re-scans every tick for the same reason. No trigger_item notification either way — this
-        // is AURA-only, and a continuous passive effect re-firing every ~1s has no discrete
-        // activation moment worth flashing (it would just pulse forever); triggerEquippedItems
-        // already skips that notification for TriggerType.AURA.
         this.state.skillsTimers.push(
             this.clock.setInterval(() => {
                 try {
-                    triggerEquippedItems(player, behaviorContext, TriggerType.AURA);
+                    // Keep the hidden shop-roll stat seeded during the fight too — a fight
+                    // doesn't spend it, but Bulk Discount/Insider Trading's status lines should
+                    // still read live.
+                    player.luckyFindChance = baseLuckyFindChance(player.level) + player.luckyFindMythicBonus;
+                    // Ironblood (item skill): re-seeded to false before the scaling pass runs, so
+                    // a tick where poison isn't actually cleansed (no poison, or no regen budget)
+                    // can't keep last tick's suppression latched — see statsUtils.ts.
+                    player.regenSuppressed = false;
+
+                    const attackerSnapshot = buildFloorSnapshot(player);
+                    const behaviorContext: BehaviorContext = {
+                        client: this.state.playerClient,
+                        attacker: player,
+                        defender: enemy,
+                        clock: this.clock,
+                        questItems: this.state.questItems,
+                        commandDispatcher: this.room.dispatcher,
+                        trigger: TriggerType.AURA,
+                        attackerSnapshot,
+                    };
+
+                    // Scaling sources first, in dependency order — see
+                    // DraftAuraTriggerCommand for the identical pattern and reasoning.
+                    runScalingSources(player, behaviorContext);
+
+                    player.talents.forEach((talent) => {
+                        if (!talent.triggerTypes.includes(TriggerType.AURA)) return;
+                        if (SCALING_TALENT_IDS.has(talent.talentId)) return;
+                        try {
+                            talent.executeBehavior(behaviorContext);
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    });
+
+                    // Re-checked every tick rather than snapshotted once per item — an item can
+                    // gain a new AURA-triggered skill mid-fight (Weapon Whisperer granting its
+                    // bonus item skill to an already-Mythic weapon the first time its own
+                    // talent aura ticks happens to land inside FightRoom rather than during the
+                    // preceding draft), and that skill must start ticking the moment it's
+                    // granted rather than being silently skipped for the rest of the fight.
+                    // SCALING_SKILL_IDS is skipped here since those already ran, in dependency
+                    // order, via runScalingSources above.
+                    triggerEquippedItems(player, behaviorContext, TriggerType.AURA, SCALING_SKILL_IDS);
                 } catch (e) {
                     console.error(e);
                 }
-            }, 1000)
-        );
-
-        // Keep the hidden shop-roll stat seeded during the fight too — previously only the draft
-        // ever wrote it, so it displayed 0% mid-fight. Registered LAST, not first: ClockTimer.tick()
-        // (see @colyseus/timer ClockTimer.ts) iterates its `delayed` list in REVERSE registration
-        // order, so the most-recently-pushed interval runs FIRST each tick. Registering this seed
-        // after the talent/item loops above means it still executes before them every tick, so any
-        // of them that modify luckyFindChance (Black Market Contact) compose on a fresh base
-        // instead of the base clobbering their result a moment later.
-        this.state.skillsTimers.push(
-            this.clock.setInterval(() => {
-                player.luckyFindChance = baseLuckyFindChance(player.level) + player.luckyFindMythicBonus;
             }, 1000)
         );
     }

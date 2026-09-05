@@ -31,3 +31,6 @@ export const smokeBombUsed = new WeakMap<Item, boolean>();
 // Battle Focus: dodges-taken counter (this player's attack being dodged, not this item's own
 // dodges), reset on FIGHT_START — same idiom as coatedEdgeCounters above.
 export const battleFocusCounters = new WeakMap<Item, number>();
+// Ironblood: running count of poison stacks this item has cleansed this fight, reset on
+// FIGHT_END — same idiom as coatedEdgeCounters above. Read by itemSkillBalance.ts's status().
+export const ironbloodCleansed = new WeakMap<Item, number>();

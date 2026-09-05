@@ -317,13 +317,13 @@ export const GAMBLERS_DICE_ITEM_ID = 703;
  *  there — feeds back into the dice's own baseMaxDamage (= income * rarity/2), so a winning
  *  streak compounds into both economy and damage. */
 export function diceWinIncome(rarity: number): number {
-    return Math.ceil(rarity / 2); // 1,1,2,2,3
+    return rarity;
 }
 
 /** Gambler's Dice (703), off hand: one-off gold refund after every fight LOST while worn there —
  *  insurance rather than a snowball. */
 export function diceLossGold(rarity: number): number {
-    return rarity * 4; // 4,8,12,16,20
+    return rarity * 6; 
 }
 
 /** Gambler's Dice (703) description — single source of truth, used by both the item's own

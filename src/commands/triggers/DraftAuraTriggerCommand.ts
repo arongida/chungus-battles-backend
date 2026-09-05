@@ -3,11 +3,12 @@ import {TriggerType} from '../../common/types';
 import {DraftRoom} from '../../rooms/DraftRoom';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {TalentBehaviorContext} from "../../talents/behavior/TalentBehaviorContext";
-import {triggerEquippedItems} from '../../common/triggerUtils';
-import {buildBaseAndItemsSnapshot} from '../../common/statsUtils';
+import {triggerEquippedItems, runScalingSources} from '../../common/triggerUtils';
+import {buildFloorSnapshot} from '../../common/statsUtils';
 import {baseLuckyFindChance, BASE_POTION_CAPACITY, BASE_REFRESH_SHOP_COST} from '../ShopUpgradeUtils';
 import {ensurePotionEffect, ensureShieldSkill, refreshFutureItemSkill} from '../../items/skills/itemSkillRoller';
 import {applyBulkDiscount, recomputeStoreCreditClaim} from '../../items/behavior/ItemSkillBehaviors';
+import {SCALING_TALENT_IDS, SCALING_SKILL_IDS} from '../../common/scalingRegistry';
 
 export class DraftAuraTriggerCommand extends Command<DraftRoom> {
     execute() {
@@ -77,7 +78,7 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
 
         const auraTalents: Talent[] = player.talents.filter((talent) => talent.triggerTypes?.includes(TriggerType.AURA));
 
-        const attackerSnapshot = buildBaseAndItemsSnapshot(player);
+        const attackerSnapshot = buildFloorSnapshot(player);
 
         let behaviorContext: TalentBehaviorContext = {
             client: this.state.playerClient,
@@ -89,7 +90,18 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
             forceFreeReroll: this.room.forceFreeReroll,
         };
 
+        // Scaling sources (Bulwark, Titan's Might, Ironblood, Strong, ...) run in dependency
+        // order first, each folding its output into `attackerSnapshot` before the next runs —
+        // see scalingGraph.ts / scalingRegistry.ts. `behaviorContext.attackerSnapshot` is the
+        // SAME object throughout (mutated in place), so every source after the first sees every
+        // source before it.
+        runScalingSources(player, behaviorContext);
+
+        // Everything else: non-scaling AURA talents, plus every equipped item's AURA behavior
+        // EXCEPT the scaling skills already run above (triggerEquippedItems would otherwise
+        // re-fire them a second time, now against the fully-folded snapshot — i.e. self-feeding).
         auraTalents.forEach((talent) => {
+            if (SCALING_TALENT_IDS.has(talent.talentId)) return;
             try {
                 talent.executeBehavior(behaviorContext);
             } catch (e) {
@@ -97,7 +109,7 @@ export class DraftAuraTriggerCommand extends Command<DraftRoom> {
             }
         });
 
-        triggerEquippedItems(this.state.player, behaviorContext, TriggerType.AURA);
+        triggerEquippedItems(this.state.player, behaviorContext, TriggerType.AURA, SCALING_SKILL_IDS);
 
         // Applied last (after aura talents), so Black Market Contact's x2 always lands on VIP
         // Pass's fully-adjusted flat bonus, not a partial one.

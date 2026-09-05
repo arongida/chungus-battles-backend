@@ -4,19 +4,16 @@ import { ItemRarity, ItemType } from '../items/types/ItemTypes';
 import { cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
 import { TalentType } from '../talents/types/TalentTypes';
-import { ensureShieldSkill, grantItemSkill, isSkillEligibleForItem, refreshFutureItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
+import { grantItemSkill, isSkillEligibleForItem, refreshFutureItemSkill, refreshItemSkillDescription, rollItemSkill } from '../items/skills/itemSkillRoller';
 import { ITEM_SKILLS } from '../items/behavior/itemSkillBalance';
 import {
   BURN_DAMAGE_PER_STACK,
   BURN_DURATION_MS,
   chungiHpDamageFraction,
-  floweringStaffCooldownReduction,
   floweringStaffRegenSteal,
   FLOWERING_STAFF_MAX_STEAL,
   frostbiteChillThreshold,
   frostbiteFreezeMs,
-  magicRingCooldownReduction,
-  magicWandCooldownReduction,
   NON_UPGRADEABLE_ITEM_IDS,
   scytheSoulValue,
   secondWindHealFraction,
@@ -42,7 +39,7 @@ const itemDescriptionUpdaters: Partial<Record<number, (item: Item, player: Playe
     const selfStacks = selfBurnStacks(stacks);
     return `Every 2s, ignites the enemy with ${stacks} burn stack${stacks > 1 ? 's' : ''} and yourself with ${selfStacks} (${BURN_DAMAGE_PER_STACK} damage per stack per second, for ${BURN_DURATION_MS / 1000}s).`;
   },
-  702: (item) => `Every 1s during battle: Gains bonus stats. Evolves on level up.`,
+  702: (item) => `Gain bonus stats during combat. Unequip for one fight and stats will be rerolled.`,
   18: (item) => {
     const stacks = item.rarity;
     const totalHpPct = parseFloat((POISON_DAMAGE_PER_STACK_FRACTION * 100 * (POISON_DURATION_MS / 1000)).toFixed(2));
@@ -164,7 +161,7 @@ export const BASE_REFRESH_SHOP_COST = 2;
 /** Bargain Hunter's free shop rerolls granted per round (contributed into
  *  Player.freeRerollGrant, stacking additively with the Haggler item skill — see
  *  TalentBehaviors.ts and DraftAuraTriggerCommand). */
-export const BARGAIN_HUNTER_FREE_REROLLS = 2;
+export const BARGAIN_HUNTER_FREE_REROLLS = 3;
 
 /** Base (un-modified) active-potion capacity, seeded onto Player.potionCapacity each draft aura
  *  tick before aura talents run; Flash Sale (MERCHANT_1) adds to it while owned — see

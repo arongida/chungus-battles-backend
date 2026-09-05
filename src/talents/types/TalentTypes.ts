@@ -53,7 +53,7 @@ export enum TalentType {
 	WARRIOR_3 = 301,
 	POISON_2 = 302,
 	MERCHANT_5 = 303,
-	WARRIOR_4 = 401,
+	BERSERK = 401,
 	MISCONDUCT = 402,
 	// Was LEARN_BY_DOING (+XP on refresh) — reworked into Fortune's Fool, Season 21.
 	FORTUNES_FOOL = 403,

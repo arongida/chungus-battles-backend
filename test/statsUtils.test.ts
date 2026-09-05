@@ -103,18 +103,7 @@ describe('recalculatePlayerStats', () => {
         expect(player.defense).toBe(6);
     });
 
-    it('dodgeRate is zeroed while dodgeDisabled is set, regardless of dodge sources', () => {
-        const player = new Player();
-        player.baseStats = Object.assign(new AffectedStats(), { dodgeRate: 15 });
-        player.equippedItems.set('mainHand', statItem({ dodgeRate: 10 }));
-        player.dodgeDisabled = true;
-
-        recalculatePlayerStats(player);
-
-        expect(player.dodgeRate).toBe(0);
-    });
-
-    it('dodgeRate is zeroed while stunned, same as dodgeDisabled', () => {
+    it('dodgeRate is zeroed while stunned, regardless of dodge sources', () => {
         const player = new Player();
         player.baseStats = Object.assign(new AffectedStats(), { dodgeRate: 15 });
         player.stunned = true;

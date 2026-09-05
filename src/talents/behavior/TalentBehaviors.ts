@@ -517,8 +517,14 @@ export const TalentBehaviors = {
     // has no discrete activation moment worth flashing (it would just pulse forever).
     [TalentType.STRONG]: (context: TalentBehaviorContext) => {
         const { attacker, talent, attackerSnapshot } = context;
-        const base = attackerSnapshot ?? attacker;
-        const hpBonus = base.maxHp * talent.activationRate;
+        // No `?? attacker` fallback (see scalingGraph.ts) — a missing snapshot would mean
+        // reading the live, fully-derived maxHp instead of the pre-node one, silently
+        // reintroducing the old self-feeding bug (this talent both reads and writes maxHp).
+        if (!attackerSnapshot) {
+            console.error('STRONG fired AURA without an attackerSnapshot — skipping.');
+            return;
+        }
+        const hpBonus = attackerSnapshot.maxHp * talent.activationRate;
         const attackBonus = 10;
 
         talent.affectedStats.maxHp = hpBonus;
@@ -549,10 +555,18 @@ export const TalentBehaviors = {
     },
 
     
+    // Zealot — a scaling source (talentScaling.ts): it both reads AND writes defense, so it must
+    // resolve against the pre-node snapshot. Reading the live `attacker.defense` would let it see
+    // its own negative output and halve the halving every tick.
     [TalentType.ZEALOT]: (context: TalentBehaviorContext) => {
-        const { attacker, talent } = context;
-        attacker.dodgeDisabled = true;
-        talent.affectedStats.attackSpeed = 1 + (attacker.defense * 0.8 * 0.01);
+        const { talent, attackerSnapshot } = context;
+        if (!attackerSnapshot) {
+            console.error('ZEALOT fired AURA without an attackerSnapshot — skipping.');
+            return;
+        }
+        const converted = Math.round(Math.max(0, attackerSnapshot.defense) * talent.activationRate);
+        talent.affectedStats.defense = -converted;
+        talent.affectedStats.attackSpeed = 1 + converted * 0.01;
     },
 
     // Hidden Vials — ON_DODGE trigger. `defender` is the dodger (talent owner); the enemy who
@@ -645,7 +659,10 @@ export const TalentBehaviors = {
     [TalentType.FUTURE_NOW]: (context: TalentBehaviorContext) => {
         const { attacker, client, talent } = context;
 
-        const extraXp = attacker.round * 2;
+        // Season 27 buff: 2 -> 2.25 multiplier (total post-battle xp goes from 2x base to 2.125x
+        // base). `|| 2.25` covers embedded copies from before this talent had a `scaling` field
+        // at all — without it, `round * undefined` silently pays out NaN xp.
+        const extraXp = Math.round(attacker.round * (talent.scaling || 2.25));
         attacker.xp += extraXp;
         track(talent, 1, 0, 0, 0, extraXp, { client, playerId: attacker.playerId });
 
@@ -806,7 +823,7 @@ export const TalentBehaviors = {
 
     [TalentType.GAMBLER]:
         (context: TalentBehaviorContext) => {
-            const { attacker, client, questItems, talent } = context;
+            const { attacker, client, questItems } = context;
 
             // Checks every equipped slot, not just the hands — a Martial Artist can push this
             // quest weapon into armor/helmet too (TalentBehaviors.ts's isMartialArtistEquippable).
@@ -1046,14 +1063,20 @@ export const TalentBehaviors = {
         },
 
     [TalentType.ROGUE_1]:
+        // Season 27 buff: 1-2 gold at random instead of a flat 1. Range is read from the DB
+        // (base = min, scaling = max) rather than hardcoded, so the tooltip can't drift from the
+        // applied value the way Just a Scratch's payout did. `scaling || base` degrades a
+        // pre-migration embedded copy (scaling: 0) to the old flat-1 behavior instead of rolling
+        // a 1-0 range.
         (context: TalentBehaviorContext) => {
             const { defender, client, talent, clock } = context;
             const last = pickpocketLastProcMs.get(talent);
             if (clock && last !== undefined && clock.elapsedTime - last < PICKPOCKET_COOLDOWN_MS) return;
             if (clock) pickpocketLastProcMs.set(talent, clock.elapsedTime);
-            defender.gold += 1;
-            track(context.talent, 1, 0, 0, 1, 0, { client, playerId: defender.playerId });
-            client.send('combat_log', { text: `${defender.name} found 1 gold during dodge roll!`, kind: 'reward', talentId: context.talent.talentId, attackerId: defender.playerId, goldDelta: 1 } as CombatLogMessage);
+            const gold = rollTheDice(talent.base, talent.scaling || talent.base);
+            defender.gold += gold;
+            track(context.talent, 1, 0, 0, gold, 0, { client, playerId: defender.playerId });
+            client.send('combat_log', { text: `${defender.name} found ${gold} gold during dodge roll!`, kind: 'reward', talentId: context.talent.talentId, attackerId: defender.playerId, goldDelta: gold } as CombatLogMessage);
             client.send('trigger_talent', {
                 playerId: defender.playerId,
                 talentId: TalentType.ROGUE_1,
@@ -1205,19 +1228,13 @@ export const TalentBehaviors = {
         (context: TalentBehaviorContext) => {
             const { attacker, client, talent, trigger } = context;
 
-            if (trigger === TriggerType.AFTER_REFRESH) {
-                // Back-compat: in-progress runs may carry an embedded copy from before this
-                // rework (Learn by doing's after-refresh trigger). Repoint to aura + fight-start
-                // and bail — same migration idiom as Misconduct/Penny Stocks above.
-                talent.triggerTypes.clear();
-                talent.triggerTypes.push(TriggerType.AURA);
-                talent.triggerTypes.push(TriggerType.FIGHT_START);
-                return;
-            }
-
             if (trigger === TriggerType.AURA) {
-                attacker.freeRerolls = true;
                 const pct = Math.round(Math.min(talent.scaling, talent.base * attacker.rerollsThisRound) * 100);
+                if (pct >= 99) {
+                    talent.description = `You rerolled like a fool - start the fight at -99% HP.`
+                    return;
+                }
+                attacker.freeRerolls = true;
                 talent.description = attacker.rerollsThisRound > 0
                     ? `Rerolls are free. ${attacker.rerollsThisRound} reroll(s) this round — start the fight at -${pct}% HP.`
                     : `Rerolls are free. Each reroll this round costs 5% HP (max 99%) at the start of your next fight.`;
@@ -1232,7 +1249,7 @@ export const TalentBehaviors = {
                 attacker.hp -= hpLoss;
                 track(talent, 1, hpLoss);
                 client.send('damage', { playerId: attacker.playerId, damage: hpLoss, type: 'normal' } as DamageMessage);
-                client.send('combat_log', { text: `${attacker.name} starts the fight wounded from ${attacker.rerollsThisRound} reroll(s), losing ${fmt(hpLoss)} HP!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, damage: hpLoss } as CombatLogMessage);
+                client.send('combat_log', { text: `${attacker.name} starts the fight wounded from rerolling like a fool, losing ${fmt(hpLoss)} HP!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, damage: hpLoss } as CombatLogMessage);
                 client.send('trigger_talent', {
                     playerId: attacker.playerId,
                     talentId: TalentType.FORTUNES_FOOL,
@@ -1240,18 +1257,24 @@ export const TalentBehaviors = {
             }
         },
 
-    // Berserk — AURA trigger. Re-checked every ~1s; below 50% HP grants +100% strength (of base+item
-    // strength, via attackerSnapshot so it doesn't feed on its own bonus) and +100% attack speed.
+    // Berserk — AURA trigger. Re-checked every ~1s; below `activationRate` (60%) HP grants
+    // `+scaling` (140% as of Season 27) strength (of base+item strength, via attackerSnapshot so
+    // it doesn't feed on its own bonus) and the same bonus to attack speed. No code change for the
+    // Season 27 buff — both numbers come straight from the DB.
     // Writes `=` each tick (not `+=`), so UpdateStatsCommand's from-scratch resum removes the buff
-    // automatically once healed back above 50% — no FIGHT_END reset needed.
-    // Pure AURA talent — no trigger_talent send (see STRONG above): "below 50%" stays true for
-    // as long as the fight does, which would otherwise pulse every tick the whole time.
-    [TalentType.WARRIOR_4]:
+    // automatically once healed back above the threshold — no FIGHT_END reset needed.
+    // Pure AURA talent — no trigger_talent send (see STRONG above): "below threshold" stays true
+    // for as long as the fight does, which would otherwise pulse every tick the whole time.
+    [TalentType.BERSERK]:
         (context: TalentBehaviorContext) => {
             const { attacker, talent, attackerSnapshot } = context;
-            const base = attackerSnapshot ?? attacker;
+            // No `?? attacker` fallback (see scalingGraph.ts) — see STRONG above.
+            if (!attackerSnapshot) {
+                console.error('WARRIOR_4 fired AURA without an attackerSnapshot — skipping.');
+                return;
+            }
             const below = attacker.hp < attacker.maxHp * talent.activationRate;
-            talent.affectedStats.strength = below ? base.strength * talent.scaling : 0;
+            talent.affectedStats.strength = below ? attackerSnapshot.strength * talent.scaling : 0;
             talent.affectedStats.attackSpeed = below ? 1 + talent.scaling : 1;
         },
 
@@ -1276,17 +1299,24 @@ export const TalentBehaviors = {
     // Pure AURA talent — no trigger_talent send (see STRONG above).
     [TalentType.MERCHANT_5]:
         (context: TalentBehaviorContext) => {
-            const { attacker, talent, attackerSnapshot } = context;
+            const { talent, attackerSnapshot } = context;
+            // No `?? attacker` fallback (see scalingGraph.ts) — see STRONG above. This talent
+            // reads nearly the whole stat block, so it's forced to run after every other
+            // scaling source (talentScaling.ts) specifically so it CAN safely read the live
+            // board here without cycling.
+            if (!attackerSnapshot) {
+                console.error('MERCHANT_5 fired AURA without an attackerSnapshot — skipping.');
+                return;
+            }
             talent.affectedStats.income = talent.base;
-            const base = attackerSnapshot ?? attacker;
-            const bonusCoefficent = (base.income * talent.scaling) / 100;
-            talent.affectedStats.strength = Math.ceil(base.strength * bonusCoefficent);
-            talent.affectedStats.accuracy = Math.ceil(base.accuracy * bonusCoefficent);
+            const bonusCoefficent = (attackerSnapshot.income * talent.scaling) / 100;
+            talent.affectedStats.strength = Math.ceil(attackerSnapshot.strength * bonusCoefficent);
+            talent.affectedStats.accuracy = Math.ceil(attackerSnapshot.accuracy * bonusCoefficent);
             talent.affectedStats.attackSpeed = 1 + bonusCoefficent;
-            talent.affectedStats.defense = Math.ceil(base.defense * bonusCoefficent);
-            talent.affectedStats.maxHp = Math.ceil(base.maxHp * bonusCoefficent);
-            talent.affectedStats.dodgeRate = Math.ceil(base.dodgeRate * bonusCoefficent);
-            talent.affectedStats.hpRegen = Math.ceil(base.hpRegen * bonusCoefficent);
+            talent.affectedStats.defense = Math.ceil(attackerSnapshot.defense * bonusCoefficent);
+            talent.affectedStats.maxHp = Math.ceil(attackerSnapshot.maxHp * bonusCoefficent);
+            talent.affectedStats.dodgeRate = Math.ceil(attackerSnapshot.dodgeRate * bonusCoefficent);
+            talent.affectedStats.hpRegen = Math.ceil(attackerSnapshot.hpRegen * bonusCoefficent);
         },
 
     [TalentType.WARRIOR_5]:
@@ -1363,7 +1393,10 @@ export const TalentBehaviors = {
                 talent.statDamageDealt += damage;
             } else if (trigger === TriggerType.FIGHT_END) {
                 if (talent.statDamageDealt <= 0) return;
-                const gold = Math.floor(talent.statDamageDealt * 0.1);
+                // Season 27 bugfix: this was still paying out 10% — the season-26 "reduced gold
+                // gained to 5%" note (and the talent's own DB description) never actually landed
+                // here. 0.05 is what was announced; it just wasn't wired up until now.
+                const gold = Math.floor(talent.statDamageDealt * 0.05);
                 attacker.gold += gold;
                 track(talent, 1, 0, 0, gold, 0, { client, playerId: attacker.playerId });
                 client.send('combat_log', { text: `${attacker.name} profits from pain, gaining ${gold} gold for ${fmt(talent.statDamageDealt)} damage taken!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, goldDelta: gold } as CombatLogMessage);

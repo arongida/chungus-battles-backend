@@ -92,11 +92,14 @@ export class Player extends Schema implements IStats {
     // as empoweredAttackSource above, so it can't accumulate the way a duration-based invulnerability
     // window would at high attack speed. Cleared per-fight in FightRoom.startBattle.
     pendingBlockSource: Item = null;
-    // Zealot (talent 28, reworked): set true by Zealot's aura behavior every ~1s it's owned
-    // (talents are never un-picked, so this never needs to reset back to false). Clamped in
-    // recalculatePlayerStats (statsUtils.ts), which zeroes dodgeRate after computing it whenever
-    // this is set — after every equipped item/talent has already contributed to the snapshot.
-    dodgeDisabled: boolean = false;
+    // Ironblood (item skill): while true, this tick's regen heals nothing — set whenever it
+    // actually cleanses a poison stack (ItemSkillBehaviors.ts), read by recalculatePlayerStats
+    // (statsUtils.ts) the same "zero after every source has contributed" treatment the stun check
+    // gives dodgeRate there. Re-seeded to false at the top of every aura tick
+    // (FightAuraTriggerCommand) and on FIGHT_END, so it can't latch on past the poison that set it
+    // or survive unequipping the item. A boolean rather than a subtracted amount is what lets two
+    // equipped copies compose safely — see itemSkillBalance.ts.
+    regenSuppressed: boolean = false;
     // Smoke Bomb (item skill): while true, this player's own attacks deal no damage (see
     // FightRoom.tryWeaponAttack). Not synced — the effect is visible through the paired dodgeRate
     // spike (item.skillAffectedStats) and combat log lines instead.
@@ -529,7 +532,14 @@ export class Player extends Schema implements IStats {
         playerClient.send('combat_log', { text: `${this.name} is poisoned! ${this.poisonStack} stacks!`, kind: 'poison_apply', defenderId: this.playerId, poisonStacks: this.poisonStack } as CombatLogMessage);
 
         clock.setTimeout(() => {
-            this.poisonStack -= stack;
+            // Ironblood (item skill) may have already cleansed some of this fight's poison stacks
+            // via consumePoisonStacks() before this timeout fires. poisonConsumedDebt tracks how
+            // many stacks were consumed "early" so this removal absorbs from that debt first,
+            // instead of decrementing stacks that were applied (and are still owed their full
+            // duration) after the cleanse happened. Mirrors addBurnStacks/burnConsumedDebt exactly.
+            const absorbed = Math.min(this.poisonConsumedDebt, stack);
+            this.poisonConsumedDebt -= absorbed;
+            this.poisonStack -= (stack - absorbed);
             removeDotSource(this.poisonSources, source, stack);
             if (this.poisonStack === 0 && this.poisonTimer) {
                 this.poisonTimer.clear();
@@ -599,6 +609,35 @@ export class Player extends Schema implements IStats {
      *  alongside the other burn/poison per-fight resets in FightRoom. */
     resetBurnConsumedDebt() {
         this.burnConsumedDebt = 0;
+    }
+
+    /** Stacks already removed by consumePoisonStacks() whose originating addPoisonStacks() expiry
+     *  timeout is still pending. Mirrors burnConsumedDebt above. */
+    private poisonConsumedDebt: number = 0;
+
+    /** Removes up to `max` live poison stacks and returns how many were actually removed. Used by
+     *  Ironblood (item skill) to cleanse poison via regen. Mirrors consumeBurnStacks above,
+     *  including the interval-reset on full clear (addPoisonStacks' own expiry does the same). */
+    consumePoisonStacks(max: number): number {
+        const consumed = Math.min(max, this.poisonStack);
+        if (consumed <= 0) return 0;
+        this.poisonStack -= consumed;
+        this.poisonConsumedDebt += consumed;
+        // poisonSources is deliberately NOT reduced here — same reasoning as consumeBurnStacks:
+        // the pending timeouts still remove exactly what they added, and dotSources.denom()
+        // already tolerates a ledger total exceeding the live stack count.
+        if (this.poisonStack === 0) {
+            this.poisonTimer?.clear();
+            this.poisonTimer = null;
+            this.poisonTickIntervalMs = POISON_TICK_INTERVAL_MS;
+        }
+        return consumed;
+    }
+
+    /** Resets the consumption-debt counter between fights (see poisonConsumedDebt above). Call
+     *  alongside the other burn/poison per-fight resets in FightRoom. */
+    resetPoisonConsumedDebt() {
+        this.poisonConsumedDebt = 0;
     }
 
     getItem(item: Item) {

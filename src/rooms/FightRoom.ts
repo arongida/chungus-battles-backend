@@ -884,6 +884,8 @@ export class FightRoom extends BaseRoom {
         this.state.enemy.burnSources.clear();
         this.state.player.resetBurnConsumedDebt();
         this.state.enemy.resetBurnConsumedDebt();
+        this.state.player.resetPoisonConsumedDebt();
+        this.state.enemy.resetPoisonConsumedDebt();
         this.state.player.empoweredAttackSource = null;
         this.state.enemy.empoweredAttackSource = null;
         this.state.player.pendingBlockSource = null;
@@ -963,7 +965,7 @@ export class FightRoom extends BaseRoom {
                 this.handleWin();
                 break;
             case FightResultType.LOSE:
-                this.handleLoose();
+                this.handleLose();
                 break;
             case FightResultType.DRAW:
                 this.handleDraw();
@@ -1027,9 +1029,9 @@ export class FightRoom extends BaseRoom {
         this.broadcast('end_battle', { result: 'win', replayId: this.currentReplayId, stats: this.currentFightStats, wins: this.state.player.wins });
     }
 
-    private handleLoose() {
-        this.logCombat('broadcast', { text: 'You loose!', kind: 'result', result: 'lose' });
-        console.log(`[FightRoom]' ${this.state.player.name} looses!`);
+    private handleLose() {
+        this.logCombat('broadcast', { text: 'You lose!', kind: 'result', result: 'lose' });
+        console.log(`[FightRoom]' ${this.state.player.name} loses!`);
         this.state.player.losses++;
         this.state.player.lives--;
         if (this.state.player.lives <= 0) {
