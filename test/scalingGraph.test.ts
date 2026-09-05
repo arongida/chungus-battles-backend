@@ -287,6 +287,76 @@ describe('Zealot (defense -> attack speed conversion)', () => {
     });
 });
 
+// Regression coverage for the bug where buildFloorSnapshot summed every equipped item's rolled
+// `affectedStats` but never its `skillAffectedStats`/`skillAffectedStats2` — so a non-scaling
+// item skill's output (accumulated defense, granted dodge rate, ...) was invisible to every
+// scaling reader (Zealot, Fluid Motion, Berserk, ...) even though recalculatePlayerStats summed
+// it correctly into the player's real stats. Fixed by folding non-scaling skill output into the
+// floor, guarded by SCALING_SKILL_IDS exactly like the existing talent guard just above.
+describe('buildFloorSnapshot includes non-scaling skill output (regression)', () => {
+    it('Shield Wall\'s accumulated defense feeds Zealot\'s conversion', () => {
+        const player = new Player();
+        player.baseStats = Object.assign(new AffectedStats(), { defense: 100 });
+        const shield = scalingItem(ItemSkillType.SHIELD_WALL, ItemRarity.MYTHIC);
+        shield.skillAffectedStats.defense = 50; // simulated stack accumulated from ON_ATTACKED hits
+        player.equippedItems.set(EquipSlot.OFF_HAND, shield);
+        player.talents.push(scalingTalent(TalentType.ZEALOT, 0.5));
+
+        const snapshot = buildFloorSnapshot(player);
+        expect(snapshot.defense).toBe(150); // 100 base + 50 Shield Wall stack, visible on the floor
+
+        runScalingSources(player, fakeContext(player, snapshot));
+        recalculatePlayerStats(player);
+
+        // 150 converted at 50% -> -75 defense, +75% attack speed. Final defense: 100 base + 50
+        // Shield Wall stack - 75 Zealot conversion = 75.
+        expect(player.defense).toBe(75);
+        expect(player.attackSpeedMultiplier).toBeCloseTo(1.75);
+    });
+
+    it('Smoke Bomb\'s granted dodge rate feeds Fluid Motion\'s attack-speed bonus', () => {
+        const player = new Player();
+        player.baseStats = Object.assign(new AffectedStats(), { dodgeRate: 0 });
+        const boots = scalingItem(ItemSkillType.SMOKE_BOMB, ItemRarity.MYTHIC);
+        boots.skillAffectedStats.dodgeRate = 40; // simulated granted dodge rate
+        player.equippedItems.set(EquipSlot.ARMOR, boots);
+        const weapon = scalingItem(ItemSkillType.FLUID_MOTION, ItemRarity.MYTHIC);
+        player.equippedItems.set(EquipSlot.MAIN_HAND, weapon);
+
+        const snapshot = buildFloorSnapshot(player);
+        expect(snapshot.dodgeRate).toBe(40);
+
+        runScalingSources(player, fakeContext(player, snapshot));
+        recalculatePlayerStats(player);
+
+        // Fluid Motion (Mythic): +1% attack speed per 5 dodge rate -> floor(40/5) = 8 -> +8%.
+        expect(player.attackSpeedMultiplier).toBeCloseTo(1.08);
+    });
+
+    it('War Chest\'s granted strength feeds Berserk\'s scaling bonus', () => {
+        const player = new Player();
+        player.baseStats = Object.assign(new AffectedStats(), { strength: 20, maxHp: 100 });
+        player.maxHp = 100;
+        player.hp = 10; // below Berserk's activationRate threshold
+        const chestplate = scalingItem(ItemSkillType.WAR_CHEST, ItemRarity.MYTHIC);
+        chestplate.skillAffectedStats.strength = 30; // simulated strength granted from gold spend
+        player.equippedItems.set(EquipSlot.ARMOR, chestplate);
+        const berserk = scalingTalent(TalentType.BERSERK, 0.5); // active below 50% HP
+        berserk.scaling = 1; // 100% bonus while active
+        player.talents.push(berserk);
+
+        const snapshot = buildFloorSnapshot(player);
+        expect(snapshot.strength).toBe(50); // 20 base + 30 War Chest, visible on the floor
+
+        runScalingSources(player, fakeContext(player, snapshot));
+        recalculatePlayerStats(player);
+
+        // Berserk grants strength * scaling on top of the 50 it read -> +50, total 100.
+        expect(player.strength).toBe(100);
+        expect(player.attackSpeedMultiplier).toBeCloseTo(2);
+    });
+});
+
 describe('Ironblood (regen bonus + poison cleanse)', () => {
     it('grants a bonus computed from a snapshot that already includes Last Stand\'s regen', () => {
         const player = new Player();
