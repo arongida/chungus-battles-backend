@@ -1,7 +1,7 @@
 import { Client } from '@colyseus/core';
 import { BaseRoom } from './BaseRoom';
 import { FightState } from './schema/FightState';
-import { buildJoe, getPlayer, getSameRoundPlayer, incrementRunsEnded, JOE_PLAYER_ID, setNextFightEnemy, snapshotPlayer, updatePlayer } from '../players/db/Player';
+import { buildJoe, getPlayer, getSameRoundPlayer, incrementRunsEnded, JOE_PLAYER_ID, persistGameWin, setNextFightEnemy, snapshotPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
 import { END_BURN_START_MS, FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
@@ -962,7 +962,7 @@ export class FightRoom extends BaseRoom {
 
         switch (this.state.fightResult) {
             case FightResultType.WIN:
-                this.handleWin();
+                await this.handleWin();
                 break;
             case FightResultType.LOSE:
                 this.handleLose();
@@ -1011,7 +1011,7 @@ export class FightRoom extends BaseRoom {
         }
     }
 
-    private handleWin() {
+    private async handleWin() {
         this.logCombat('broadcast', { text: 'You win!', kind: 'result', result: 'win' });
         console.log(`'[FightRoom]' ${this.state.player.name} wins!`);
         this.state.player.wins++;
@@ -1021,6 +1021,10 @@ export class FightRoom extends BaseRoom {
             // Hard-ends the run server-side: DraftRoom/FightRoom onJoin already reject
             // lives <= 0, so a finished character can't be continued.
             this.state.player.lives = 0;
+            // Persist + drop the ranked-list cache BEFORE announcing the win: the client
+            // navigates straight to /end and fetches /wallOfFame, and onLeave's updatePlayer
+            // (which normally does the full save) is far too late for that first request.
+            await persistGameWin(this.state.player);
             this.broadcast('game_win', {
                 wins: this.state.player.wins,
                 losses: this.state.player.losses,

@@ -323,6 +323,19 @@ export async function updatePlayer(player: Player): Promise<Player> {
     return player;
 }
 
+/** Writes the run-ending win straight to the character's live document so the Wall of Fame
+ *  reflects it before the client can navigate to /end. Deliberately a targeted $set (not
+ *  updatePlayer) — FightRoom.handleWin runs mid-handleFightEnd, before the round's gold/xp/income
+ *  block and FightEndTriggerCommand, so a whole-document write here would persist a half-finished
+ *  round. onLeave's updatePlayer still writes the complete final state afterwards. */
+export async function persistGameWin(player: Player): Promise<void> {
+    await playerModel.updateOne(
+        {playerId: player.playerId},
+        {$set: {wins: player.wins, losses: player.losses, lives: player.lives}},
+    ).catch(err => console.error('[persistGameWin]', err));
+    invalidateRankedListCache();
+}
+
 // Credits the killer's canonical (original) document. runsEnded lives ONLY here + is read via
 // $max in the leaderboard aggregation; it is deliberately never written through
 // playerToPlainObject, so a concurrent updatePlayer() from the killer's own live session can't
@@ -488,6 +501,13 @@ const LEADERBOARD_PROJECTION = {
 // combination (including a name search) gets its own cached entry rather than sharing one.
 const rankedListCache = new Map<string, { docs: Record<string, any>[]; expiresAt: number }>();
 const RANKED_LIST_CACHE_TTL_MS = 15_000;
+
+/** Drops every cached ranked list. Called when a write happens that a player is expected to see
+ *  reflected immediately (a run-ending win landing on the Wall of Fame) — rare enough that the
+ *  cost is one re-aggregation, unlike per-round writes which should keep riding the TTL. */
+export function invalidateRankedListCache(): void {
+    rankedListCache.clear();
+}
 
 /** Runs `buildPipeline()`'s aggregation and caches the full result array (unpaginated — the
  *  pipeline should do its own $skip/$limit-free dedupe+sort+project) for RANKED_LIST_CACHE_TTL_MS,
