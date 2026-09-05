@@ -25,6 +25,7 @@ import type { Item } from '../schema/ItemSchema';
 import {
   coatedEdgeCounters, openingActCounters, crushingBlowCounters, protectionMoneyLastProcMs,
   shieldBashLastProcMs, braceCounters, bulkDiscountBasePrices, smokeBombUsed, battleFocusCounters,
+  ironbloodCleansed,
 } from './itemSkillState';
 
 export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) => void> = {
@@ -48,9 +49,15 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   [ItemSkillType.FLUID_MOTION]: (context) => {
     const { attacker, item, trigger, attackerSnapshot } = context;
     if (trigger !== TriggerType.AURA || !attacker || !item) return;
+    // No `?? attacker` fallback (see scalingGraph.ts) — a missing snapshot here would mean
+    // reading the live, fully-derived dodgeRate instead of the pre-node one, silently
+    // reintroducing the old self-feeding bug for any future skill that writes dodgeRate.
+    if (!attackerSnapshot) {
+      console.error('FLUID_MOTION fired AURA without an attackerSnapshot — skipping.');
+      return;
+    }
     const { perDodgeRate } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const base = attackerSnapshot ?? attacker;
-    item.skillAffectedStats.attackSpeed = 1 + Math.floor(Math.max(0, base.dodgeRate) / perDodgeRate) * 0.01;
+    item.skillAffectedStats.attackSpeed = 1 + Math.floor(Math.max(0, attackerSnapshot.dodgeRate) / perDodgeRate) * 0.01;
   },
 
   [ItemSkillType.PLAGUE_BEARER]: (context) => {
@@ -216,17 +223,55 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   [ItemSkillType.TITANS_MIGHT]: (context) => {
     const { attacker, item, trigger, attackerSnapshot } = context;
     if (trigger !== TriggerType.AURA || !attacker || !item) return;
+    // No `?? attacker` fallback (see scalingGraph.ts) — a missing snapshot would mean reading
+    // the live, fully-derived maxHp, silently reintroducing the old self-feeding bug.
+    if (!attackerSnapshot) {
+      console.error('TITANS_MIGHT fired AURA without an attackerSnapshot — skipping.');
+      return;
+    }
     const { divisor } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const base = attackerSnapshot ?? attacker;
-    item.skillAffectedStats.strength = Math.floor(Math.max(0, base.maxHp) / divisor);
+    item.skillAffectedStats.strength = Math.floor(Math.max(0, attackerSnapshot.maxHp) / divisor);
   },
 
-  [ItemSkillType.IRON_HIDE]: (context) => {
-    const { attacker, item, trigger, attackerSnapshot } = context;
-    if (trigger !== TriggerType.AURA || !attacker || !item) return;
-    const { divisor } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const base = attackerSnapshot ?? attacker;
-    item.skillAffectedStats.defense = Math.floor(Math.max(0, base.maxHp) / divisor);
+  // Ironblood (reworked Season 27 from Iron Hide — see itemSkillBalance.ts's header comment on
+  // the old versions). Grants bonus HP regen; while poisoned, that regen cleanses stacks instead
+  // of healing. `attackerSnapshot.hpRegen` already includes Last Stand's emergency regen bonus
+  // when both are equipped and active, so the cleanse rate benefits from it the same tick.
+  [ItemSkillType.IRONBLOOD]: (context) => {
+    const { attacker, item, client, trigger, attackerSnapshot } = context;
+    if (!item) return;
+    if (trigger === TriggerType.FIGHT_END) {
+      item.skillAffectedStats.hpRegen = 0;
+      if (attacker) attacker.regenSuppressed = false;
+      ironbloodCleansed.set(item, 0);
+      return;
+    }
+    if (trigger !== TriggerType.AURA || !attacker) return;
+    // No `?? attacker` fallback (see scalingGraph.ts): a missing snapshot would mean reading the
+    // live, fully-derived hpRegen, which already includes this skill's OWN previous tick's
+    // output — exactly the self-feeding shape this system exists to prevent.
+    if (!attackerSnapshot) {
+      console.error('IRONBLOOD fired AURA without an attackerSnapshot — skipping.');
+      return;
+    }
+    const { regenBonus } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    // Self-clearing `=` write, recomputed from the pre-node snapshot every tick — it can never
+    // compound on itself. Draft has no poison, so this is the only branch that ever runs there,
+    // which is what makes the bonus show up in the draft stat panel like Bulwark's max HP.
+    const bonus = Math.round(Math.max(0, attackerSnapshot.hpRegen) * regenBonus);
+    item.skillAffectedStats.hpRegen = bonus;
+
+    if (bonus > 0 && attacker.poisonStack > 0) {
+      const cleansed = attacker.consumePoisonStacks(bonus);
+      if (cleansed > 0) {
+        attacker.regenSuppressed = true;
+        ironbloodCleansed.set(item, (ironbloodCleansed.get(item) ?? 0) + cleansed);
+        client?.send('combat_log', {
+          text: `${attacker.name}'s ${item.name} burns ${cleansed} poison stack${cleansed === 1 ? '' : 's'} out of their blood!`,
+          kind: 'item', attackerId: attacker.playerId, itemId: item.itemId,
+        } as CombatLogMessage);
+      }
+    }
   },
 
   [ItemSkillType.BULWARK]: (context) => {
@@ -234,9 +279,13 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     if (!item) return;
     if (trigger === TriggerType.AURA) {
       if (!attacker) return;
+      // No `?? attacker` fallback (see scalingGraph.ts) — see TITANS_MIGHT above.
+      if (!attackerSnapshot) {
+        console.error('BULWARK fired AURA without an attackerSnapshot — skipping.');
+        return;
+      }
       const { hpRatio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-      const base = attackerSnapshot ?? attacker;
-      item.skillAffectedStats.maxHp = Math.round(Math.max(0, base.maxHp) * hpRatio);
+      item.skillAffectedStats.maxHp = Math.round(Math.max(0, attackerSnapshot.maxHp) * hpRatio);
       return;
     }
     if (trigger !== TriggerType.FIGHT_START || !attacker) return;
@@ -252,10 +301,14 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   [ItemSkillType.LAST_STAND]: (context) => {
     const { attacker, item, trigger, attackerSnapshot } = context;
     if (trigger !== TriggerType.AURA || !attacker || !item) return;
+    // No `?? attacker` fallback (see scalingGraph.ts) — see TITANS_MIGHT above.
+    if (!attackerSnapshot) {
+      console.error('LAST_STAND fired AURA without an attackerSnapshot — skipping.');
+      return;
+    }
     const { defenseRatio, hpRegen } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const base = attackerSnapshot ?? attacker;
     const below = attacker.maxHp > 0 && attacker.hp < attacker.maxHp * 0.5;
-    item.skillAffectedStats.defense = below ? Math.round(base.defense * defenseRatio) : 0;
+    item.skillAffectedStats.defense = below ? Math.round(attackerSnapshot.defense * defenseRatio) : 0;
     item.skillAffectedStats.hpRegen = below ? hpRegen : 0;
   },
 
@@ -337,9 +390,15 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   [ItemSkillType.COMPOUND_INTEREST]: (context) => {
     const { attacker, item, trigger, attackerSnapshot } = context;
     if (trigger !== TriggerType.AURA || !attacker || !item) return;
+    // No `?? attacker` fallback (see scalingGraph.ts) — this reads AND writes income, so a
+    // missing snapshot here means reading its own live output and compounding every tick,
+    // exactly the old bug's shape.
+    if (!attackerSnapshot) {
+      console.error('COMPOUND_INTEREST fired AURA without an attackerSnapshot — skipping.');
+      return;
+    }
     const { ratio } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const base = attackerSnapshot ?? attacker;
-    item.skillAffectedStats.income = Math.round(Math.max(0, base.income) * ratio);
+    item.skillAffectedStats.income = Math.round(Math.max(0, attackerSnapshot.income) * ratio);
   },
 
   // Insider Trading (renamed from Market Manipulation): AURA write straight into

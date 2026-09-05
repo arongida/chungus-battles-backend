@@ -109,17 +109,20 @@ export class Item extends Schema {
   // flags on Player. See PlayerSchema.storeCreditClaims / ItemSkillBehaviors.ts STORE_CREDIT.
   storeCreditClaimUsed: boolean = false;
 
-  executeBehavior(context: BehaviorContext): void | Promise<void> {
+  /** `skipSkillIds` (only ever passed for TriggerType.AURA, via triggerEquippedItems) excludes a
+   *  scaling skill already run by triggerUtils.runScalingSources — see its header comment. The
+   *  item's own unique `itemId` behavior still runs unconditionally either way. */
+  executeBehavior(context: BehaviorContext, skipSkillIds?: Set<number>): void | Promise<void> {
     const itemContext: ItemBehaviorContext = { ...context, item: this };
     const results: (void | Promise<void>)[] = [];
 
     const behavior = ItemBehaviors[this.itemId] ?? ItemBehaviors[this.type];
     if (behavior) results.push(behavior(itemContext));
 
-    const skillBehavior = this.skillId ? ItemSkillBehaviors[this.skillId] : undefined;
+    const skillBehavior = this.skillId && !skipSkillIds?.has(this.skillId) ? ItemSkillBehaviors[this.skillId] : undefined;
     if (skillBehavior) results.push(skillBehavior(itemContext));
 
-    const skillBehavior2 = this.skillId2 ? ItemSkillBehaviors[this.skillId2] : undefined;
+    const skillBehavior2 = this.skillId2 && !skipSkillIds?.has(this.skillId2) ? ItemSkillBehaviors[this.skillId2] : undefined;
     if (skillBehavior2) results.push(skillBehavior2({ ...context, item: getSkillSlot2View(this) }));
 
     const pending = results.filter((r) => r instanceof Promise) as Promise<void>[];

@@ -3,6 +3,8 @@ import {AffectedStats} from './schema/AffectedStatsSchema';
 import {POISON_HEALING_EFFECTIVENESS} from './poisonBalance';
 import {ITEM_SKILLS, skillValues} from '../items/behavior/itemSkillBalance';
 import {ItemRarity} from '../items/types/ItemTypes';
+import {SCALING_TALENT_IDS} from './scalingRegistry';
+import type {ScalingNodeId} from './scalingGraph';
 
 export interface StatsSnapshot {
     strength: number;
@@ -108,8 +110,8 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     // straight into the snapshot alongside every other item/talent source — see
     // PlayerSchema.pendingPotionEffects. Folding into the snapshot (rather than adding to
     // player.hpRegen/dodgeRate/etc. after assignment, as the old single-effect pendingRegenBuff
-    // did) means an Evasion brew's dodge bonus is correctly zeroed by the Zealot/stun check below
-    // like any other dodge source, instead of bypassing it. Antidote and Salve grant no stats —
+    // did) means an Evasion brew's dodge bonus is correctly zeroed by the stun check below like
+    // any other dodge source, instead of bypassing it. Antidote and Salve grant no stats —
     // they're read directly via getPoisonDamageMultiplier/getBurnDamageMultiplier (FightRoom.ts's
     // poison/burn tick calculations); Liquid Courage is read directly in FightRoom.startBattle —
     // so none of the three contribute anything here.
@@ -130,12 +132,14 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     player.accuracy = snapshot.accuracy;
     player.maxHp = snapshot.maxHp;
     player.defense = snapshot.defense;
-    // Zealot: zeroes dodge after every item/talent has contributed, so no other dodge source
-    // (items, other talents) can bring it back up while Zealot is owned. Shield Bash (item skill)
-    // reuses the same zeroing for its stun — a stunned player can't dodge either.
-    player.dodgeRate = (player.dodgeDisabled || player.stunned) ? 0 : snapshot.dodgeRate;
+    // Shield Bash (item skill): zeroes dodge for a stunned player — a stunned player can't dodge.
+    player.dodgeRate = player.stunned ? 0 : snapshot.dodgeRate;
     player.income = snapshot.income;
-    player.hpRegen = snapshot.hpRegen;
+    // Ironblood (item skill): zeroes regen on any tick it actually cleanses a poison stack, same
+    // "zero after every source has contributed" treatment as dodgeRate above — set from the aura
+    // pass (ItemSkillBehaviors.ts), re-seeded to false each tick (FightAuraTriggerCommand) and on
+    // FIGHT_END so it can't latch on past the poison that triggered it.
+    player.hpRegen = player.regenSuppressed ? 0 : snapshot.hpRegen;
     player.cooldownReduction = snapshot.cooldownReduction;
 
     player.attackSpeedMultiplier = attackSpeedMultiplier;
@@ -146,7 +150,20 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     player.healingEffectiveness = player.poisonStack > 0 ? POISON_HEALING_EFFECTIVENESS : 1;
 }
 
-export function buildBaseAndItemsSnapshot(player: Player): StatsSnapshot {
+/**
+ * Base for the scaling pass (see scalingGraph.ts / scalingRegistry.ts): baseStats + every
+ * item's rolled `affectedStats` + non-scaling talents' `affectedStats` + pending potion effects.
+ * Deliberately excludes every scaling source's own output (item `skillAffectedStats`/
+ * `skillAffectedStats2`, scaling talents' `affectedStats`) — those are folded in one node at a
+ * time, in dependency order, by the scaling pass itself (foldScalingOutputs below, driven by
+ * triggerUtils.runScalingSources). A scaling talent's `affectedStats` is entirely recomputed by
+ * its own AURA behavior every tick, so summing it here too would double-count whatever value the
+ * PREVIOUS tick happened to leave behind before this tick's node runs and overwrites it.
+ *
+ * Replaces the old buildBaseAndItemsSnapshot, which excluded ALL skill/talent output
+ * unconditionally and so couldn't let Bulwark feed Titan's Might or Ironblood.
+ */
+export function buildFloorSnapshot(player: Player): StatsSnapshot {
     const snapshot: StatsSnapshot = {
         strength: player.baseStats.strength,
         accuracy: player.baseStats.accuracy,
@@ -160,5 +177,40 @@ export function buildBaseAndItemsSnapshot(player: Player): StatsSnapshot {
     player.equippedItems.forEach((item) => {
         addStats(snapshot, item.affectedStats);
     });
+    player.talents.forEach((talent) => {
+        if (!SCALING_TALENT_IDS.has(talent.talentId)) addStats(snapshot, talent.affectedStats);
+    });
+    // Health Flask brews (Regeneration/Evasion/Stoneskin/Fortitude) — same reasoning as their
+    // fold into recalculatePlayerStats's snapshot above: nothing declares them as a scaling
+    // source, so they belong on the floor like base/item stats.
+    player.pendingPotionEffects.forEach((skillId) => {
+        const def = ITEM_SKILLS[skillId];
+        if (!def) return;
+        const v = skillValues(def, ItemRarity.COMMON);
+        snapshot.hpRegen += v.hpRegen || 0;
+        snapshot.dodgeRate += v.dodgeRate || 0;
+        snapshot.defense += v.defense || 0;
+        snapshot.maxHp += v.maxHp || 0;
+    });
     return snapshot;
+}
+
+/**
+ * Folds one scaling node's current output into a running snapshot (see buildFloorSnapshot
+ * above). Called once per node, in SCALING_ORDER, between running that node's behavior and
+ * running the next one — so the next node's `attackerSnapshot` includes this node's
+ * contribution. See triggerUtils.runScalingSources, the only caller.
+ */
+export function foldScalingOutputs(snapshot: StatsSnapshot, player: Player, nodeId: ScalingNodeId): void {
+    if (nodeId.startsWith('skill:')) {
+        const skillId = Number(nodeId.slice('skill:'.length));
+        player.equippedItems.forEach((item) => {
+            if (item.skillId === skillId) addStats(snapshot, item.skillAffectedStats);
+            if (item.skillId2 === skillId) addStats(snapshot, item.skillAffectedStats2);
+        });
+    } else {
+        const talentId = Number(nodeId.slice('talent:'.length));
+        const talent = player.talents.find((t) => t.talentId === talentId);
+        if (talent) addStats(snapshot, talent.affectedStats);
+    }
 }

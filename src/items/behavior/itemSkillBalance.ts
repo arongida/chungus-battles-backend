@@ -9,8 +9,13 @@ import { ItemSkillType } from '../types/ItemSkillTypes';
 import { fmt } from '../../common/MessageTypes';
 import {
   coatedEdgeCounters, openingActCounters, crushingBlowCounters, protectionMoneyLastProcMs,
-  shieldBashLastProcMs, braceCounters, smokeBombUsed, battleFocusCounters,
+  shieldBashLastProcMs, braceCounters, smokeBombUsed, battleFocusCounters, ironbloodCleansed,
 } from './itemSkillState';
+// Scaling-graph plumbing (see scalingGraph.ts) — only the skills that read another scaling
+// source's output declare a `scaling` block below. TalentType is needed only for BULWARK's
+// `after` tie-break against the Strong talent.
+import { ScalingDeclaration, talentNode } from '../../common/scalingGraph';
+import { TalentType } from '../../talents/types/TalentTypes';
 // Type-only — see itemSkillState.ts's header comment on why this doesn't create a runtime cycle
 // with ItemSchema.ts (which imports ItemSkillBehaviors.ts, which imports this file).
 import type { Item } from '../schema/ItemSchema';
@@ -45,6 +50,10 @@ export interface ItemSkillDefinition {
   slots: EquipSlot[];
   /** Unioned onto item.triggerTypes when the skill is granted (see grantItemSkill). */
   triggerTypes: TriggerType[];
+  /** Declares this skill as a scaling source whose AURA output is computed from another stat —
+   *  see scalingGraph.ts. Omit for the vast majority of skills, whose AURA output (if any)
+   *  doesn't depend on any other scaling source's contribution. */
+  scaling?: ScalingDeclaration;
   /** Rarity-keyed tuning — ItemSkillBehaviors reads skillValues(def, item.rarity). Class skills
    *  only define LEGENDARY/MYTHIC (they never roll below Legendary). Shield skills define every
    *  bracket, since shield skills are active from Common — see skillValues' fallback below. */
@@ -124,6 +133,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: 'Fluid Motion',
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
+    // Reads dodgeRate — no other scaling source writes dodgeRate (see talentScaling.ts's
+    // MERCHANT_5, which is forced to run after this), so this node has no natural predecessor
+    // and always resolves against the floor value; declared anyway for uniform treatment and
+    // documentation.
+    scaling: { reads: ['dodgeRate'], writes: [] },
     values: {
       [ItemRarity.LEGENDARY]: { perDodgeRate: 10 },
       [ItemRarity.MYTHIC]: { perDodgeRate: 5 },
@@ -189,8 +203,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // ItemSkillBehaviors.ts — this is one of the rare skills that writes -= instead of =).
     triggerTypes: [TriggerType.ON_DODGE, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.LEGENDARY]: { healRatio: 0.02, dodgeCost: 4 },
-      [ItemRarity.MYTHIC]: { healRatio: 0.04, dodgeCost: 3 },
+      [ItemRarity.LEGENDARY]: { healRatio: 0.02, dodgeCost: 3 },
+      [ItemRarity.MYTHIC]: { healRatio: 0.04, dodgeCost: 4 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHADOWSTEP], r);
@@ -260,8 +274,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     describe: (r) => {
       const { upgrade } = skillValues(ITEM_SKILLS[ItemSkillType.LIGHT_FINGERS], r);
       return upgrade > 0
-        ? 'When you sell an item: steal a random shop item — free, and it gains one rarity. Costs 1 income.'
-        : 'When you sell an item: steal a random shop item — free. Costs 1 income.';
+        ? 'When you sell an item: steal a random shop item, and it gains one rarity. Costs 1 income.'
+        : 'When you sell an item: steal a random shop item. Costs 1 income.';
     },
     status: (ctx) => (ctx.inFight ? '' : 'steals a random shop item on sell'),
   },
@@ -316,28 +330,59 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: "Titan's Might",
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
-    // Divisors raised ~20% in Season 25 (base HP doubled) to hold late-game output roughly steady.
+    // Reads max HP, which can now include Bulwark's and Strong's contributions (see BULWARK's
+    // `scaling` below) instead of just base+item max HP — a real power increase for a board
+    // stacking both, so divisors are raised ~20% from their Season 25 values to compensate. No
+    // `after` needed: the natural edges from BULWARK/STRONG (both write maxHp, this only reads
+    // it) already place this after them.
+    scaling: { reads: ['maxHp'], writes: ['strength'] },
     values: {
-      [ItemRarity.LEGENDARY]: { divisor: 14 },
-      [ItemRarity.MYTHIC]: { divisor: 7 },
+      [ItemRarity.LEGENDARY]: { divisor: 18 },
+      [ItemRarity.MYTHIC]: { divisor: 11 },
     },
     describe: (r) => `Gain 1 strength per ${skillValues(ITEM_SKILLS[ItemSkillType.TITANS_MIGHT], r).divisor} max HP.`,
     status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.strength)} strength`,
   },
 
-  [ItemSkillType.IRON_HIDE]: {
-    id: ItemSkillType.IRON_HIDE,
+  // Reworked (Season 27), formerly Iron Hide: was a flat "1 defense per X max HP" drip, then
+  // briefly a regen-to-defense hardening skill — both unconditional or nearly so, and neither
+  // one answered anything the enemy could actually do to you. Now grants bonus HP regen that,
+  // while you're poisoned, cleanses stacks instead of healing you — a real answer to the poison
+  // line (which otherwise has no counter at all) that's dead weight in a poison-free matchup only
+  // in the sense that the regen bonus alone still justifies the slot. Burn is deliberately left
+  // untouched: poison is the stat-scaling, healing-halving DoT, and leaving burn alone keeps this
+  // a poison answer rather than a blanket DoT immunity. See Player.consumePoisonStacks /
+  // regenSuppressed for the plumbing this reuses.
+  [ItemSkillType.IRONBLOOD]: {
+    id: ItemSkillType.IRONBLOOD,
     class: ItemClass.WARRIOR,
-    name: 'Iron Hide',
+    name: 'Ironblood',
     slots: GEAR_SLOTS,
-    triggerTypes: [TriggerType.AURA],
-    // Divisors raised ~20% in Season 25 (base HP doubled) to hold late-game output roughly steady.
+    // AURA grants the regen bonus every tick and cleanses poison with it when there's any to
+    // cleanse (see ItemSkillBehaviors.ts); FIGHT_END resets both the bonus and the suppression
+    // flag it can leave set.
+    triggerTypes: [TriggerType.AURA, TriggerType.FIGHT_END],
+    // Reads and writes the same stat (hpRegen) — the self-edge the scaling graph excludes by
+    // construction, so this always reads a snapshot free of its own previous tick's output.
+    // Nothing else reads hpRegen except Merchant's capstone (forced last — see talentScaling.ts),
+    // so the only edge here is the natural LAST_STAND -> IRONBLOOD one: Last Stand's emergency
+    // regen feeds this skill's bonus/cleanse for the rest of that tick.
+    scaling: { reads: ['hpRegen'], writes: ['hpRegen'] },
     values: {
-      [ItemRarity.LEGENDARY]: { divisor: 10 },
-      [ItemRarity.MYTHIC]: { divisor: 5 },
+      [ItemRarity.LEGENDARY]: { regenBonus: 0.30 },
+      [ItemRarity.MYTHIC]: { regenBonus: 0.60 },
     },
-    describe: (r) => `Gain 1 defense per ${skillValues(ITEM_SKILLS[ItemSkillType.IRON_HIDE], r).divisor} max HP.`,
-    status: (ctx) => `+${fmt(ctx.item.skillAffectedStats.defense)} defense`,
+    describe: (r) => {
+      const v = skillValues(ITEM_SKILLS[ItemSkillType.IRONBLOOD], r);
+      return `+${pct(v.regenBonus)} HP regen. While poisoned, that regen cleanses stacks instead of healing you.`;
+    },
+    status: (ctx) => {
+      const cleansed = ironbloodCleansed.get(ctx.item) ?? 0;
+      if (ctx.inFight && cleansed > 0 && ctx.player.regenSuppressed) {
+        return `cleansing — ${cleansed} poison stack${cleansed === 1 ? '' : 's'} purged`;
+      }
+      return `+${fmt(ctx.item.skillAffectedStats.hpRegen)} hp regen`;
+    },
   },
 
   [ItemSkillType.BULWARK]: {
@@ -349,6 +394,10 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     // fight-start heal would be a no-op since fights always start at full HP, so this grants max
     // HP instead. FIGHT_START is kept only for the Mythic invulnerability rider.
     triggerTypes: [TriggerType.AURA, TriggerType.FIGHT_START],
+    // `after: STRONG` — this and the Strong talent both read AND write maxHp, so left to natural
+    // edges alone they'd cycle. Ordering item skills after talents means gear builds on top of
+    // whatever the talent board already grants, not the reverse.
+    scaling: { reads: ['maxHp'], writes: ['maxHp'], after: [talentNode(TalentType.STRONG)] },
     values: {
       [ItemRarity.LEGENDARY]: { hpRatio: 0.2, invulnMs: 0 },
       [ItemRarity.MYTHIC]: { hpRatio: 0.4, invulnMs: 1300 },
@@ -368,6 +417,12 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: 'Last Stand',
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
+    // Reads defense. Zealot (talentScaling.ts) also writes defense and is forced to run AFTER
+    // this node, so this always resolves against base+item defense, same as before Zealot became
+    // a scaling source. Writing hpRegen is what puts this before Ironblood in the sort: Ironblood
+    // reads hpRegen, so this emergency regen bonus feeds Ironblood's bonus/cleanse the same tick
+    // it turns on.
+    scaling: { reads: ['defense'], writes: ['defense', 'hpRegen'] },
     values: {
       [ItemRarity.LEGENDARY]: { defenseRatio: 0.5, hpRegen: 10 },
       [ItemRarity.MYTHIC]: { defenseRatio: 1.0, hpRegen: 20 },
@@ -441,8 +496,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
     values: {
-      [ItemRarity.LEGENDARY]: { count: 1 },
-      [ItemRarity.MYTHIC]: { count: 2 },
+      [ItemRarity.LEGENDARY]: { count: 2 },
+      [ItemRarity.MYTHIC]: { count: 3 },
     },
     describe: (r) => {
       const count = skillValues(ITEM_SKILLS[ItemSkillType.HAGGLER], r).count;
@@ -488,8 +543,8 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.ON_SELL],
     values: {
-      [ItemRarity.LEGENDARY]: { gold: 2, xp: 4 },
-      [ItemRarity.MYTHIC]: { gold: 3, xp: 6 },
+      [ItemRarity.LEGENDARY]: { gold: 2, xp: 3 },
+      [ItemRarity.MYTHIC]: { gold: 3, xp: 5 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.CASH_BACK], r);
@@ -503,6 +558,11 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     name: 'Compound Interest',
     slots: ANY_SLOT,
     triggerTypes: [TriggerType.AURA],
+    // Reads AND writes income — without graph placement this would read its own previous
+    // output and compound every tick, exactly the old bug's shape. No other scaling source
+    // writes income (Merchant's capstone does, but is forced to run after every other scaling
+    // node — see talentScaling.ts's MERCHANT_5), so this resolves against the floor income.
+    scaling: { reads: ['income'], writes: ['income'] },
     values: {
       [ItemRarity.LEGENDARY]: { ratio: 0.15 },
       [ItemRarity.MYTHIC]: { ratio: 0.3 },
@@ -565,7 +625,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     triggerTypes: [TriggerType.ON_ATTACKED],
     values: {
       [ItemRarity.LEGENDARY]: { gold: 1, cooldownMs: 1000 },
-      [ItemRarity.MYTHIC]: { gold: 1, cooldownMs: 0 },
+      [ItemRarity.MYTHIC]: { gold: 2, cooldownMs: 1000 },
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.PROTECTION_MONEY], r);

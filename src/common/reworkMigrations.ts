@@ -45,6 +45,23 @@ export function migrateLegacyTalent(talent: Talent): void {
         talent.affectedStats.dodgeRate = 15;
     }
 
+    // Pickpocket (ROGUE_1, 102): Season 27 buff, 1 flat gold -> 1-2 gold roll (base = min,
+    // scaling = max). Unconditional normalize, same idiom as Scam/Bully below, so any pre-buff
+    // embedded copy (scaling: 0, read by TalentBehaviors.ts as "no range, use base") self-corrects
+    // to the current range instead of staying flat forever.
+    if (talent.talentId === TalentType.ROGUE_1) {
+        talent.base = 1;
+        talent.scaling = 2;
+    }
+
+    // The Future is Now (FUTURE_NOW, 32): Season 27 buff, xp multiplier 2 -> 2.25. Unconditional
+    // normalize — pre-buff embedded copies have no `scaling` field at all, which
+    // TalentBehaviors.ts's `talent.scaling || 2.25` already covers defensively, but setting it
+    // here keeps the embedded copy's own numbers truthful rather than relying on the fallback.
+    if (talent.talentId === TalentType.FUTURE_NOW) {
+        talent.scaling = 2.25;
+    }
+
     // Fire with Fire (31): reworked Season 24 from The Bear (an ON_ATTACK burn applicator, and
     // before that a flat max-HP-scaled hit) into an ACTIVE burn-consumer + heal at tier 4. Every
     // pre-rework copy — either shape — is still sitting on ON_ATTACK, so that's the one check

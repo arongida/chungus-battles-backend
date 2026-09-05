@@ -1,4 +1,4 @@
-export const GAME_VERSION = 26;
+export const GAME_VERSION = 27;
 
 /** Reaching this many wins ends the run as a victory (Season 16 fixed-length runs). */
 export const WINS_TO_WIN = 12;

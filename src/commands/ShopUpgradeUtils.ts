@@ -164,7 +164,7 @@ export const BASE_REFRESH_SHOP_COST = 2;
 /** Bargain Hunter's free shop rerolls granted per round (contributed into
  *  Player.freeRerollGrant, stacking additively with the Haggler item skill — see
  *  TalentBehaviors.ts and DraftAuraTriggerCommand). */
-export const BARGAIN_HUNTER_FREE_REROLLS = 2;
+export const BARGAIN_HUNTER_FREE_REROLLS = 3;
 
 /** Base (un-modified) active-potion capacity, seeded onto Player.potionCapacity each draft aura
  *  tick before aura talents run; Flash Sale (MERCHANT_1) adds to it while owned — see

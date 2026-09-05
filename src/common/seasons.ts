@@ -18,6 +18,25 @@ export interface SeasonInfo {
 /** All seasons, newest first.  The first entry must have number === GAME_VERSION. */
 export const SEASONS: SeasonInfo[] = [
   {
+    number: 27,
+    name: 'Fine Print',
+    changes: [
+      'Gamblers Dice: increased income on win and gold on loss',
+      'Zealot reworked: no longer zeroes your dodge rate — instead half of your defense is converted into attack speed (+1% attack speed per point converted)',
+      'Fortune\'s Fool: can\'t reroll for free after reaching 99% hp loss',
+      'Iron Hide renamed to Ironblood and reworked again: grants bonus HP regen, and while you\'re poisoned that regen cleanses stacks off you instead of healing you',
+      "Item skills and talents that scale off another stat (Bulwark, Titan's Might, Last Stand, Fluid Motion, Compound Interest, Strong, Berserk, Merchant's capstone) can now see each other's contributions in a fixed order instead of only base+item stats — e.g. Bulwark's max HP now feeds Titan's Might and Strong's max HP now feeds Bulwark. Titan's Might divisors raised to compensate",
+      'Scam: slighly more frequent trigger: 0.5 to 0.6 each second',
+      'Some unique weapons have slightly increased bonus stats: Wand of Fire (+5 hp), Flowering Staff (+5 hp), Soulstealer Scythe (+0.05 base attack speed).',
+      'Bargain Hunter: incresed free reroll count to 3',
+      'Increased defense, hp and dodge stats on items in tier by ~5% (more on early, less on late)',
+      'Mercenary: increased damage required for gold payout from 6 to 7 (slightly less gold)',
+      "Fixed: Just a Scratch was paying out 10% of damage taken as gold instead of the advertised 5%",
+      'Pickpocket: gold on dodge is now 1-2 at random instead of a flat 1',
+      'The Future is Now: slightly increased the bonus xp',
+    ],
+  },
+  {
     number: 26,
     name: 'Cold Snap',
     changes: [
@@ -207,7 +226,7 @@ export const SEASONS: SeasonInfo[] = [
     number: 19,
     name: 'Less Magical Ring',
     changes: [
-      'Magic Ring base bonus stat halved, unequipping for a fight rerolls stats (you loose stacking bonuses)',
+      'Magic Ring base bonus stat halved, unequipping for a fight rerolls stats (you lose stacking bonuses)',
       'Small buff: Wits End',
       'Loss consolation buffed: bonus XP raised to 1.5x the gold amount, and the random item-upgrade now upgrades more items the lower your lives (3 on your last life, 2 on your second-to-last)',
       'Martial Artist reworked: fists no longer copy weapon stats — instead each fist hit unleashes an extra attack with a random weapon from your inventory, triggering that weapon\'s on-hit effects (poison, invulnerability, burn, etc.);',
