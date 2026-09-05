@@ -28,6 +28,11 @@ export class Player extends Schema implements IStats {
     @type('string') avatarUrl: string;
     @type('number') gameVersion: number;
     @type('number') income: number = 0;
+    // Derived in recalculatePlayerStats: how far below 0 the raw (base + item + talent) income
+    // total is. income itself is floored at 0 (no negative gold payouts), so this is the only
+    // place the theft debt from stealShopItem is visible again. Exactly one of income/incomeDebt
+    // is non-zero at a time — raw = income - incomeDebt.
+    @type('number') incomeDebt: number = 0;
     @type('number') hpRegen: number = 0;
     @type([Talent]) talents: ArraySchema<Talent> = new ArraySchema<Talent>();
     @type([Item]) inventory: ArraySchema<Item> = new ArraySchema<Item>();

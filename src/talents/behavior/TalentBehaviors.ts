@@ -1309,7 +1309,10 @@ export const TalentBehaviors = {
                 return;
             }
             talent.affectedStats.income = talent.base;
-            const bonusCoefficent = (attackerSnapshot.income * talent.scaling) / 100;
+            // Clamp like Compound Interest (ItemSkillBehaviors.ts) — buildFloorSnapshot's income
+            // can be negative while in theft debt, and this talent must not turn that into a
+            // penalty on every other stat.
+            const bonusCoefficent = (Math.max(0, attackerSnapshot.income) * talent.scaling) / 100;
             talent.affectedStats.strength = Math.ceil(attackerSnapshot.strength * bonusCoefficent);
             talent.affectedStats.accuracy = Math.ceil(attackerSnapshot.accuracy * bonusCoefficent);
             talent.affectedStats.attackSpeed = 1 + bonusCoefficent;

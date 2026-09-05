@@ -134,7 +134,12 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
     player.defense = snapshot.defense;
     // Shield Bash (item skill): zeroes dodge for a stunned player — a stunned player can't dodge.
     player.dodgeRate = player.stunned ? 0 : snapshot.dodgeRate;
-    player.income = snapshot.income;
+    // Income is the one stat with a real negative source (theft debt, see stealShopItem). Floor
+    // the computed value at 0 so every consumer — the fight-end payout, Throw Money's damage,
+    // Intimidating Wealth, Comrade's reroll surcharge, Gambler's Dice max damage — is safe by
+    // construction rather than each clamping for itself. The debt itself surfaces as incomeDebt.
+    player.incomeDebt = Math.max(0, -snapshot.income);
+    player.income = Math.max(0, snapshot.income);
     // Ironblood (item skill): zeroes regen on any tick it actually cleanses a poison stack, same
     // "zero after every source has contributed" treatment as dodgeRate above — set from the aura
     // pass (ItemSkillBehaviors.ts), re-seeded to false each tick (FightAuraTriggerCommand) and on
