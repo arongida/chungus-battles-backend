@@ -3,7 +3,7 @@ import {AffectedStats} from './schema/AffectedStatsSchema';
 import {POISON_HEALING_EFFECTIVENESS} from './poisonBalance';
 import {ITEM_SKILLS, skillValues} from '../items/behavior/itemSkillBalance';
 import {ItemRarity} from '../items/types/ItemTypes';
-import {SCALING_TALENT_IDS} from './scalingRegistry';
+import {SCALING_TALENT_IDS, SCALING_SKILL_IDS} from './scalingRegistry';
 import type {ScalingNodeId} from './scalingGraph';
 
 export interface StatsSnapshot {
@@ -156,14 +156,19 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
 }
 
 /**
- * Base for the scaling pass (see scalingGraph.ts / scalingRegistry.ts): baseStats + every
- * item's rolled `affectedStats` + non-scaling talents' `affectedStats` + pending potion effects.
- * Deliberately excludes every scaling source's own output (item `skillAffectedStats`/
- * `skillAffectedStats2`, scaling talents' `affectedStats`) — those are folded in one node at a
- * time, in dependency order, by the scaling pass itself (foldScalingOutputs below, driven by
- * triggerUtils.runScalingSources). A scaling talent's `affectedStats` is entirely recomputed by
+ * Base for the scaling pass (see scalingGraph.ts / scalingRegistry.ts): baseStats + every item's
+ * rolled `affectedStats` + non-scaling skills' `skillAffectedStats`/`skillAffectedStats2` +
+ * non-scaling talents' `affectedStats` + pending potion effects. Deliberately excludes only each
+ * SCALING source's own output (item `skillAffectedStats`/`skillAffectedStats2` for a skill
+ * registered in SCALING_SKILL_IDS, a scaling talent's `affectedStats`) — those are folded in one
+ * node at a time, in dependency order, by the scaling pass itself (foldScalingOutputs below,
+ * driven by triggerUtils.runScalingSources). A scaling source's output is entirely recomputed by
  * its own AURA behavior every tick, so summing it here too would double-count whatever value the
- * PREVIOUS tick happened to leave behind before this tick's node runs and overwrites it.
+ * PREVIOUS tick happened to leave behind before this tick's node runs and overwrites it. A
+ * non-scaling skill (e.g. Shield Wall's accumulated defense stack) has no such node to fold it in
+ * later, so it must be summed here or it's invisible to every scaling reader (Zealot, Last Stand,
+ * Merchant's capstone, Exploit Weakness, ...) despite still applying to the player's real stats
+ * via recalculatePlayerStats.
  *
  * Replaces the old buildBaseAndItemsSnapshot, which excluded ALL skill/talent output
  * unconditionally and so couldn't let Bulwark feed Titan's Might or Ironblood.
@@ -181,6 +186,12 @@ export function buildFloorSnapshot(player: Player): StatsSnapshot {
     };
     player.equippedItems.forEach((item) => {
         addStats(snapshot, item.affectedStats);
+        // Non-scaling skill output (e.g. Shield Wall's accumulated defense stack) belongs on the
+        // floor just like a non-scaling talent's affectedStats below — a scaling skill's own
+        // output is excluded here since foldScalingOutputs folds it in, in dependency order,
+        // during the scaling pass itself (see this function's own doc comment).
+        if (!SCALING_SKILL_IDS.has(item.skillId)) addStats(snapshot, item.skillAffectedStats);
+        if (!SCALING_SKILL_IDS.has(item.skillId2)) addStats(snapshot, item.skillAffectedStats2);
     });
     player.talents.forEach((talent) => {
         if (!SCALING_TALENT_IDS.has(talent.talentId)) addStats(snapshot, talent.affectedStats);
