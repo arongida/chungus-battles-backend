@@ -291,7 +291,12 @@ export function stealShopItem(
   player.gold += item.price;    // refund AFTER re-pricing so getItem nets to free
   player.getItem(item);         // debits item.price, marks sold, handles preview replacement
   item.sellPrice = item.price;  // stolen items sell for full price
-  if (player.baseStats.income > 0 && reduceIncome) player.baseStats.income -= 1;
+  // Season 27: no `> 0` guard — the cost lands even when it pushes baseStats.income negative.
+  // Effective income is floored at 0 in recalculatePlayerStats, so a debt means "no income until
+  // you've earned it back" (+1/fight, +2/merchant level), never gold taken away. Without this the
+  // tax was free for anyone with item income, since only baseStats was ever decremented while the
+  // affordability checks and every consumer read the computed (item-inclusive) income.
+  if (reduceIncome) player.baseStats.income -= 1;
   return { steps, becameMythic };
 }
 

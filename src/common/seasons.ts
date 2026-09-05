@@ -35,6 +35,7 @@ export const SEASONS: SeasonInfo[] = [
       "Fixed: Just a Scratch was paying out 10% of damage taken as gold instead of the advertised 5%",
       'Pickpocket: gold on dodge is now 1-2 at random instead of a flat 1',
       'The Future is Now: slightly increased the bonus xp',
+      'Fixed: Robbery, Misconduct and Light Fingers no longer cost nothing once you have income on your items — the 1 income cost now always lands and can push your income into the red, where you earn 0 gold per fight until it recovers',
     ],
   },
   {

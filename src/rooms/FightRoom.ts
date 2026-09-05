@@ -972,6 +972,10 @@ export class FightRoom extends BaseRoom {
                 break;
         }
 
+        // Project next fight's payout from the raw (possibly debt-negative) income rather than
+        // hard-coding goldToGet + 1 — while in debt (incomeDebt > 0) goldToGet is floored at 0 and
+        // adding 1 to it would lie about the debt still being paid down instead of earning gold.
+        const rawIncome = this.state.player.income - this.state.player.incomeDebt;
         const goldToGet = Math.floor(this.state.player.income);
         this.state.player.baseStats.income += 1;
 
@@ -979,7 +983,8 @@ export class FightRoom extends BaseRoom {
         const xpToGet = this.state.player.round * 2;
         this.state.player.xp += xpToGet;
 
-        this.logCombat('broadcast', { text: `You gained ${goldToGet} gold! (Income grows to ${goldToGet + 1} next fight)`, kind: 'reward', goldDelta: goldToGet });
+        const nextIncome = Math.max(0, Math.floor(rawIncome) + 1);
+        this.logCombat('broadcast', { text: `You gained ${goldToGet} gold! (Income grows to ${nextIncome} next fight)`, kind: 'reward', goldDelta: goldToGet });
         this.logCombat('broadcast', { text: `You gained ${xpToGet} xp!`, kind: 'reward', xpDelta: xpToGet });
         this.broadcast('reward_gain', { playerId: this.state.player.playerId, gold: goldToGet, xp: xpToGet } as RewardGainMessage);
 
