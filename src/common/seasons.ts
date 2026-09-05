@@ -21,6 +21,7 @@ export const SEASONS: SeasonInfo[] = [
     number: 27,
     name: 'Fine Print',
     changes: [
+      'Light Fingers: will not trigger if you can\'t pay the income cost',
       'Gamblers Dice: increased income on win and gold on loss',
       'Zealot reworked: no longer zeroes your dodge rate — instead half of your defense is converted into attack speed (+1% attack speed per point converted)',
       'Fortune\'s Fool: can\'t reroll for free after reaching 99% hp loss',

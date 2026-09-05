@@ -166,7 +166,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     if (trigger !== TriggerType.ON_SELL || !attacker || !shop || !item || !soldItem) return;
     const { upgrade } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
     const candidates = Array.from(shop).filter((i) => !i.sold);
-    if (candidates.length === 0) return;
+    if (candidates.length === 0 || attacker.income <= 0) return;
     const chosen = candidates[Math.floor(Math.random() * candidates.length)];
     const originalPrice = chosen.price;
     // upgrade (1 at Mythic, 0 at Legendary) steps the stolen item's rarity up once; reduceIncome
@@ -176,7 +176,7 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     // of stealShopItem's default "sells for full price" — otherwise sell -> steal -> sell would be
     // a value-neutral loop instead of one that bleeds value (on top of the income cost) each pass.
     chosen.sellPrice = Math.floor(originalPrice * 0.7);
-    client?.send('draft_log', `${item.name} lifts ${chosen.name} from the shop after selling ${soldItem.name} — free, but costs 1 income!`);
+    client?.send('draft_log', `${item.name} lifts ${chosen.name} from the shop after selling ${soldItem.name}, but costs 1 income!`);
   },
 
   // -------------------------------------------------------------- WARRIOR ----
