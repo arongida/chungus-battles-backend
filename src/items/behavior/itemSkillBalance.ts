@@ -132,21 +132,13 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     class: ItemClass.ROGUE,
     name: 'Fluid Motion',
     slots: ANY_SLOT,
-    triggerTypes: [TriggerType.AURA],
-    // Reads dodgeRate — no other scaling source writes dodgeRate (see talentScaling.ts's
-    // MERCHANT_5, which is forced to run after this), so this node has no natural predecessor
-    // and always resolves against the floor value; declared anyway for uniform treatment and
-    // documentation.
-    scaling: { reads: ['dodgeRate'], writes: [] },
+    triggerTypes: [TriggerType.ON_DODGE, TriggerType.FIGHT_START, TriggerType.FIGHT_END],
     values: {
-      [ItemRarity.LEGENDARY]: { perDodgeRate: 10 },
-      [ItemRarity.MYTHIC]: { perDodgeRate: 5 },
+      [ItemRarity.LEGENDARY]: { attackSpeedPerDodge: 0.05 },
+      [ItemRarity.MYTHIC]: { attackSpeedPerDodge: 0.10 },
     },
-    describe: (r) => `Gain 1% attack speed per ${skillValues(ITEM_SKILLS[ItemSkillType.FLUID_MOTION], r).perDodgeRate} dodge rate.`,
-    status: (ctx) => {
-      const as = ctx.item.skillAffectedStats.attackSpeed;
-      return as === 1 ? '' : `+${pct(as - 1)} attack speed`;
-    },
+    describe: (r) => `On dodge: +${pct(skillValues(ITEM_SKILLS[ItemSkillType.FLUID_MOTION], r).attackSpeedPerDodge)} attack speed for this fight.`,
+    status: (ctx) => `+${pct(ctx.item.skillAffectedStats.attackSpeed - 1)} attack speed`,
   },
 
   [ItemSkillType.PLAGUE_BEARER]: {
@@ -766,7 +758,7 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
     },
     describe: (r) => {
       const v = skillValues(ITEM_SKILLS[ItemSkillType.SHIELD_BASH], r);
-      return `On being attacked (max once every ${v.cooldownMs / 1000}s): stun the enemy for ${(v.stunMs / 1000).toFixed(1)}s — they cannot attack, regenerate, use skills, or dodge.`;
+      return `On being attacked (max once every ${v.cooldownMs / 1000}s): stun the enemy for ${(v.stunMs / 1000).toFixed(1)}s — they cannot attack, use skills, or dodge.`;
     },
     status: (ctx) => {
       if (!ctx.inFight || !ctx.clock) return '';

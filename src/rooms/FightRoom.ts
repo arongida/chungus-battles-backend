@@ -1,3 +1,4 @@
+import { getSkillSlot2View } from '../items/skills/itemSkillSlot2View';
 import { Client } from '@colyseus/core';
 import { BaseRoom } from './BaseRoom';
 import { FightState } from './schema/FightState';
@@ -716,27 +717,22 @@ export class FightRoom extends BaseRoom {
         let empowerSource: Talent | Item = attacker.empoweredAttackSource;
         if (empowerSource) attacker.empoweredAttackSource = null;
 
-        // Crushing Blow (item skill): every `every`th attack from this weapon IS the empowered
-        // hit itself, not a charge for the following one — has to be decided here, before the
-        // dodge roll, since the item's own ON_ATTACK trigger only fires after this swing's
-        // damage/dodge are already resolved (too late to retroactively make it unavoidable).
-        if (weapon.skillId === ItemSkillType.CRUSHING_BLOW) {
-            const { every } = skillValues(ITEM_SKILLS[ItemSkillType.CRUSHING_BLOW], weapon.rarity);
-            const count = (crushingBlowCounters.get(weapon) ?? 0) + 1;
-            crushingBlowCounters.set(weapon, count);
-            if (count % every === 0 && !empowerSource) empowerSource = weapon;
-        }
-
-        // Opening Act (item skill): the first `count` attacks from this weapon each fight are
-        // themselves empowered hits (unavoidable, +50% bonus damage) rather than a mirrored
-        // double-damage hit — decided here, before the dodge roll, for the same reason as
-        // Crushing Blow above (ON_ATTACK fires too late to retroactively make a swing unavoidable).
-        if (weapon.skillId === ItemSkillType.OPENING_ACT) {
-            const { count } = skillValues(ITEM_SKILLS[ItemSkillType.OPENING_ACT], weapon.rarity);
-            const used = openingActCounters.get(weapon) ?? 0;
-            if (used < count && !empowerSource) {
-                openingActCounters.set(weapon, used + 1);
-                empowerSource = weapon;
+        // Resolve both skill slots before dodge. Slot-2 views retain independent counters
+        // and correct source attribution. At most one source can empower a given swing.
+        for (const skillItem of [weapon, getSkillSlot2View(weapon)]) {
+            if (skillItem.skillId === ItemSkillType.CRUSHING_BLOW) {
+                const { every } = skillValues(ITEM_SKILLS[ItemSkillType.CRUSHING_BLOW], skillItem.rarity);
+                const count = (crushingBlowCounters.get(skillItem) ?? 0) + 1;
+                crushingBlowCounters.set(skillItem, count);
+                if (count % every === 0 && !empowerSource) empowerSource = skillItem;
+            }
+            if (skillItem.skillId === ItemSkillType.OPENING_ACT) {
+                const { count } = skillValues(ITEM_SKILLS[ItemSkillType.OPENING_ACT], skillItem.rarity);
+                const used = openingActCounters.get(skillItem) ?? 0;
+                if (used < count && !empowerSource) {
+                    openingActCounters.set(skillItem, used + 1);
+                    empowerSource = skillItem;
+                }
             }
         }
 

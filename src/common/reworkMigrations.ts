@@ -1,3 +1,4 @@
+import {currentTalentDescription} from '../talents/behavior/talentDescriptions';
 // One-time-per-load migrations for the cooldown-reduction / active-skill rework (Season 24).
 // Talents and items are embedded SNAPSHOTS inside the player document (see Player Copy
 // Mechanism in CLAUDE.md) — a DB balance edit never reaches an already-owned copy on its own.
@@ -20,6 +21,7 @@ import {
 const ACTIVE_TALENT_CDR_BY_TIER: Record<number, number> = { 2: 20, 3: 30, 4: 40, 5: 50 };
 
 export function migrateLegacyTalent(talent: Talent): void {
+    talent.description = currentTalentDescription(talent);
     // Stab (29): pre-rework copies fired on-attack with the missing-HP coefficient stashed in
     // activationRate. Convert to the ACTIVE trigger + base/scaling shape used by the current
     // behavior (TalentBehaviors.ts).
@@ -97,7 +99,7 @@ export function migrateLegacyTalent(talent: Talent): void {
     // no-op once migrated and self-corrects any future retune of base/activationRate.
     if (talent.talentId === TalentType.WARRIOR_2) {
         talent.name = 'Bully';
-        talent.description = 'Every 4s: if your Strength is higher than the enemy\'s right now, stun them for 1s — they cannot attack, regenerate, use skills or dodge. If you\'re not stronger, nothing happens. +20 ⏳';
+        talent.description = 'Every 4s: if your Strength is higher than the enemy\'s right now, stun them for 1s — they cannot attack, use skills or dodge. If you\'re not stronger, nothing happens. +20 ⏳';
         talent.activationRate = 0.25;
         talent.base = 1;
         talent.scaling = 0;

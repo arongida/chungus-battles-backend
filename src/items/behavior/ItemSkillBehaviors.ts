@@ -46,18 +46,19 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
     } as CombatLogMessage);
   },
 
-  [ItemSkillType.FLUID_MOTION]: (context) => {
-    const { attacker, item, trigger, attackerSnapshot } = context;
-    if (trigger !== TriggerType.AURA || !attacker || !item) return;
-    // No `?? attacker` fallback (see scalingGraph.ts) — a missing snapshot here would mean
-    // reading the live, fully-derived dodgeRate instead of the pre-node one, silently
-    // reintroducing the old self-feeding bug for any future skill that writes dodgeRate.
-    if (!attackerSnapshot) {
-      console.error('FLUID_MOTION fired AURA without an attackerSnapshot — skipping.');
+  [ItemSkillType.FLUID_MOTION]: ({ item, defender, client, trigger }) => {
+    if (!item) return;
+    if (trigger === TriggerType.FIGHT_START || trigger === TriggerType.FIGHT_END) {
+      item.skillAffectedStats.attackSpeed = 1;
       return;
     }
-    const { perDodgeRate } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    item.skillAffectedStats.attackSpeed = 1 + Math.floor(Math.max(0, attackerSnapshot.dodgeRate) / perDodgeRate) * 0.01;
+    if (trigger !== TriggerType.ON_DODGE || !defender) return;
+    const { attackSpeedPerDodge } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
+    item.skillAffectedStats.attackSpeed += attackSpeedPerDodge;
+    client?.send('combat_log', {
+      text: `${defender.name}'s Fluid Motion gains ${fmt(attackSpeedPerDodge * 100)}% attack speed!`,
+      kind: 'item', attackerId: defender.playerId, itemId: item.itemId,
+    } as CombatLogMessage);
   },
 
   [ItemSkillType.PLAGUE_BEARER]: (context) => {

@@ -20,11 +20,9 @@ import { MAGIC_RING_DESCRIPTION, rollMagicRingBonus, FIRE_WITH_FIRE_MAX_STACKS, 
 import { weaponWhispererSnapshots, weaponWhispererFinalRolls } from "./weaponWhispererState";
 import { FESTERING_WOUNDS_GRANT_ITEM_ID } from "../../common/poisonBalance";
 import {
-    JOKER_CARDS,
+    dealJokerCards,
     JOKER_BASE_DESCRIPTION,
     JOKER_SUSPENDED_DESCRIPTION,
-    jokerCardAmount,
-    encodeJokerCard,
     parseJokerPendingCards,
     rebuildJokerAffectedStats,
 } from "./jokerState";
@@ -112,7 +110,7 @@ export const TalentBehaviors = {
 
         talent.affectedStats.strength += talent.activationRate;
         track(talent, 1);
-        client.send('combat_log', { text: `${defender.name} rages, increased attack by 1!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId } as CombatLogMessage);
+        client.send('combat_log', { text: `${defender.name} rages, increased strength by ${talent.activationRate}!`, kind: 'talent', talentId: talent.talentId, attackerId: defender.playerId } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: defender.playerId,
             talentId: TalentType.RAGE,
@@ -918,11 +916,7 @@ export const TalentBehaviors = {
 
             if (trigger !== TriggerType.FIGHT_END) return;
 
-            const offered = [...JOKER_CARDS].sort(() => Math.random() - 0.5).slice(0, 2);
-            for (const card of offered) {
-                talent.tags.push(encodeJokerCard(card.stat, jokerCardAmount(card, attacker.level)));
-            }
-            rebuildJokerAffectedStats(talent);
+            dealJokerCards(talent, attacker.level);
             track(talent, 1);
             client.send('combat_log', { text: `${attacker.name}'s Joker deals two cards — pick one in the shop!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId } as CombatLogMessage);
             client.send('trigger_talent', {

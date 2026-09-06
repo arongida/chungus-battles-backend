@@ -314,7 +314,7 @@ describe('buildFloorSnapshot includes non-scaling skill output (regression)', ()
         expect(player.attackSpeedMultiplier).toBeCloseTo(1.75);
     });
 
-    it('Smoke Bomb\'s granted dodge rate feeds Fluid Motion\'s attack-speed bonus', () => {
+    it('Fluid Motion requires actual dodges, not a passive dodge-rating conversion', () => {
         const player = new Player();
         player.baseStats = Object.assign(new AffectedStats(), { dodgeRate: 0 });
         const boots = scalingItem(ItemSkillType.SMOKE_BOMB, ItemRarity.MYTHIC);
@@ -329,8 +329,8 @@ describe('buildFloorSnapshot includes non-scaling skill output (regression)', ()
         runScalingSources(player, fakeContext(player, snapshot));
         recalculatePlayerStats(player);
 
-        // Fluid Motion (Mythic): +1% attack speed per 5 dodge rate -> floor(40/5) = 8 -> +8%.
-        expect(player.attackSpeedMultiplier).toBeCloseTo(1.08);
+        // Its old scaling node is gone; dodge rating alone must not grant attack speed.
+        expect(player.attackSpeedMultiplier).toBeCloseTo(1);
     });
 
     it('War Chest\'s granted strength feeds Berserk\'s scaling bonus', () => {

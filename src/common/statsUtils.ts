@@ -125,11 +125,14 @@ export function recalculatePlayerStats(player: Player, enemy?: Player): void {
         snapshot.maxHp += v.maxHp || 0;
     });
 
-    // Assign once: neutralize accuracy first so the strength setter can't clamp up to a
-    // stale value, then strength, then accuracy (its setter clamps to min(accuracy, strength)).
+    // Above strength, split excess accuracy between both damage endpoints. Preserve
+    // fractional overflow and recompute from raw sources so repeated ticks never compound it.
+    const rawStrength = Math.max(1, snapshot.strength);
+    const rawAccuracy = Math.max(1, snapshot.accuracy);
+    const overflow = Math.max(0, rawAccuracy - rawStrength) / 2;
     player.accuracy = 1;
-    player.strength = snapshot.strength;
-    player.accuracy = snapshot.accuracy;
+    player.strength = rawStrength + overflow;
+    player.accuracy = Math.min(rawAccuracy, rawStrength) + overflow;
     player.maxHp = snapshot.maxHp;
     player.defense = snapshot.defense;
     // Shield Bash (item skill): zeroes dodge for a stunned player — a stunned player can't dodge.

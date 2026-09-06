@@ -1,7 +1,7 @@
 import {ArraySchema, MapSchema, Schema, type} from '@colyseus/schema';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {Item} from '../../items/schema/ItemSchema';
-import {IStats} from '../../common/types';
+import {IStats, TriggerType} from '../../common/types';
 import {TalentType} from '../../talents/types/TalentTypes';
 import { CombatLogMessage, DamageMessage, DamageSource, DamageType, InvulnerableMessage, InvulnerableStateMessage, StunnedStateMessage } from '../../common/MessageTypes';
 import {Client, Delayed, Clock as ClockTimer} from '@colyseus/core';
@@ -417,7 +417,7 @@ export class Player extends Schema implements IStats {
         this.vanishTimer = clock.setTimeout(endVanish, durationMs);
     }
 
-    /** Shield Bash (item skill): pauses this player's attack timers, regen timer, and active-skill
+    /** Shield Bash (item skill): pauses this player's attack timers and active-skill
      *  timers, and forces dodgeRate to 0 (see statsUtils.recalculatePlayerStats) for the duration.
      *  A paused weapon-attack timer never fires and never reschedules — FightRoom.startSingleWeaponTimer
      *  clears+recreates its timer after every swing, so pausing simply holds the countdown in place
@@ -426,7 +426,6 @@ export class Player extends Schema implements IStats {
     setStunned(clock: ClockTimer, durationMs: number, playerClient?: Client) {
         if (!this.stunned) {
             this.attackTimers.forEach((timer) => timer.pause());
-            this.regenTimer?.pause();
             this.activeSkillTimers.forEach((timer) => timer.pause());
             playerClient?.send('stunned_state', { playerId: this.playerId, stunned: true } as StunnedStateMessage);
         }
@@ -435,7 +434,6 @@ export class Player extends Schema implements IStats {
             this.stunned = false;
             this.stunTimer = null;
             this.attackTimers.forEach((timer) => timer.resume());
-            this.regenTimer?.resume();
             this.activeSkillTimers.forEach((timer) => timer.resume());
             playerClient?.send('stunned_state', { playerId: this.playerId, stunned: false } as StunnedStateMessage);
         };
@@ -501,6 +499,17 @@ export class Player extends Schema implements IStats {
         // Includes enemy damage, self-costs and both combatants' burn stacks. Arena end-burn
         // bypasses takeDamage and directly reduces HP, so it never charges Retribution.
         this.chargeRetribution(hpBefore - this.hp, playerClient);
+        const hpLost = Math.min(hpBefore, hpBefore - this.hp);
+        if (hpLost > 0) {
+            // Only rewards move here. Guardian Angel and other prevention effects still
+            // run before the hit in OnDamageTriggerCommand.
+            this.talents.forEach(talent => {
+                if (talent.talentId !== TalentType.RAGE && talent.talentId !== TalentType.JUST_A_SCRATCH) return;
+                talent.executeBehavior({ client: playerClient, attacker: this, defender: this,
+                    damage: hpLost, damageType, trigger: TriggerType.ON_DAMAGE });
+            });
+        }
+
     }
 
     /** Reset before fight-start talents so their health costs can contribute immediately. */

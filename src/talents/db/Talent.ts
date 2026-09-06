@@ -1,3 +1,4 @@
+import {currentTalentDescription} from '../behavior/talentDescriptions';
 import mongoose, {Schema} from 'mongoose';
 import {StatsSchema} from "../../common/db/Stats";
 import {Talent} from "../schema/TalentSchema";
@@ -51,6 +52,7 @@ function getTalentSchemaObject(talentObjectFromDb: any): Talent {
   const newTalent = new Talent().assign(primitives);
   newTalent.affectedStats = affectedStatsFromRaw(affectedStats);
   newTalent.affectedEnemyStats = affectedStatsFromRaw(affectedEnemyStats);
+  newTalent.description = currentTalentDescription(newTalent);
   return newTalent;
 }
 
@@ -66,7 +68,7 @@ let allTalentsCache: { docs: {}[]; expiresAt: number } | null = null;
 export async function getAllTalents(): Promise<{}[]> {
   const now = Date.now();
   if (!allTalentsCache || allTalentsCache.expiresAt <= now) {
-    const docs = await talentModel.find().lean();
+    const docs = (await talentModel.find().lean()).map(talent => ({ ...talent, description: currentTalentDescription(talent) }));
     allTalentsCache = { docs, expiresAt: now + ALL_TALENTS_CACHE_TTL_MS };
   }
   return allTalentsCache.docs;
