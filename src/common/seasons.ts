@@ -21,6 +21,10 @@ export const SEASONS: SeasonInfo[] = [
     number: 27,
     name: 'Fine Print',
     changes: [
+      'Excess accuracy converts evenly into strength and accuracy, preserving average damage instead of being capped.',
+      'Stuns no longer interrupt HP regeneration.',
+      'Joker deals its first pair of cards immediately when picked.',
+      'Fluid Motion reworked: each dodge grants +5% attack speed (Mythic: +10%) for the fight.',
       'Battle Focus renamed to Retribution: losing 20% (Mythic: 15%) of max HP cumulatively to damage empowers the next auto.',
       'Light Fingers: will not trigger if you can\'t pay the income cost',
       'Gamblers Dice: increased income on win and gold on loss',

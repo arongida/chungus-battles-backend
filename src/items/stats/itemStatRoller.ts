@@ -72,11 +72,15 @@ export function rollItemStats(item: Item): void {
     const affixCount = (AFFIX_COUNT_BY_TIER[tier] ?? 1) * (twoHanded ? 2 : 1);
     const n = Math.min(affixCount, pool.length);
 
-    // Shuffle pool and take n distinct stats.
-    const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, n);
+    // Fisher–Yates: every eligible stat has equal selection probability.
+    const shuffled = [...pool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
 
     const newStats = new AffectedStats();
-    for (const stat of shuffled) {
+    for (const stat of shuffled.slice(0, n)) {
         (newStats as any)[stat] = rollStat(stat, tier);
     }
     item.affectedStats = newStats;

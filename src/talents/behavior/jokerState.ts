@@ -1,4 +1,4 @@
-import type { ArraySchema } from '@colyseus/schema';
+import { ArraySchema } from '@colyseus/schema';
 import type { Talent } from '../schema/TalentSchema';
 
 /** Joker (talentId 41) — reworked Season 24. Every stat the talent can deal, keyed to the same
@@ -105,8 +105,16 @@ export function rebuildJokerAffectedStats(talent: Talent): void {
     }
 }
 
+/** Shared by the on-pick deal and the normal post-fight deal. */
+export function dealJokerCards(talent: Talent, level: number): void {
+    if (!talent.tags) talent.tags = new ArraySchema<string>();
+    const offered = [...JOKER_CARDS].sort(() => Math.random() - 0.5).slice(0, 2);
+    for (const card of offered) talent.tags.push(encodeJokerCard(card.stat, jokerCardAmount(card, level)));
+    rebuildJokerAffectedStats(talent);
+}
+
 export const JOKER_BASE_DESCRIPTION =
-    "After every fight, win or lose, the Joker deals two cards — pick one in the shop for a permanent stat bonus. Leave a card unpicked and the Joker withholds every bonus it's ever dealt you.";
+    "Now and after every fight: The Joker deals two cards — pick one for a permanent stat bonus.";
 
 export const JOKER_SUSPENDED_DESCRIPTION =
     'A card is waiting — pick one to restore everything the Joker has dealt you.';

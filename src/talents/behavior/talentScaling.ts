@@ -54,7 +54,6 @@ export const TALENT_SCALING: Record<number, ScalingDeclaration> = {
       skillNode(ItemSkillType.TITANS_MIGHT),
       skillNode(ItemSkillType.IRONBLOOD),
       skillNode(ItemSkillType.LAST_STAND),
-      skillNode(ItemSkillType.FLUID_MOTION),
       skillNode(ItemSkillType.COMPOUND_INTEREST),
     ],
   },

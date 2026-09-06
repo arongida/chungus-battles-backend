@@ -1,3 +1,4 @@
+import {TalentType} from '../../talents/types/TalentTypes';
 import {Command} from '@colyseus/command';
 import {Talent} from '../../talents/schema/TalentSchema';
 import {TriggerType} from '../../common/types';
@@ -26,6 +27,8 @@ export class OnDamageTriggerCommand extends Command<
 
         const onDamageTalents: Talent[] = defender.talents.filter((talent) =>
             talent.triggerTypes.includes(TriggerType.ON_DAMAGE)
+            && talent.talentId !== TalentType.RAGE
+            && talent.talentId !== TalentType.JUST_A_SCRATCH
         );
 
         onDamageTalents.forEach((talent) => {

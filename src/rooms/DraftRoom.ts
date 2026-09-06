@@ -27,7 +27,7 @@ import { recomputeStoreCreditClaim } from '../items/behavior/ItemSkillBehaviors'
 import { ItemSkillType } from '../items/types/ItemSkillTypes';
 import { TalentType } from '../talents/types/TalentTypes';
 import { grantFlashSaleFlask, track } from '../talents/behavior/TalentBehaviors';
-import { addJokerTotal, clearJokerPendingCards, parseJokerPendingCards, rebuildJokerAffectedStats } from '../talents/behavior/jokerState';
+import { dealJokerCards, addJokerTotal, clearJokerPendingCards, parseJokerPendingCards, rebuildJokerAffectedStats } from '../talents/behavior/jokerState';
 import { authenticatePlayerId } from '../players/db/PlayerToken';
 
 export class DraftRoom extends BaseRoom {
@@ -875,6 +875,10 @@ export class DraftRoom extends BaseRoom {
         if (!talent) return;
         this.state.remainingTalentPoints--;
         this.state.player.talents.push(talent);
+        if (talent.talentId === TalentType.JOKER) {
+            dealJokerCards(talent, this.state.player.level);
+            track(talent, 1);
+        }
         // Flash Sale (MERCHANT_1): grants its first free flask the instant it's picked, not
         // just on the SHOP_START trigger every round after — see grantFlashSaleFlask's own
         // comment for why this can never double up with that round's SHOP_START firing.

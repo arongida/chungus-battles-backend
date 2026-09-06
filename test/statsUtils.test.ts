@@ -113,17 +113,20 @@ describe('recalculatePlayerStats', () => {
         expect(player.dodgeRate).toBe(0);
     });
 
-    it('accuracy is clamped to strength even after both accumulate bonuses', () => {
+    it('excess accuracy raises both endpoints without compounding on later ticks', () => {
         const player = new Player();
         player.baseStats = Object.assign(new AffectedStats(), { strength: 10, accuracy: 5 });
-        // A big accuracy bonus with no matching strength bonus would otherwise push accuracy
-        // above strength, which the Player.accuracy setter must not allow.
+        // Raw endpoints 25 accuracy / 10 strength become 17.5 / 17.5.
         player.equippedItems.set('mainHand', statItem({ accuracy: 20 }));
 
         recalculatePlayerStats(player);
 
         expect(player.accuracy).toBeLessThanOrEqual(player.strength);
-        expect(player.accuracy).toBe(10);
+        expect(player.accuracy).toBe(17.5);
+        expect(player.strength).toBe(17.5);
+        recalculatePlayerStats(player);
+        expect(player.accuracy).toBe(17.5);
+        expect(player.strength).toBe(17.5);
     });
 
     it('preserves the absolute damage already taken when maxHp changes mid-fight', () => {

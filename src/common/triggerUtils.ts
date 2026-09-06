@@ -33,7 +33,7 @@ export function triggerEquippedItems(player: Player, context: BehaviorContext, t
                 // separate triggerEquippedItems calls and still notify normally.
                 if (triggerType === TriggerType.AURA) return;
                 const sendTrigger = () => context.client.send('trigger_item', {
-                    playerId: context.attacker?.playerId ?? player.playerId,
+                    playerId: player.playerId,
                     itemId: item.itemId,
                     slot,
                 });
