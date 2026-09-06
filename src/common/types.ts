@@ -41,7 +41,7 @@ export enum TriggerType {
 	ON_DODGE = 'on-dodge',
 	ON_SELL = 'on-sell',
 	// Mirror of ON_DODGE: fires on the player whose attack WAS dodged (not the dodger), so a
-	// skill like Battle Focus can react to being evaded. Dispatched from OnDodgeTriggerCommand
+	// item skills can react to being evaded. Dispatched from OnDodgeTriggerCommand
 	// alongside ON_DODGE itself.
 	ON_ATTACK_DODGED = 'on-attack-dodged'
 }

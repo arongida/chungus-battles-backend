@@ -24,7 +24,7 @@ import type { Item } from '../schema/ItemSchema';
 // refresher can read the same state these behaviors write, see itemSkillState.ts's header comment.
 import {
   coatedEdgeCounters, openingActCounters, crushingBlowCounters, protectionMoneyLastProcMs,
-  shieldBashLastProcMs, braceCounters, bulkDiscountBasePrices, smokeBombUsed, battleFocusCounters,
+  shieldBashLastProcMs, braceCounters, bulkDiscountBasePrices, smokeBombUsed,
   ironbloodCleansed,
 } from './itemSkillState';
 
@@ -181,34 +181,6 @@ export const ItemSkillBehaviors: Record<number, (context: ItemBehaviorContext) =
   },
 
   // -------------------------------------------------------------- WARRIOR ----
-
-  // Reworked (Season 26): from a flat accuracy drip into a conditional anti-dodge comeback — every
-  // `every`th time this player's attack is dodged, their next weapon attack is charged empowered
-  // (unavoidable, +50% damage). Shares the same empoweredAttackSource flag as Unstoppable Force
-  // (TalentBehaviors.ts WARRIOR_3), consumed in FightRoom.tryWeaponAttack. FIGHT_START resets the
-  // per-item dodge counter (same idiom as Coated Edge/Brace); ON_ATTACK_DODGED
-  // (OnDodgeTriggerCommand's attacker-side pass) increments it and charges on the Nth dodge.
-  [ItemSkillType.BATTLE_FOCUS]: (context) => {
-    const { attacker, item, client, trigger } = context;
-    if (!item) return;
-    if (trigger === TriggerType.FIGHT_START) {
-      battleFocusCounters.set(item, 0);
-      return;
-    }
-    if (trigger !== TriggerType.ON_ATTACK_DODGED || !attacker) return;
-    const { every } = skillValues(ITEM_SKILLS[item.skillId], item.rarity);
-    const count = (battleFocusCounters.get(item) ?? 0) + 1;
-    battleFocusCounters.set(item, count);
-    if (count % every !== 0) return;
-    // Guarded like Unstoppable Force — don't clobber an attack another source already charged;
-    // the dodge is still counted above either way, so the next Nth dodge tries again.
-    if (attacker.empoweredAttackSource) return;
-    attacker.empoweredAttackSource = item;
-    client?.send('combat_log', {
-      text: `${attacker.name}'s ${item.name} reads the dodge — the next attack won't miss!`,
-      kind: 'item', attackerId: attacker.playerId, itemId: item.itemId,
-    } as CombatLogMessage);
-  },
 
   [ItemSkillType.INTIMIDATING_PRESENCE]: (context) => {
     const { attacker, defender, item, trigger } = context;
