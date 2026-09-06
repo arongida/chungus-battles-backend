@@ -9,6 +9,7 @@ export type DamageMessage = {
   playerId: number;
   damage: number;
   type?: DamageType;
+  empowered?: boolean;
 };
 
 export type InvulnerableMessage = {
@@ -131,6 +132,8 @@ export type CombatLogMessage = {
   talentId?: number;
   slot?: string;
   damage?: number;
+  /** Present on weapon-hit logs only when an empowered auto actually removed HP. */
+  empowered?: boolean;
   rolledDamage?: number;
   mitigatedDamage?: number;
   defenderHpAfter?: number;

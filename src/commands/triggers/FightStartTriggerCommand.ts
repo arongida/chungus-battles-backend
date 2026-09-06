@@ -13,6 +13,7 @@ export class FightStartTriggerCommand extends Command<FightRoom> {
     }
 
     applyFightStartEffects(player: Player, enemy: Player) {
+        player.resetRetributionCharge();
         const fightStartContext: BehaviorContext = {
             client: this.state.playerClient,
             attacker: player,

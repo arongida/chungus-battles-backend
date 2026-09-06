@@ -9,7 +9,7 @@ import { ItemSkillType } from '../types/ItemSkillTypes';
 import { fmt } from '../../common/MessageTypes';
 import {
   coatedEdgeCounters, openingActCounters, crushingBlowCounters, protectionMoneyLastProcMs,
-  shieldBashLastProcMs, braceCounters, smokeBombUsed, battleFocusCounters, ironbloodCleansed,
+  shieldBashLastProcMs, braceCounters, smokeBombUsed, retributionCharge, ironbloodCleansed,
 } from './itemSkillState';
 // Scaling-graph plumbing (see scalingGraph.ts) — only the skills that read another scaling
 // source's output declare a `scaling` block below. TalentType is needed only for BULWARK's
@@ -282,27 +282,24 @@ export const ITEM_SKILLS: Record<number, ItemSkillDefinition> = {
 
   // -------------------------------------------------------------- WARRIOR ----
 
-  [ItemSkillType.BATTLE_FOCUS]: {
-    id: ItemSkillType.BATTLE_FOCUS,
+  [ItemSkillType.RETRIBUTION]: {
+    id: ItemSkillType.RETRIBUTION,
     class: ItemClass.WARRIOR,
-    name: 'Battle Focus',
+    name: 'Retribution',
     slots: ANY_SLOT,
-    // ON_ATTACK_DODGED charges the empowerment; FIGHT_START resets the per-item dodge counter.
-    triggerTypes: [TriggerType.ON_ATTACK_DODGED, TriggerType.FIGHT_START],
+    // Actual HP loss charges this skill; FightStartTriggerCommand resets it before talents run.
+    triggerTypes: [],
     values: {
-      [ItemRarity.LEGENDARY]: { every: 3 },
-      [ItemRarity.MYTHIC]: { every: 2 },
+      [ItemRarity.LEGENDARY]: { hpRatio: 0.20 },
+      [ItemRarity.MYTHIC]: { hpRatio: 0.15 },
     },
-    describe: (r) => {
-      const { every } = skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], r);
-      const ordinal = every === 2 ? '2nd' : every === 3 ? '3rd' : `${every}th`;
-      return `Every ${ordinal} time the enemy dodges your attack, your next attack is empowered: unavoidable, +50% bonus damage.`;
-    },
+    describe: (r) => `Take ${pct(skillValues(ITEM_SKILLS[ItemSkillType.RETRIBUTION], r).hpRatio)} max HP in damage to empower your next auto.`,
     status: (ctx) => {
       if (!ctx.inFight) return '';
-      const { every } = skillValues(ITEM_SKILLS[ItemSkillType.BATTLE_FOCUS], ctx.item.rarity);
-      const count = battleFocusCounters.get(ctx.item) ?? 0;
-      return `${count % every}/${every} dodges charged`;
+      if (ctx.player.empoweredAttackSource === ctx.item) return 'empowered auto ready';
+      const { hpRatio } = skillValues(ITEM_SKILLS[ItemSkillType.RETRIBUTION], ctx.item.rarity);
+      const charge = retributionCharge.get(ctx.item) ?? 0;
+      return `${fmt(charge * 100)}/${fmt(hpRatio * 100)}% max HP lost${ctx.player.empoweredAttackSource ? ' — paused' : ''}`;
     },
   },
 

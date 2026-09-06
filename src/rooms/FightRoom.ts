@@ -822,7 +822,8 @@ export class FightRoom extends BaseRoom {
             });
         }
 
-        defender.takeDamage(damage, this.state.playerClient);
+        const hpBeforeWeaponHit = defender.hp;
+        defender.takeDamage(damage, this.state.playerClient, 'normal', 'weapon', empowered);
 
         // Dual Wield: the off-hand ghost copy has no talent context of its own to credit through,
         // so the damage is attributed here by weapon tag.
@@ -832,7 +833,7 @@ export class FightRoom extends BaseRoom {
         }
 
         this.state.playerClient.send('trigger_item', { playerId: attacker.playerId, itemId: weapon.itemId, slot });
-        this.logCombat(this.state.playerClient, { text: `${attacker.name}'s ${weapon.name} hits ${defender.name} for ${fmt(damage)} damage!`, kind: 'attack', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId, slot, damage, rolledDamage: attackRoll, mitigatedDamage: attackRoll - damage, defenderHpAfter: defender.hp });
+        this.logCombat(this.state.playerClient, { text: `${attacker.name}'s ${weapon.name} hits ${defender.name} for ${fmt(damage)} damage!`, kind: 'attack', attackerId: attacker.playerId, defenderId: defender.playerId, weaponItemId: weapon.itemId, slot, damage, empowered: empowered && defender.hp < hpBeforeWeaponHit, rolledDamage: attackRoll, mitigatedDamage: attackRoll - damage, defenderHpAfter: defender.hp });
         this.state.playerClient.send('attack', attacker.playerId);
 
         if (empowered) {
@@ -840,14 +841,14 @@ export class FightRoom extends BaseRoom {
             attacker.fightStats.empoweredDamage += empoweredBonus;
             if (empowerSource instanceof Item) {
                 // Flavor text keyed by which item skill actually empowered this swing — Crushing
-                // Blow, Opening Act and Battle Focus all funnel through this same empowered-hit
+                // Blow, Opening Act and Retribution all funnel through this same empowered-hit
                 // path (see the empowerSource assignments above) but read very differently in the
                 // log.
                 let flavor: string;
                 if (empowerSource.skillId === ItemSkillType.OPENING_ACT) {
                     flavor = `${attacker.name}'s ${empowerSource.name} opens with a flourish — an unavoidable blow for ${fmt(empoweredBonus)} bonus damage!`;
-                } else if (empowerSource.skillId === ItemSkillType.BATTLE_FOCUS) {
-                    flavor = `${attacker.name}'s ${empowerSource.name} capitalizes on the dodge — an unavoidable blow for ${fmt(empoweredBonus)} bonus damage!`;
+                } else if (empowerSource.skillId === ItemSkillType.RETRIBUTION) {
+                    flavor = `${attacker.name}'s ${empowerSource.name} strikes back in retribution — an unavoidable blow for ${fmt(empoweredBonus)} bonus damage!`;
                 } else {
                     flavor = `${attacker.name}'s ${empowerSource.name} lands a crushing, unavoidable blow for ${fmt(empoweredBonus)} bonus damage!`;
                 }

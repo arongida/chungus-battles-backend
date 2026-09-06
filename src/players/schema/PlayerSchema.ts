@@ -11,6 +11,8 @@ import {ITEM_SKILLS, skillValues} from "../../items/behavior/itemSkillBalance";
 import {AffectedStats} from "../../common/schema/AffectedStatsSchema";
 import {BURN_DURATION_MS, selfBurnStacks} from "../../items/behavior/uniqueItemBalance";
 import {POISON_DURATION_MS, POISON_TICK_INTERVAL_MS} from "../../common/poisonBalance";
+import {retributionCharge} from '../../items/behavior/itemSkillState';
+import {getSkillSlot2View} from '../../items/skills/itemSkillSlot2View';
 import {FightStats} from "./FightStats";
 import {weaponWhispererSnapshots} from "../../talents/behavior/weaponWhispererState";
 import {addDotSource, creditHealingPrevented, DotSourceLedger, removeDotSource} from "../../common/dotSources";
@@ -473,7 +475,7 @@ export class Player extends Schema implements IStats {
         return gained;
     }
 
-    takeDamage(damage: number, playerClient: Client, damageType: DamageType = 'normal', source: DamageSource = 'weapon') {
+    takeDamage(damage: number, playerClient: Client, damageType: DamageType = 'normal', source: DamageSource = 'weapon', empowered = false) {
         if (this.hp <= 0) return;
         if (damage <= 0) return;
         if (this.invincible) {
@@ -485,16 +487,59 @@ export class Player extends Schema implements IStats {
             playerClient.send('combat_log', { text: `${this.name} is invulnerable and takes no damage!`, kind: 'invulnerable', defenderId: this.playerId, damage: damage } as CombatLogMessage);
             return;
         }
+        const hpBefore = this.hp;
         this.hp -= damage;
-        // damageType drives client-facing rendering; source is attribution-only and only
-        // matters when damageType is 'normal' (poison/burn ticks are never a 'skill'/'self').
+        // damageType drives rendering; source attributes normal damage to its stat bucket.
         const bucket = damageType === 'normal' ? source : damageType;
         this.fightStats.damageTaken[bucket] += damage;
         playerClient.send('damage', {
             playerId: this.playerId,
             damage: damage,
             type: damageType,
+            empowered: empowered && this.hp < hpBefore,
         } as DamageMessage);
+        // Includes enemy damage, self-costs and both combatants' burn stacks. Arena end-burn
+        // bypasses takeDamage and directly reduces HP, so it never charges Retribution.
+        this.chargeRetribution(hpBefore - this.hp, playerClient);
+    }
+
+    /** Reset before fight-start talents so their health costs can contribute immediately. */
+    resetRetributionCharge() {
+        this.equippedItems.forEach(item => {
+            retributionCharge.set(item, 0);
+            retributionCharge.set(getSkillSlot2View(item), 0);
+        });
+    }
+
+    /** Unavoidable health payment, preserving the caller's existing stat/log attribution. */
+    payHealthCost(amount: number, client: Client) {
+        const hpBefore = this.hp;
+        this.hp -= Math.min(Math.max(0, amount), Math.max(0, this.hp - 1));
+        this.chargeRetribution(hpBefore - this.hp, client);
+    }
+
+    /** Runs only after HP actually falls. Fractions preserve progress if max HP changes. */
+    private chargeRetribution(hpLost: number, client: Client) {
+        if (hpLost <= 0 || this.hp <= 0 || this.maxHp <= 0 || this.empoweredAttackSource) return;
+        this.equippedItems.forEach((equipped, slot) => {
+            for (const item of [equipped, getSkillSlot2View(equipped)]) {
+                if (this.empoweredAttackSource || item.skillId !== ItemSkillType.RETRIBUTION) continue;
+                const { hpRatio } = skillValues(ITEM_SKILLS[ItemSkillType.RETRIBUTION], item.rarity);
+                const charge = (retributionCharge.get(item) ?? 0) + hpLost / this.maxHp;
+                if (charge + 1e-10 < hpRatio) {
+                    retributionCharge.set(item, charge);
+                    continue;
+                }
+                // One stored attack; excess damage cannot bank another empowerment.
+                retributionCharge.set(item, 0);
+                this.empoweredAttackSource = item;
+                client.send('trigger_item', { playerId: this.playerId, itemId: item.itemId, slot });
+                client.send('combat_log', {
+                    text: `${this.name}'s ${item.name} charges Retribution — the next auto is empowered!`,
+                    kind: 'item', attackerId: this.playerId, itemId: item.itemId,
+                } as CombatLogMessage);
+            }
+        });
     }
 
     // defenseMultiplier scales the effective defense used for this hit only — e.g. Stab passes

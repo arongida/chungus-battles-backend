@@ -28,9 +28,8 @@ export const bulkDiscountBasePrices = new WeakMap<Item, { price: number; sellPri
 // a once-per-fight conditional, not a repeating proc), reset on FIGHT_END — same per-fight-scoped
 // idiom as coatedEdgeCounters above.
 export const smokeBombUsed = new WeakMap<Item, boolean>();
-// Battle Focus: dodges-taken counter (this player's attack being dodged, not this item's own
-// dodges), reset on FIGHT_START — same idiom as coatedEdgeCounters above.
-export const battleFocusCounters = new WeakMap<Item, number>();
+// Retribution: cumulative fraction of max HP lost, reset before fight-start talents.
+export const retributionCharge = new WeakMap<Item, number>();
 // Ironblood: running count of poison stacks this item has cleansed this fight, reset on
 // FIGHT_END — same idiom as coatedEdgeCounters above. Read by itemSkillBalance.ts's status().
 export const ironbloodCleansed = new WeakMap<Item, number>();

@@ -1221,7 +1221,7 @@ export const TalentBehaviors = {
     // Robbery. Also fires during fight (AURA runs there too) but freeRerolls is unused mid-fight.
     // FIGHT_START: charges the HP cost sized by how many times the shop was rerolled this round
     // (player.rerollsThisRound, reset per shop phase in DraftRoom.onJoin). Written as a direct
-    // `attacker.hp -=` rather than takeDamage() — this is a pre-fight cost, not a hit, so it
+    // payHealthCost rather than takeDamage() — this is a pre-fight cost, not a hit, so it
     // shouldn't touch fightStats.damageTaken or be blocked by invincibility. Capped so it can
     // never drop below 1 HP.
     [TalentType.FORTUNES_FOOL]:
@@ -1246,7 +1246,7 @@ export const TalentBehaviors = {
                 if (pct <= 0) return;
                 const hpLoss = Math.min(Math.floor(attacker.maxHp * pct), attacker.maxHp - 1);
                 if (hpLoss <= 0) return;
-                attacker.hp -= hpLoss;
+                attacker.payHealthCost(hpLoss, client);
                 track(talent, 1, hpLoss);
                 client.send('damage', { playerId: attacker.playerId, damage: hpLoss, type: 'normal' } as DamageMessage);
                 client.send('combat_log', { text: `${attacker.name} starts the fight wounded from rerolling like a fool, losing ${fmt(hpLoss)} HP!`, kind: 'talent', talentId: talent.talentId, attackerId: attacker.playerId, damage: hpLoss } as CombatLogMessage);
