@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import '../src/app.config';
 import {
     claimPlayerSession,
+    clearAllSessionClaims,
     playerModel,
     releasePlayerSession,
     SESSION_CLAIM_TTL_MS,
@@ -137,5 +138,54 @@ describe('session claim primitives', () => {
         await claimPlayerSession(playerId, 'sessionA', 'roomA', 'draft');
         await releasePlayerSession(playerId, 'sessionA');
         expect(await claimPlayerSession(playerId, 'sessionB', 'roomB', 'fight')).toBe('claimed');
+    });
+
+    // clearAllSessionClaims's real, production call (app.config.ts's beforeListen) is
+    // deliberately unscoped — "every claim in the database" — which is exactly why it must never
+    // be exercised for real against this shared dev database from a test. Every call below is
+    // scoped via extraFilter to only the playerIds this test itself created.
+    describe('clearAllSessionClaims (scoped to this test\'s own documents)', () => {
+        it('clears every live-looking claim matching the filter', async () => {
+            const playerId1 = await seedFreePlayer();
+            const playerId2 = await seedFreePlayer();
+            await claimPlayerSession(playerId1, 'sessionA', 'roomA', 'draft');
+            await claimPlayerSession(playerId2, 'sessionB', 'roomB', 'fight');
+
+            const cleared = await clearAllSessionClaims({ playerId: { $in: [playerId1, playerId2] } });
+            expect(cleared).toBe(2);
+
+            for (const playerId of [playerId1, playerId2]) {
+                const doc = await playerModel.findOne({ playerId }).lean();
+                expect(doc?.sessionId).toBe('');
+                expect(doc?.sessionHeartbeatAt).toBeUndefined();
+                expect(doc?.sessionClaimedAt).toBeUndefined();
+                expect(doc?.sessionRoomId).toBeUndefined();
+                expect(doc?.sessionPhase).toBeUndefined();
+            }
+        });
+
+        it('clears a claim regardless of how fresh its heartbeat is — unlike claimPlayerSession, this has no staleness check', async () => {
+            const playerId = await seedFreePlayer();
+            await claimPlayerSession(playerId, 'sessionA', 'roomA', 'draft');
+            // Heartbeat is fresh (just claimed) — still must be cleared unconditionally, since a
+            // freshly-restarted process has no way to know whether a heartbeat is "fresh" in a
+            // way that matters; it's from a process that no longer exists either way.
+            const cleared = await clearAllSessionClaims({ playerId });
+            expect(cleared).toBe(1);
+            expect((await playerModel.findOne({ playerId }).lean())?.sessionId).toBe('');
+        });
+
+        it('leaves documents with no claim untouched (no unnecessary write)', async () => {
+            const playerId = await seedFreePlayer(); // sessionId: '' from the start
+            const cleared = await clearAllSessionClaims({ playerId });
+            expect(cleared).toBe(0);
+        });
+
+        it('a claim cleared this way is immediately claimable again', async () => {
+            const playerId = await seedFreePlayer();
+            await claimPlayerSession(playerId, 'sessionA', 'roomA', 'draft');
+            await clearAllSessionClaims({ playerId });
+            expect(await claimPlayerSession(playerId, 'sessionB', 'roomB', 'fight')).toBe('claimed');
+        });
     });
 });

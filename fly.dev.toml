@@ -6,6 +6,11 @@
 app = 'chungus-battles-backend-dev'
 primary_region = 'arn'
 
+# See fly.toml's matching comment — gives graceful shutdown (onLeave save + onDispose session
+# release) a realistic window to finish on deploy instead of hitting fly's 5s default.
+kill_signal = 'SIGTERM'
+kill_timeout = 30
+
 [build]
 
 [env]

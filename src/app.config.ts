@@ -44,7 +44,7 @@ matchMaker.controller.getCorsHeaders = (headers: Headers) => {
  */
 import {FightRoom} from './rooms/FightRoom';
 import {DraftRoom} from './rooms/DraftRoom';
-import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, getWallOfFame, getRunSummaries, playerToPlainObject} from './players/db/Player';
+import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, getWallOfFame, getRunSummaries, clearAllSessionClaims, playerToPlainObject} from './players/db/Player';
 import {generatePlayerToken, reservePlayerId} from './players/db/PlayerToken';
 import {GAME_VERSION} from './common/types';
 import { getAllItems } from "./items/db/Item";
@@ -393,6 +393,16 @@ export const server = defineServer({
         });
     },
 
-    beforeListen: () => {
+    beforeListen: async () => {
+        // Runs before matchMaker.accept()/the port binds, so no real join can race this — see
+        // clearAllSessionClaims's doc comment (Player.ts) for why an unconditional sweep here is
+        // safe on this single-process deployment. Never blocks startup: worst case on failure,
+        // a handful of runs just wait out SESSION_CLAIM_TTL_MS like before this existed.
+        try {
+            const cleared = await clearAllSessionClaims();
+            if (cleared > 0) console.log(`[startup] cleared ${cleared} stale session claim(s) from a previous process`);
+        } catch (err) {
+            console.error('[startup] clearAllSessionClaims failed', err);
+        }
     },
 });

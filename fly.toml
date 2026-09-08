@@ -6,6 +6,17 @@
 app = 'chungus-battles-backend'
 primary_region = 'arn'
 
+# fly's default kill_timeout (5s) is too short for a graceful deploy to reliably finish: every
+# still-connected DraftRoom/FightRoom must run onLeave (save the in-progress round to Mongo) and
+# onDispose (release its session claim — see BaseRoom.ts/Player.ts's claimPlayerSession) before
+# SIGKILL lands, and each of those is a couple of real Mongo round-trips per room. A longer window
+# gives Colyseus's own graceful-shutdown path (already correct) a real chance to drain everyone
+# instead of abandoning mid-round state. (Doesn't affect auto_stop_machines = "suspend" below —
+# a suspend freezes the process as-is rather than sending a kill signal at all; this only matters
+# for an actual deploy/stop, which does.)
+kill_signal = 'SIGTERM'
+kill_timeout = 30
+
 [build]
 
 [env]
