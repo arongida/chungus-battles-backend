@@ -44,7 +44,7 @@ matchMaker.controller.getCorsHeaders = (headers: Headers) => {
  */
 import {FightRoom} from './rooms/FightRoom';
 import {DraftRoom} from './rooms/DraftRoom';
-import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, getWallOfFame, playerToPlainObject} from './players/db/Player';
+import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, getWallOfFame, getRunSummaries, playerToPlainObject} from './players/db/Player';
 import {generatePlayerToken, reservePlayerId} from './players/db/PlayerToken';
 import {GAME_VERSION} from './common/types';
 import { getAllItems } from "./items/db/Item";
@@ -224,6 +224,16 @@ export const server = defineServer({
             const player = await getPlayer(playerId);
             if (!player) return res.status(404).send({error: 'Player not found'});
             res.status(200).json(playerToPlainObject(player));
+        }));
+
+        // Batch summary for the frontend's "continue a run" list (RunRegistryService /
+        // RunSummariesService) — every field here is already public via /leaderboard, so this
+        // needs no auth, just the default rate limiter and a small id cap.
+        app.get('/runSummaries', asyncHandler(async (req, res) => {
+            const raw = String(req.query.playerIds ?? '').split(',').map(s => Number(s.trim()));
+            const playerIds = [...new Set(raw.filter(n => Number.isSafeInteger(n) && n > 0))].slice(0, 10);
+            const summaries = await getRunSummaries(playerIds);
+            res.status(200).json(summaries);
         }));
 
         app.get('/rank', asyncHandler(async (req, res) => {

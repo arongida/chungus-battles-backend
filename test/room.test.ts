@@ -1,6 +1,6 @@
 import { ColyseusTestServer, boot } from "@colyseus/testing";
 import { server } from '../src/app.config';
-import { getNextPlayerId, getPlayer } from "../src/players/db/Player";
+import { claimPlayerSession, getNextPlayerId, getPlayer, playerModel, SESSION_CLAIM_TTL_MS, SESSION_HEARTBEAT_INTERVAL_MS } from "../src/players/db/Player";
 import { generatePlayerToken, reservePlayerId } from "../src/players/db/PlayerToken";
 import { FightResultType } from "../src/common/types";
 import { Item } from "../src/items/schema/ItemSchema";
@@ -401,4 +401,80 @@ describe("testing your Colyseus app", () => {
             expect(fightRoom.state.player.lives).toBe(livesAtStart);
         }
     }, 30000);
+
+    // -------------------------------------------------------------------------
+    // Live-session claim — the fix for the mid-fight save-scumming exploit (see
+    // players/db/Player.ts's claimPlayerSession and BaseRoom/DraftRoom/FightRoom's onJoin).
+    // -------------------------------------------------------------------------
+
+    it("rejects a second draft_room join for a character that's still connected", async () => {
+        const { room: draftRoom, client, playerId, playerToken, cleanExit } = await createAndJoinDraftRoom("Duplicate1");
+
+        const secondRoom = await colyseus.createRoom("draft_room", {});
+        await expect(
+            colyseus.connectTo(secondRoom, { playerId, playerToken, name: "Duplicate1", avatarUrl: "test_avatar" })
+        ).rejects.toThrow(/already playing/i);
+
+        // The original session must be completely unaffected by the rejected attempt.
+        const player = await getPlayer(playerId);
+        expect(player.sessionId).toBe(client.sessionId);
+        expect(draftRoom.state.player.sessionId).toBe(client.sessionId);
+
+        await cleanExit();
+    }, 15000);
+
+    it("rejects a second fight_room join mid-fight, and does NOT advance round or clear the live session (regression test for the reject-path bug)", async () => {
+        const { client: draftClient, playerId, playerToken } = await createAndJoinDraftRoom("Duplicate2");
+        draftClient.leave(true);
+
+        const { fightRoom, fightClient } = await createAndJoinFightRoom(playerId, playerToken);
+        const roundBeforeDuplicateAttempt = fightRoom.state.player.round;
+
+        const secondFightRoom = await colyseus.createRoom("fight_room", {});
+        await expect(
+            colyseus.connectTo(secondFightRoom, { playerId, playerToken })
+        ).rejects.toThrow(/already playing/i);
+
+        // Before the fix, a rejected FightRoom join still reached onLeave (setUpState had
+        // already populated state.player.playerId) and immediately did round++ + a
+        // whole-document save clearing sessionId — corrupting the victim's live fight. Confirm
+        // neither happened: the live fight's round is untouched and its session is still claimed.
+        const player = await getPlayer(playerId);
+        expect(player.round).toBe(roundBeforeDuplicateAttempt);
+        expect(player.sessionId).toBe(fightClient.sessionId);
+        expect(fightRoom.state.player.sessionId).toBe(fightClient.sessionId);
+
+        await fightClient.leave(true);
+    }, 30000);
+
+    // Reproduces the actual UX bug reported after the exploit fix shipped: a zombie tab (its
+    // session claim stolen by another tab/device — e.g. via TTL takeover after a crash) used to
+    // just sit there with every button silently doing nothing, since nothing ever told the
+    // client its room was dead. BaseRoom's heartbeat now actively disconnects a room once it
+    // notices its claim is gone, which is what makes the frontend's room.onLeave handler fire
+    // and send that tab back to the home screen instead of freezing forever.
+    it("disconnects a room's client once its session claim is stolen by another connection", async () => {
+        const { client, playerId } = await createAndJoinDraftRoom("StolenClaim");
+
+        let leftCode: number | undefined;
+        client.onLeave((code: number) => {
+            leftCode = code;
+        });
+
+        // Simulate the claim having gone stale (as if this room's process had crashed) so a
+        // second "connection" can steal it without going through a real second client.
+        await playerModel.updateOne(
+            { playerId },
+            { $set: { sessionHeartbeatAt: new Date(Date.now() - SESSION_CLAIM_TTL_MS - 1000) } },
+        );
+        expect(await claimPlayerSession(playerId, 'someOtherTabsSession', 'someOtherRoomId', 'draft')).toBe('claimed');
+
+        // The original room's own heartbeat runs every SESSION_HEARTBEAT_INTERVAL_MS and should
+        // notice the theft on its next tick, then disconnect — this waits for that real interval.
+        await waitFor(() => leftCode !== undefined, {
+            timeout: SESSION_HEARTBEAT_INTERVAL_MS + 20000,
+            interval: 250,
+            message: "the stale draft room to disconnect its client after losing its session claim",
+        });
+    }, SESSION_HEARTBEAT_INTERVAL_MS + 30000);
 });

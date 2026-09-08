@@ -1,7 +1,7 @@
 import { Client } from '@colyseus/core';
 import { BaseRoom } from './BaseRoom';
 import { DraftState } from './schema/DraftState';
-import { buildJoe, copyPlayer, createNewPlayer, getPlayer, getSameRoundPlayer, JOE_PLAYER_ID, setNextFightEnemy, updatePlayer } from '../players/db/Player';
+import { buildJoe, claimPlayerSessionWithRetry, copyPlayer, createNewPlayer, getPlayer, getSameRoundPlayer, JOE_PLAYER_ID, setNextFightEnemy, updatePlayer } from '../players/db/Player';
 import { buildEnemyPreview, EnemyRevealLevel, extractItemClasses, extractTalentClasses } from '../players/EnemyPreview';
 import { getNumberOfItems, getQuestItems, getItemById, cloneItem } from '../items/db/Item';
 import { rollItemStats } from '../items/stats/itemStatRoller';
@@ -100,7 +100,7 @@ export class DraftRoom extends BaseRoom {
 
         this.onMessage('abandon_run', async (client) => {
             this.state.player.lives = 0;
-            await updatePlayer(this.state.player);
+            await updatePlayer(this.state.player, this.claimedSessionId ?? undefined);
             client.send('game_over', 'You abandoned your run.');
         });
 
@@ -149,12 +149,24 @@ export class DraftRoom extends BaseRoom {
         const avatarUrl = (Object.values(PlayerAvatar) as string[]).includes(options.avatarUrl) ? options.avatarUrl : PlayerAvatar.MERCHANT;
 
         await delay(1000, this.clock);
-        const foundPlayer = await getPlayer(options.playerId);
+
+        // Claim the character's live session BEFORE loading it and before touching room state.
+        // Claim-then-read is what makes the read safe: once we hold the claim, no other session
+        // can be mid-save (updatePlayer is session-guarded — see Player.ts), so the document we
+        // load next is guaranteed to be the final post-onLeave state, not a snapshot the previous
+        // holder is still in the middle of overwriting. 'not-found' means no document exists yet
+        // — brand-new character (onAuth already proved this playerId was reserved for this token).
+        const claim = await claimPlayerSessionWithRetry(Number(options.playerId), client.sessionId, this.roomId, 'draft');
+        if (claim === 'busy') throw new Error('Player already playing!');
+
         let loadedPlayer: Player;
 
-        //if player already exists, check if player is already playing
-        if (foundPlayer) {
-            if (foundPlayer.sessionId !== '') throw new Error('Player already playing!');
+        if (claim === 'claimed') {
+            this.beginSession(Number(options.playerId), client.sessionId);
+
+            const foundPlayer = await getPlayer(options.playerId);
+            // Deleted between the claim and the read — nothing to play; onLeave will release the claim.
+            if (!foundPlayer) throw new Error('Player not found!');
             if (foundPlayer.lives <= 0) throw new Error('Player has no lives left!');
 
             await this.setUpState(foundPlayer, client);
@@ -164,7 +176,11 @@ export class DraftRoom extends BaseRoom {
             await this.checkLevelUp();
         } else {
             if (!isNameClean(name)) throw new Error('Please choose a different name.');
-            const newPlayer = await createNewPlayer(options.playerId, name, client.sessionId, avatarUrl);
+            // Inserts WITH the session already claimed + heartbeat-stamped (see getNewPlayer), so
+            // a brand-new character is locked from the instant it exists — and, unlike before,
+            // that lock now expires if this process dies before onLeave ever runs.
+            const newPlayer = await createNewPlayer(options.playerId, name, client.sessionId, avatarUrl, this.roomId);
+            this.beginSession(Number(options.playerId), client.sessionId);
             this.state.remainingTalentPoints = avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
             await this.setUpState(newPlayer, client);
             loadedPlayer = newPlayer;
@@ -269,35 +285,43 @@ export class DraftRoom extends BaseRoom {
     onDrop(client: Client) {
         // onDrop also runs when onJoin itself throws (e.g. "Player already playing!",
         // a routine race on duplicate tabs / fast reconnects) — in that case the client
-        // never actually joined, and allowReconnection() rejects synchronously with
-        // "not joined". That rejection was previously unhandled, which — absent the
-        // onUncaughtException handler now defined on BaseRoom — used to crash the whole
-        // process. Swallow it here; there's nothing to reconnect to.
+        // never actually joined, and allowReconnection() rejects synchronously with "not
+        // joined" — which routes straight to onLeave in the SAME tick, not after the 30s
+        // window (verified against @colyseus/core's _onLeave/_onAfterLeave). That rejection
+        // was previously unhandled here, which — absent the onUncaughtException handler now
+        // defined on BaseRoom — used to crash the whole process. Swallow it; there's nothing
+        // to reconnect to.
         this.allowReconnection(client, 30).catch(() => {});
     }
 
     async onLeave(client: Client, code: number) {
         console.log(`[DraftRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
-        // this.state.player defaults to a bare `new Player()` (DraftState.ts) and only gets
-        // populated by setUpState inside onJoin — a client whose onJoin threw before reaching
-        // that (bad/duplicate playerId, no lives left, ...) still reaches onLeave once its
-        // reconnection window (onDrop) expires. Without this guard, that unpopulated player
-        // (playerId undefined) went through copyPlayer/updatePlayer anyway, inserting a junk
-        // snapshot document and burning a playerId for nothing.
-        if (this.state.player.playerId) {
-            this.state.player.sessionId = '';
+        // Guard on the SESSION CLAIM, not on state.player.playerId. setUpState populates
+        // playerId before the claim/lives checks in onJoin can even run, so a REJECTED join
+        // (duplicate tab, no lives left, character vanished mid-claim) still has a populated
+        // playerId — ownsSession() correctly stays false for it (beginSession() is only ever
+        // called after a successful claim), so it can't run this save or free someone else's
+        // claim. Same reasoning protects against a room whose claim was TTL-stolen after a crash.
+        if (this.ownsSession(client) && this.state.player.playerId) {
+            this.state.player.sessionId = ''; // synced Colyseus field only — no longer persisted here
             await copyPlayer(this.state.player);
-            await updatePlayer(this.state.player);
+            // Session-guarded: a no-op if this room is no longer the character's owner.
+            await updatePlayer(this.state.player, client.sessionId);
             console.log(`[DraftRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
         }
+        // Released LAST and unconditionally: last, so no incoming join can claim the character
+        // before the save above lands; unconditionally, so a join that threw *after* claiming
+        // (no lives, player vanished) still frees the character instead of leaning on the TTL.
+        await this.releaseSession();
         this.clock.setTimeout(() => {
             this.disconnect();
         }, 5000);
 
     }
 
-    onDispose() {
+    async onDispose() {
         console.log('[DraftRoom]', 'room', this.roomId, 'disposing...');
+        await super.onDispose();
     }
 
     private async updateShop(newShopSize: number) {

@@ -2,7 +2,7 @@ import { getSkillSlot2View } from '../items/skills/itemSkillSlot2View';
 import { Client } from '@colyseus/core';
 import { BaseRoom } from './BaseRoom';
 import { FightState } from './schema/FightState';
-import { buildJoe, getPlayer, getSameRoundPlayer, incrementRunsEnded, JOE_PLAYER_ID, persistGameWin, setNextFightEnemy, snapshotPlayer, updatePlayer } from '../players/db/Player';
+import { buildJoe, claimPlayerSessionWithRetry, getPlayer, getSameRoundPlayer, incrementRunsEnded, JOE_PLAYER_ID, persistGameWin, setNextFightEnemy, snapshotPlayer, updatePlayer } from '../players/db/Player';
 import { Player } from '../players/schema/PlayerSchema';
 import { delay } from '../common/utils';
 import { END_BURN_START_MS, FightResultType, GAME_VERSION, WINS_TO_WIN } from '../common/types';
@@ -96,7 +96,7 @@ export class FightRoom extends BaseRoom {
 
         this.onMessage('abandon_run', async (client) => {
             this.state.player.lives = 0;
-            await updatePlayer(this.state.player);
+            await updatePlayer(this.state.player, this.claimedSessionId ?? undefined);
         });
 
         this.onMessage('select_loss_reward', (client, message: SelectLossRewardMessage) => {
@@ -187,13 +187,36 @@ export class FightRoom extends BaseRoom {
         // check if player id is provided
         if (!options.playerId) throw new Error('Player ID is required!');
 
-        //get player from db
         await delay(1000, this.clock);
+
+        // Claim FIRST — before getPlayer, before setUpState, before pickEnemy. This fixes two
+        // bugs the old (post-load) ordering had:
+        //  1. setUpState used to populate state.player.playerId before the mutex/lives checks
+        //     ran, so a REJECTED join still satisfied onLeave's old playerId-based guard and
+        //     immediately did round++ + a whole-document updatePlayer against the victim's live
+        //     character. Now nothing populates state.player until after a successful claim.
+        //  2. pickEnemy calls setNextFightEnemy — a write to the victim's document. A rejected
+        //     join used to be able to silently re-roll the victim's locked-in next-enemy preview.
+        // Claim-then-read also guarantees the loaded document is the final post-DraftRoom-onLeave
+        // state, not a snapshot the draft room is still in the middle of saving.
+        const claim = await claimPlayerSessionWithRetry(Number(options.playerId), client.sessionId, this.roomId, 'fight');
+        if (claim === 'busy') throw new Error('Player already playing!');
+        if (claim === 'not-found') throw new Error('Player not found!');
+        this.beginSession(Number(options.playerId), client.sessionId);
+
+        //get player from db
         let player = await getPlayer(options.playerId);
         if (!player) throw new Error('Player not found!');
+        if (player.lives <= 0) throw new Error('Player has no lives left!');
 
         //set up player state
         await this.setUpState(player);
+        // Assigned right after setUpState: onDrop's "was this a genuine mid-fight drop" check
+        // (below) keys off state.player.sessionId, so it must be set before any await that could
+        // interleave with a disconnect.
+        this.state.player.sessionId = client.sessionId;
+        this.state.playerClient = client;
+        this.wrapPlayerClient(client);
 
         //set up enemy state
         if (!this.state.enemy.playerId) {
@@ -203,13 +226,6 @@ export class FightRoom extends BaseRoom {
             //set up enemy state
             await this.setUpState(enemy, true);
         }
-
-        // check if player is already playing
-        if (this.state.player.sessionId !== '') throw new Error('Player already playing!');
-        if (this.state.player.lives <= 0) throw new Error('Player has no lives left!');
-        this.state.playerClient = client;
-        this.wrapPlayerClient(client);
-        this.state.player.sessionId = client.sessionId;
 
         //set up initial room state
         this.state.questItems.clear();
@@ -288,9 +304,11 @@ export class FightRoom extends BaseRoom {
         // onDrop also runs when onJoin itself throws (bad/missing playerId, no lives left,
         // "Player already playing!" on a duplicate tab/fast reconnect, ...) — in that case the
         // client never actually finished joining, this.state.player/enemy may not even be set
-        // up yet, and allowReconnection() rejects synchronously with "not joined". Guard on our
-        // own room state (only a client this room actually finished joining gets assigned as
-        // state.player's sessionId) before treating this as a genuine mid-fight drop.
+        // up yet (now claimed AFTER them — see onJoin), and allowReconnection() rejects
+        // synchronously with "not joined", which routes straight to onLeave in the SAME tick,
+        // not after the 30s window. Guard on our own room state (only a client this room
+        // actually finished joining gets assigned as state.player's sessionId) before treating
+        // this as a genuine mid-fight drop.
         if (!this.state.player || this.state.player.sessionId !== client.sessionId) {
             this.allowReconnection(client, 30).catch(() => {});
             return;
@@ -342,15 +360,13 @@ export class FightRoom extends BaseRoom {
 
     async onLeave(client: Client, code: number) {
         console.log(`[FightRoom] onLeave  sid=${client.sessionId} code=${code} roomId=${this.roomId}`);
-        // this.state.player defaults to a bare `new Player()` (FightState.ts) and only gets
-        // populated by setUpState inside onJoin — a client whose onJoin threw before reaching
-        // that (missing/unowned playerId, no lives left, ...) still reaches onLeave once its
-        // reconnection window (onDrop) expires. Without this guard, updatePlayer(this.state.player)
-        // ran with playerId undefined — see Player.ts's updatePlayer, which does
-        // findOne({playerId: player.playerId}); depending on how that undefined value gets
-        // serialized, that risks silently overwriting an arbitrary real player's document
-        // instead of just no-op'ing.
-        if (this.state.player.playerId) {
+        // Guard on the SESSION CLAIM, not on state.player.playerId. In onJoin, setUpState now
+        // runs AFTER the claim (so a rejected join never even reaches it — see onJoin), but this
+        // guard also protects against a room whose claim was TTL-stolen after a crash: such a
+        // room must not persist its stale in-memory state or free the new owner's claim.
+        // ownsSession() is false in both cases (beginSession() only ever runs after a
+        // successful claim).
+        if (this.ownsSession(client) && this.state.player.playerId) {
             // Let an in-flight item upgrade finish before saving, and default to the
             // gold option if the player left without choosing a loss reward.
             if (this.state.lossRewardApplication) await this.state.lossRewardApplication;
@@ -362,17 +378,21 @@ export class FightRoom extends BaseRoom {
             this.state.player.sessionId = '';
             //set player for next round
             this.state.player.round++;
-            await updatePlayer(this.state.player);
+            // Session-guarded: a no-op if this room is no longer the character's owner.
+            await updatePlayer(this.state.player, client.sessionId);
             console.log(`[FightRoom] player saved, scheduling disconnect in 5s  roomId=${this.roomId}`);
         }
+        // Released LAST and unconditionally — see DraftRoom.onLeave for why.
+        await this.releaseSession();
         this.clock.setTimeout(() => {
             this.disconnect();
         }, 5000);
 
     }
 
-    onDispose() {
+    async onDispose() {
         console.log('[FightRoom]', 'room', this.roomId, 'disposing...');
+        await super.onDispose();
     }
 
     // Only meaningful once startBattle() has run (recorder.start() populates initialState) —
