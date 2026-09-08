@@ -469,6 +469,35 @@ export async function releasePlayerSession(playerId: number, sessionId: string):
     return res.matchedCount === 1;
 }
 
+/** Every session claim in the DB is stale the instant this process starts: this deployment is
+ *  single-process (no Redis/shared presence — see claimPlayerSession above), so a fresh process
+ *  has zero rooms by definition, and nothing it does could legitimately still hold one of these
+ *  claims. Called once from app.config.ts's beforeListen, which runs before the server accepts
+ *  any connection, so there's no race with a real join claiming first. This is what makes "in
+ *  progress elsewhere" recover in seconds after a deploy/crash instead of waiting out
+ *  SESSION_CLAIM_TTL_MS.
+ *
+ *  SAFETY: this is only correct because the deployment is single-process. If this ever became
+ *  horizontally scaled (multiple machines/processes sharing this Mongo), an unconditional sweep
+ *  on one process's boot could steal a claim a sibling process still genuinely holds — at that
+ *  point this must be replaced with something process-aware (e.g. only clearing claims whose
+ *  sessionRoomId isn't known to any live process).
+ *
+ *  @param extraFilter Narrows which documents are affected, ANDed with the sessionId filter —
+ *  production (app.config.ts's beforeListen) always calls this with no argument, meaning "every
+ *  claim, no exceptions." It exists purely so tests can scope a call to their own seeded
+ *  documents instead of exercising the genuinely-global default against a shared database. */
+export async function clearAllSessionClaims(extraFilter: Record<string, any> = {}): Promise<number> {
+    const res = await playerModel.updateMany(
+        {...extraFilter, sessionId: {$nin: ['', null]}},
+        {
+            $set: {sessionId: ''},
+            $unset: {sessionClaimedAt: '', sessionHeartbeatAt: '', sessionRoomId: '', sessionPhase: ''},
+        },
+    );
+    return res.modifiedCount;
+}
+
 /** Writes the run-ending win straight to the character's live document so the Wall of Fame
  *  reflects it before the client can navigate to /end. Deliberately a targeted $set (not
  *  updatePlayer) — FightRoom.handleWin runs mid-handleFightEnd, before the round's gold/xp/income
