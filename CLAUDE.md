@@ -166,7 +166,7 @@ Stats are **recalculated from scratch on every tick**:
 
 ### Player Progression
 
-- Start: level 1, 3 lives, 0 wins
+- Start: level 1, 4 lives (5 for Warrior), 0 wins
 - Max level: 5
 - XP to level: `12 + level*4` (cumulative)
 - Win condition: beat the current highest win record (tracked globally)
