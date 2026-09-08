@@ -496,6 +496,27 @@ const LEADERBOARD_PROJECTION = {
     wins: 1, losses: 1, gameVersion: 1, runsEnded: 1, lastPlayedAt: 1, latestPlayerId: 1,
 } as const;
 
+export interface RunSummary {
+    playerId: number; name: string; avatarUrl: string; level: number; round: number;
+    lives: number; wins: number; losses: number; gameVersion: number; busy: boolean;
+}
+
+// Batch fetch for the frontend's run-list (see RunSummariesService) — the same lean fields as
+// LEADERBOARD_PROJECTION plus `lives` and `sessionId`, the latter reduced to a `busy` boolean
+// and never returned raw (it's a live Colyseus session id, not something a client should see).
+export async function getRunSummaries(playerIds: number[]): Promise<RunSummary[]> {
+    if (!playerIds.length) return [];
+    const docs = await playerModel.find(
+        { playerId: { $in: playerIds } },
+        { ...LEADERBOARD_PROJECTION, lives: 1, sessionId: 1 },
+    ).lean();
+    return docs.map(d => ({
+        playerId: d.playerId, name: d.name, avatarUrl: d.avatarUrl, level: d.level, round: d.round,
+        lives: d.lives, wins: d.wins, losses: d.losses, gameVersion: d.gameVersion,
+        busy: !!d.sessionId,
+    }));
+}
+
 // Short-TTL cache for the leaderboard/Wall-of-Fame ranked lists — see cachedAggregate below.
 // Keyed by a JSON fingerprint of the pipeline's own $match conditions, so every distinct filter
 // combination (including a name search) gets its own cached entry rather than sharing one.
