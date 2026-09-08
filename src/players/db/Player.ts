@@ -24,7 +24,23 @@ const PlayerSchema = new Schema({
     gold: {type: Number, alias: '_gold'},
     xp: Number,
     level: {type: Number, alias: '_level'},
+    // Live-session claim (see claimPlayerSession/releasePlayerSession/touchPlayerSession below).
+    // sessionId is the claim token (the Colyseus client.sessionId of the room that currently owns
+    // this character) — set ONLY by those guarded, targeted updates, deliberately NOT part of
+    // playerToPlainObject (see that function's comment), so a whole-document updatePlayer() from
+    // any room — including a rejected join or an abandoned/zombie room — can never clobber a live
+    // claim. sessionHeartbeatAt is what makes the claim safe: it's refreshed every
+    // SESSION_HEARTBEAT_INTERVAL_MS by the owning room (BaseRoom.beginSession), and a claim whose
+    // heartbeat is older than SESSION_CLAIM_TTL_MS is treated as abandoned (crashed room /
+    // SIGKILLed process) and can be stolen — without this, a hard crash would soft-lock the
+    // character forever, exactly as happened to a number of pre-existing characters before this
+    // field existed. sessionRoomId/sessionPhase are diagnostics plus let getRunSummaries tell the
+    // frontend which room type currently holds a busy run.
     sessionId: String,
+    sessionClaimedAt: Date,
+    sessionHeartbeatAt: Date,
+    sessionRoomId: String,
+    sessionPhase: String, // 'draft' | 'fight'
     maxXp: Number,
     round: Number,
     lives: Number,
@@ -230,8 +246,10 @@ function getNewPlayer(playerId: number,
                       name: string,
                       sessionId: string,
                       avatarUrl: string,
-                      startingGold: number) {
+                      startingGold: number,
+                      roomId: string) {
     const startingLevel = avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
+    const now = new Date();
     return new playerModel({
         playerId: playerId,
         originalPlayerId: playerId,
@@ -240,6 +258,13 @@ function getNewPlayer(playerId: number,
         xp: 0,
         level: startingLevel,
         sessionId: sessionId,
+        // Stamped at insert for the same reason claimPlayerSession stamps them: without a
+        // heartbeat, a brand-new character's claim would have no expiry, and a crash before the
+        // first onLeave would lock it permanently.
+        sessionClaimedAt: now,
+        sessionHeartbeatAt: now,
+        sessionRoomId: roomId,
+        sessionPhase: 'draft',
         maxXp: avatarUrl === PlayerAvatar.THIEF ? 15 : 10,
         round: 1,
         lives: avatarUrl === PlayerAvatar.WARRIOR ? 4 : 3,
@@ -277,10 +302,11 @@ export async function createNewPlayer(
     playerId: number,
     name: string,
     sessionId: string,
-    avatarUrl: string
+    avatarUrl: string,
+    roomId: string
 ): Promise<Player> {
     const startingGold = process.env.NODE_ENV === 'production' ? 8 : 1000;
-    const newPlayer = getNewPlayer(playerId, name, sessionId, avatarUrl, startingGold);
+    const newPlayer = getNewPlayer(playerId, name, sessionId, avatarUrl, startingGold, roomId);
     await newPlayer.save().catch((err) => console.error(err));
     const playerSchema = getPlayerSchemaObject(newPlayer.toObject());
     const defaultWeapon = await getItemById(getDefaultWeaponId(avatarUrl));
@@ -312,15 +338,135 @@ export async function copyPlayer(player: Player): Promise<Player> {
     return getPlayerSchemaObject(newPlayer.toObject());
 }
 
-export async function updatePlayer(player: Player): Promise<Player> {
+/** @param expectSessionId When provided, the write only lands if the character's live session
+ *  claim still belongs to this session (see claimPlayerSession below). A zombie room — e.g. a
+ *  FightRoom left running headless after a back-button/reload exploit, or one whose claim was
+ *  TTL-stolen after a crash — can therefore never clobber the current owner's progress with its
+ *  own stale snapshot. Callers that legitimately hold no claim (createNewPlayer's post-insert
+ *  save) omit it. Note this narrows the race window to the save itself rather than eliminating
+ *  it (findOne + save is still read-modify-write) — full optimistic concurrency is a follow-up. */
+export async function updatePlayer(player: Player, expectSessionId?: string): Promise<Player> {
     const playerObject = playerToPlainObject(player);
 
-    const foundPlayerModel = await playerModel.findOne({playerId: player.playerId});
-    if (!foundPlayerModel) return player;
+    const filter: Record<string, any> = {playerId: player.playerId};
+    if (expectSessionId !== undefined) filter.sessionId = expectSessionId;
+
+    const foundPlayerModel = await playerModel.findOne(filter);
+    if (!foundPlayerModel) {
+        if (expectSessionId !== undefined) {
+            console.warn(`[updatePlayer] skipped stale write for playerId=${player.playerId} — session no longer owns this character`);
+        }
+        return player;
+    }
     foundPlayerModel.set(playerObject);
 
     await foundPlayerModel.save().catch((err) => console.error(err));
     return player;
+}
+
+export const SESSION_HEARTBEAT_INTERVAL_MS = 20_000;
+// 40s is the worst-case legitimate gap between heartbeats: FightRoom scales clock deltaTime by
+// state.timeScale, so at the minimum allowed 0.5x fight speed a 20s clock interval fires every
+// 40s of wall time. 120s leaves 3 missed beats of slack for event-loop stalls/slow Mongo
+// round-trips, and is well above the ~35s (30s allowReconnection + 5s onLeave disconnect delay)
+// teardown window, so a room mid-teardown is never robbed of its claim. It's also exactly how
+// long a character stays locked out after a hard crash with no clean onLeave — a "try again
+// shortly" experience rather than the permanent lockout every crashed-mid-creation character
+// suffered before this field existed.
+export const SESSION_CLAIM_TTL_MS = 120_000;
+
+export type SessionClaimResult = 'claimed' | 'busy' | 'not-found';
+
+/**
+ * Atomic compare-and-set claim of a character's live session — a single updateOne, so MongoDB
+ * serializes concurrent callers under the document write lock; two callers can never both match.
+ *
+ * The claim is granted when ANY of these hold:
+ *   - sessionId is '' / null / missing        -> the character is free
+ *   - sessionId === this same sessionId       -> idempotent re-claim (retries, edge cases)
+ *   - sessionHeartbeatAt is missing or stale  -> the previous owner crashed, or the document
+ *                                                predates this feature entirely
+ */
+export async function claimPlayerSession(
+    playerId: number,
+    sessionId: string,
+    roomId: string,
+    phase: 'draft' | 'fight',
+): Promise<SessionClaimResult> {
+    const now = new Date();
+    const staleCutoff = new Date(now.getTime() - SESSION_CLAIM_TTL_MS);
+
+    const res = await playerModel.updateOne(
+        {
+            playerId,
+            $or: [
+                // $in with null also matches a missing field, so this one clause covers ''/null/absent.
+                {sessionId: {$in: ['', null]}},
+                {sessionId},
+                // $not matches missing/null too — "no heartbeat at all, or an old one".
+                {sessionHeartbeatAt: {$not: {$gte: staleCutoff}}},
+            ],
+        },
+        {
+            $set: {
+                sessionId,
+                sessionRoomId: roomId,
+                sessionPhase: phase,
+                sessionClaimedAt: now,
+                sessionHeartbeatAt: now,
+            },
+        },
+    );
+
+    if (res.matchedCount === 1) return 'claimed';
+    // Only on the (rare) failure path do we pay a second round-trip to distinguish
+    // "someone else holds it" from "this character doesn't exist yet".
+    const exists = await playerModel.exists({playerId});
+    return exists ? 'busy' : 'not-found';
+}
+
+/** Bounded retry, only on 'busy' — absorbs the legitimate hand-off race in the normal
+ *  shop -> fight -> shop loop: the outgoing room's onLeave (save + release) can take a few
+ *  hundred ms, and the incoming room's onJoin already burned its own 1s delay(1000) before
+ *  getting here. A genuinely live session never releases, so every retry still fails and a real
+ *  duplicate join is still rejected — just ~2s later. */
+export async function claimPlayerSessionWithRetry(
+    playerId: number,
+    sessionId: string,
+    roomId: string,
+    phase: 'draft' | 'fight',
+    attempts = 8,
+    delayMs = 250,
+): Promise<SessionClaimResult> {
+    for (let i = 0; ; i++) {
+        const result = await claimPlayerSession(playerId, sessionId, roomId, phase);
+        if (result !== 'busy' || i >= attempts - 1) return result;
+        await new Promise((r) => setTimeout(r, delayMs));
+    }
+}
+
+/** Keeps a live claim from going stale. Guarded on sessionId so a room whose claim was already
+ *  stolen (post-crash TTL takeover, followed by the "crashed" process turning out to still be
+ *  alive) cannot resurrect it. Returns false when the claim is no longer ours. */
+export async function touchPlayerSession(playerId: number, sessionId: string): Promise<boolean> {
+    const res = await playerModel.updateOne(
+        {playerId, sessionId},
+        {$set: {sessionHeartbeatAt: new Date()}},
+    );
+    return res.matchedCount === 1;
+}
+
+/** Releases a claim — guarded on sessionId, so a rejected join or a zombie room can only ever
+ *  release ITS OWN claim, never the live holder's. Returns false if it wasn't ours to release. */
+export async function releasePlayerSession(playerId: number, sessionId: string): Promise<boolean> {
+    const res = await playerModel.updateOne(
+        {playerId, sessionId},
+        {
+            $set: {sessionId: ''},
+            $unset: {sessionClaimedAt: '', sessionHeartbeatAt: '', sessionRoomId: '', sessionPhase: ''},
+        },
+    );
+    return res.matchedCount === 1;
 }
 
 /** Writes the run-ending win straight to the character's live document so the Wall of Fame
@@ -402,6 +548,12 @@ function cleanRawPlayerDoc(doc: any): Record<string, any> {
     };
 }
 
+// NOTE: sessionId is deliberately absent from the returned object below — see the
+// sessionClaimedAt/sessionHeartbeatAt/sessionRoomId/sessionPhase block on PlayerSchema above. It
+// is owned exclusively by claimPlayerSession/releasePlayerSession/touchPlayerSession. Including
+// it here would let any whole-document updatePlayer() — including one from a rejected join or a
+// zombie room — silently clear or corrupt a live claim, which is exactly the last-writer-wins
+// hole that made the mid-fight save-scumming exploit possible.
 export function playerToPlainObject(player: Player): Record<string, any> {
     const equippedItems: Record<string, any> = {};
     player.equippedItems.forEach((item, slot) => {
@@ -414,7 +566,6 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         gold: player.gold,
         xp: player.xp,
         level: player.level,
-        sessionId: player.sessionId,
         maxXp: player.maxXp,
         round: player.round,
         lives: player.lives,
@@ -499,22 +650,32 @@ const LEADERBOARD_PROJECTION = {
 export interface RunSummary {
     playerId: number; name: string; avatarUrl: string; level: number; round: number;
     lives: number; wins: number; losses: number; gameVersion: number; busy: boolean;
+    /** Which room type currently holds the claim — only meaningful when busy. */
+    busyPhase?: 'draft' | 'fight';
 }
 
 // Batch fetch for the frontend's run-list (see RunSummariesService) — the same lean fields as
-// LEADERBOARD_PROJECTION plus `lives` and `sessionId`, the latter reduced to a `busy` boolean
-// and never returned raw (it's a live Colyseus session id, not something a client should see).
+// LEADERBOARD_PROJECTION plus `lives` and the session-claim fields, reduced to a `busy` boolean
+// (never returning sessionId itself — it's a live Colyseus session id, not something a client
+// should see). `busy` is staleness-aware: a claim whose heartbeat is older than
+// SESSION_CLAIM_TTL_MS is abandoned (crashed room) and must NOT be reported as busy, or every
+// pre-claim-fix crash-locked character (and any post-crash document still inside the TTL window)
+// would show as permanently "in progress elsewhere".
 export async function getRunSummaries(playerIds: number[]): Promise<RunSummary[]> {
     if (!playerIds.length) return [];
     const docs = await playerModel.find(
         { playerId: { $in: playerIds } },
-        { ...LEADERBOARD_PROJECTION, lives: 1, sessionId: 1 },
+        { ...LEADERBOARD_PROJECTION, lives: 1, sessionId: 1, sessionHeartbeatAt: 1, sessionPhase: 1 },
     ).lean();
-    return docs.map(d => ({
-        playerId: d.playerId, name: d.name, avatarUrl: d.avatarUrl, level: d.level, round: d.round,
-        lives: d.lives, wins: d.wins, losses: d.losses, gameVersion: d.gameVersion,
-        busy: !!d.sessionId,
-    }));
+    const liveCutoff = Date.now() - SESSION_CLAIM_TTL_MS;
+    return docs.map(d => {
+        const busy = !!d.sessionId && !!d.sessionHeartbeatAt && d.sessionHeartbeatAt.getTime() > liveCutoff;
+        return {
+            playerId: d.playerId, name: d.name, avatarUrl: d.avatarUrl, level: d.level, round: d.round,
+            lives: d.lives, wins: d.wins, losses: d.losses, gameVersion: d.gameVersion,
+            busy, busyPhase: busy ? (d.sessionPhase as 'draft' | 'fight' | undefined) : undefined,
+        };
+    });
 }
 
 // Short-TTL cache for the leaderboard/Wall-of-Fame ranked lists — see cachedAggregate below.
@@ -685,7 +846,8 @@ export async function buildJoe(forPlayerId: number): Promise<Player> {
     const avatarArray = Array.from(Object.values(PlayerAvatar));
     // Deterministic (not random) so the draft preview and the fight show the same portrait —
     // the live player's playerId is stable across the whole run.
-    const joeModel = getNewPlayer(JOE_PLAYER_ID, 'Joe', '', avatarArray[Math.abs(forPlayerId) % 3], 10);
+    // Never persisted (no .save() call below) — roomId is irrelevant, passed empty.
+    const joeModel = getNewPlayer(JOE_PLAYER_ID, 'Joe', '', avatarArray[Math.abs(forPlayerId) % 3], 10, '');
     const joe = getPlayerSchemaObject(joeModel.toObject());
     joe.baseStats.maxHp = 100;
     joe.baseStats.strength = 2;
