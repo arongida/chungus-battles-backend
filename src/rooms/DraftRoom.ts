@@ -41,6 +41,11 @@ export class DraftRoom extends BaseRoom {
     // currently visible) so repeated/cross-slot rerolls can't bring back a talent already seen.
     // Reset whenever updateTalentSelection regenerates a fresh batch (level-up/select).
     private talentSelectionSeen: Set<number> = new Set();
+    // Serializes refresh_talent_slot handling so a second reroll's exclusion snapshot is only
+    // computed after the first reroll's state mutation has fully landed — otherwise two rerolls
+    // fired for different slots in quick succession both read talentSelectionSeen before either
+    // has written to it, and can independently draw the same talent from the DB.
+    private talentRerollChain: Promise<void> = Promise.resolve();
     // Stack of recently-sold items, kept around so accidental sales can be undone in
     // reverse order. Cleared by any gold-spending action (see invalidateUndoSell).
     private soldItemStack: Item[] = [];
@@ -453,7 +458,13 @@ export class DraftRoom extends BaseRoom {
     // protected (not private): BotDraftRoom (src/bot/BotDraftRoom.ts) subclasses this room to
     // drive full runs headlessly, one-for-one mirroring the onMessage wrappers above — same
     // reasoning as FightRoom.handleFightEnd's protected visibility for TournamentFightRoom.
-    protected async handleRefreshTalentSlot(client: Client, talentId: number) {
+    protected handleRefreshTalentSlot(client: Client, talentId: number): Promise<void> {
+        const task = this.talentRerollChain.then(() => this.doRefreshTalentSlot(client, talentId));
+        this.talentRerollChain = task.catch(() => {}); // don't let one failure wedge the chain
+        return task;
+    }
+
+    private async doRefreshTalentSlot(client: Client, talentId: number) {
         const index = this.state.availableTalents.findIndex((talent) => talent.talentId === talentId);
         if (index === -1) {
             client.send('error', 'Not possible to reroll talent!');
