@@ -199,7 +199,7 @@ export async function saveReplay(data: {
     events: any[];
     truncated: boolean;
     stats?: FightStatsMessage;
-    kind?: 'run' | 'tournament';
+    kind?: 'run' | 'bot' | 'tournament';
     tournamentId?: string;
     stage?: string;
     matchId?: string;

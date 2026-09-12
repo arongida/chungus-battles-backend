@@ -179,7 +179,15 @@ export class DraftRoom extends BaseRoom {
             // Inserts WITH the session already claimed + heartbeat-stamped (see getNewPlayer), so
             // a brand-new character is locked from the instant it exists — and, unlike before,
             // that lock now expires if this process dies before onLeave ever runs.
-            const newPlayer = await createNewPlayer(options.playerId, name, client.sessionId, avatarUrl, this.roomId);
+            // isBot/startingGold are read straight off the join options so src/bot/BotRunner.ts
+            // can request a bot-flagged, production-gold character through the same onJoin a real
+            // player uses — a real frontend join never sends either, so options.isBot is always
+            // undefined (=== true is false) and options.startingGold is always undefined for a
+            // human join, leaving createNewPlayer's own NODE_ENV-based default untouched.
+            const newPlayer = await createNewPlayer(options.playerId, name, client.sessionId, avatarUrl, this.roomId, {
+                isBot: options.isBot === true,
+                startingGold: typeof options.startingGold === 'number' ? options.startingGold : undefined,
+            });
             this.beginSession(Number(options.playerId), client.sessionId);
             this.state.remainingTalentPoints = avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
             await this.setUpState(newPlayer, client);
@@ -442,7 +450,10 @@ export class DraftRoom extends BaseRoom {
         return maxTier + 1;
     }
 
-    private async handleRefreshTalentSlot(client: Client, talentId: number) {
+    // protected (not private): BotDraftRoom (src/bot/BotDraftRoom.ts) subclasses this room to
+    // drive full runs headlessly, one-for-one mirroring the onMessage wrappers above — same
+    // reasoning as FightRoom.handleFightEnd's protected visibility for TournamentFightRoom.
+    protected async handleRefreshTalentSlot(client: Client, talentId: number) {
         const index = this.state.availableTalents.findIndex((talent) => talent.talentId === talentId);
         if (index === -1) {
             client.send('error', 'Not possible to reroll talent!');
@@ -529,7 +540,7 @@ export class DraftRoom extends BaseRoom {
         if (talent) track(talent, 1, 0, 0, gold, 0);
     }
 
-    private async buyItem(itemId: number, client: Client) {
+    protected async buyItem(itemId: number, client: Client) {
         // Exclude already-sold slots: itemId isn't unique across the shop array (e.g. Second
         // Thoughts carrying an item over into a shop that also independently rolls the same
         // itemId elsewhere) — bought items stay in `shop` with sold=true rather than being
@@ -624,7 +635,7 @@ export class DraftRoom extends BaseRoom {
         await this.revalidateUpgradePreviews();
     }
 
-    private async sellItem(uid: number) {
+    protected async sellItem(uid: number) {
         const item = this.state.player.inventory.find((item) => item.uid === uid);
         if (!item) return;
         const goldBefore = this.state.player.gold;
@@ -667,7 +678,7 @@ export class DraftRoom extends BaseRoom {
         await this.revalidateUpgradePreviews();
     }
 
-    private undoSell(client: Client) {
+    protected undoSell(client: Client) {
         const item = this.soldItemStack[this.soldItemStack.length - 1];
         if (!item) {
             client.send('error', 'Nothing to undo!');
@@ -778,7 +789,7 @@ export class DraftRoom extends BaseRoom {
         }
     }
 
-    private async equipItem(uid: number, slot: EquipSlot | string, client: Client) {
+    protected async equipItem(uid: number, slot: EquipSlot | string, client: Client) {
         if (slot === 'drink') {
             await this.drinkItem(uid, client);
             return;
@@ -790,7 +801,7 @@ export class DraftRoom extends BaseRoom {
         this.state.player.setItemEquipped(item, slot as EquipSlot);
     }
 
-    private async unequipItem(uid: number, slot: EquipSlot) {
+    protected async unequipItem(uid: number, slot: EquipSlot) {
         const item = this.state.player.equippedItems.get(slot);
         if (!item || item.uid !== uid) return;
         this.state.player.setItemUnequipped(item, slot);
@@ -809,7 +820,7 @@ export class DraftRoom extends BaseRoom {
         await this.updateShop(this.state.shopSize);
     };
 
-    private async refreshShop(client: Client) {
+    protected async refreshShop(client: Client) {
         // Fortune's Fool (aura): rerolls are entirely free, checked before the shared free-charge
         // pool so it doesn't burn a Haggler/Bargain Hunter charge either.
         // Free-charge pool (Haggler item skill + Bargain Hunter talent): spend a charge before
@@ -842,18 +853,18 @@ export class DraftRoom extends BaseRoom {
         await this.updateShop(this.state.shopSize);
     }
 
-    private async handleLockShop(client: Client) {
+    protected async handleLockShop(client: Client) {
         const shop = this.state.shop;
         this.state.player.setLockedShop(shop);
         client.send('message', 'shop locked');
     }
 
-    private async handleUnlockShop(client: Client) {
+    protected async handleUnlockShop(client: Client) {
         this.state.player.unlockShop();
         client.send('message', 'shop unlocked');
     }
 
-    private async drinkItem(uid: number, client: Client) {
+    protected async drinkItem(uid: number, client: Client) {
         const item = this.state.player.inventory.find((item) => item.uid === uid);
         if (!item) {
             return;
@@ -887,7 +898,7 @@ export class DraftRoom extends BaseRoom {
         client.send('draft_log', `You drank the ${item.name} — ${brewDescription}`);
     }
 
-    private async selectTalent(talentId: number, client: Client) {
+    protected async selectTalent(talentId: number, client: Client) {
         // Checked and decremented synchronously, before the talent lookup/push and before any
         // await below (in particular grantFlashSaleFlask's DB read) — Colyseus does not
         // serialize async onMessage handlers, and JS's run-to-completion semantics mean this
@@ -919,7 +930,7 @@ export class DraftRoom extends BaseRoom {
      *  tag, so a tampered payload can't grant an arbitrary bonus. Clears both pending cards (the
      *  one not picked is discarded, not banked) and rebuilds affectedStats immediately so the
      *  un-suspended total is visible without waiting on the next AURA tick. */
-    private handleJokerPick(client: Client, stat: string) {
+    protected handleJokerPick(client: Client, stat: string) {
         const talent = this.state.player.talents.find((t) => t.talentId === TalentType.JOKER);
         if (!talent) {
             client.send('error', 'No Joker talent found.');
@@ -944,7 +955,7 @@ export class DraftRoom extends BaseRoom {
         });
     }
 
-    private async buyXp(xp: number, price: number, client: Client) {
+    protected async buyXp(xp: number, price: number, client: Client) {
         if (this.state.player.talents.some((t) => t.talentId === TalentType.FUTURE_NOW)) {
             client.send('error', 'Future is Now blocks buying XP directly!');
             return;

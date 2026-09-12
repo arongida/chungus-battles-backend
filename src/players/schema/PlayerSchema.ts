@@ -168,6 +168,12 @@ export class Player extends Schema implements IStats {
     killedByPlayerId: number;
     killedByOriginalPlayerId: number;
     killedByName: string;
+    // Bot-played character (src/bot/) — set once at creation, persisted normally via
+    // playerToPlainObject/updatePlayer (same treatment as killedByPlayerId above), and carried
+    // into every copyPlayer() matchmaking snapshot. Not @type: no live room code needs it synced
+    // to a connected client, and new @type fields must stay appended last for the frontend
+    // schema mirror — see DraftState.ts's comment on that.
+    isBot: boolean = false;
 
 
     get hp(): number {
@@ -836,6 +842,12 @@ export class Player extends Schema implements IStats {
         const { inventory, talents, lockedShop, equippedItems, baseStats, ...primitives } = source.toJSON() as any;
         this.assign(primitives);
         this.baseStats.assign(baseStats || {});
+        // isBot is a plain (non-@type) field — source.toJSON() above only serializes @type
+        // fields, so it must be copied explicitly here or a bot character's own state.player
+        // (DraftRoom.setUpState) and a bot opponent's state.enemy (FightRoom.setUpState) would
+        // silently read back isBot:false after every copyFrom, breaking the flag this field
+        // exists for. A real (non-bot) player's isBot is always false, so this is a no-op there.
+        this.isBot = source.isBot;
 
         // In-place copy for collection fields
         this.inventory.clear();
