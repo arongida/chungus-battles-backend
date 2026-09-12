@@ -87,6 +87,11 @@ const PlayerSchema = new Schema({
     killedByPlayerId: Number,
     killedByOriginalPlayerId: Number,
     killedByName: String,
+    // Bot-played characters (src/bot/) — set once at creation and carried through every
+    // copyPlayer() snapshot via playerToPlainObject below, so a matchmaking opponent's origin is
+    // always knowable. Bots stay on leaderboards/Wall of Fame (visible, not hidden) — this flag
+    // exists purely so bot-vs-human data can be told apart in analysis, not to exclude bots.
+    isBot: {type: Boolean, default: false},
 });
 
 // Backs the wall-of-fame aggregation sorts ({$sort: {wins:-1, originalPlayerId:-1, playerId:1}})
@@ -247,7 +252,8 @@ function getNewPlayer(playerId: number,
                       sessionId: string,
                       avatarUrl: string,
                       startingGold: number,
-                      roomId: string) {
+                      roomId: string,
+                      isBot = false) {
     const startingLevel = avatarUrl === PlayerAvatar.THIEF ? 2 : 1;
     const now = new Date();
     return new playerModel({
@@ -255,6 +261,7 @@ function getNewPlayer(playerId: number,
         originalPlayerId: playerId,
         name: name,
         gold: startingGold,
+        isBot: isBot,
         xp: 0,
         level: startingLevel,
         sessionId: sessionId,
@@ -303,10 +310,15 @@ export async function createNewPlayer(
     name: string,
     sessionId: string,
     avatarUrl: string,
-    roomId: string
+    roomId: string,
+    // Additive, both optional — every existing 5-arg call site (DraftRoom.onJoin) is unchanged.
+    // `startingGold` lets src/bot/BotRunner.ts force the production value (8) even when running
+    // against a dev server (whose default is 1000 — see the NODE_ENV branch below), since a bot
+    // with 1000 starting gold buys out the entire shop every round and produces useless telemetry.
+    opts?: { isBot?: boolean; startingGold?: number }
 ): Promise<Player> {
-    const startingGold = process.env.NODE_ENV === 'production' ? 8 : 1000;
-    const newPlayer = getNewPlayer(playerId, name, sessionId, avatarUrl, startingGold, roomId);
+    const startingGold = opts?.startingGold ?? (process.env.NODE_ENV === 'production' ? 8 : 1000);
+    const newPlayer = getNewPlayer(playerId, name, sessionId, avatarUrl, startingGold, roomId, opts?.isBot ?? false);
     await newPlayer.save().catch((err) => console.error(err));
     const playerSchema = getPlayerSchemaObject(newPlayer.toObject());
     const defaultWeapon = await getItemById(getDefaultWeaponId(avatarUrl));
@@ -620,6 +632,7 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         killedByPlayerId: player.killedByPlayerId,
         killedByOriginalPlayerId: player.killedByOriginalPlayerId,
         killedByName: player.killedByName,
+        isBot: player.isBot ?? false,
         baseStats: player.baseStats?.toJSON() || {},
         equippedItems,
         inventory: player.inventory.map(item => item.toJSON()),
@@ -658,6 +671,7 @@ export function snapshotPlayer(player: Player): Record<string, any> {
         income: player.income,
         refreshShopCost: player.refreshShopCost,
         gameVersion: player.gameVersion,
+        isBot: player.isBot ?? false,
         baseStats: player.baseStats?.toJSON() || {},
         equippedItems,
         inventory: player.inventory.map(item => item.toJSON()),
@@ -674,6 +688,7 @@ export function snapshotPlayer(player: Player): Record<string, any> {
 const LEADERBOARD_PROJECTION = {
     playerId: 1, originalPlayerId: 1, name: 1, avatarUrl: 1, level: 1, round: 1,
     wins: 1, losses: 1, gameVersion: 1, runsEnded: 1, lastPlayedAt: 1, latestPlayerId: 1,
+    isBot: 1,
 } as const;
 
 export interface RunSummary {
@@ -778,6 +793,11 @@ export interface LeaderboardFilters {
     level?: number;
     minWins?: number;
     rankForOriginalPlayerId?: number;
+    // undefined = unfiltered (default, today's behavior); true = bots only; false = humans only.
+    // Humans-only must use $ne rather than an exact {isBot:false} match — every player doc that
+    // predates this field has no `isBot` key at all, so an exact-false match would wrongly
+    // exclude every one of them.
+    isBot?: boolean;
 }
 
 function buildMatchConditions(filters: LeaderboardFilters): Record<string, any> {
@@ -788,6 +808,7 @@ function buildMatchConditions(filters: LeaderboardFilters): Record<string, any> 
     if (filters.minRound !== undefined) match.round = { $gte: filters.minRound };
     if (filters.level !== undefined) match.level = filters.level;
     if (filters.minWins !== undefined) match.wins = { $gte: filters.minWins };
+    if (filters.isBot !== undefined) match.isBot = filters.isBot ? true : { $ne: true };
     return match;
 }
 

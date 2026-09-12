@@ -66,6 +66,10 @@ export class FightRoom extends BaseRoom {
     // so it can be included in the end_battle broadcast, not just the fire-and-forget
     // replay save that happens afterward. Lets the client deep-link "Watch Replay".
     protected replayId = randomUUID();
+    // protected (not private): BotFightRoom (src/bot/BotFightRoom.ts) overrides this to 'bot' so
+    // bot-run replays are filterable/prunable the same way tournament replays already are (see
+    // Replay.ts's 'kind' field and pruneSeasonReplays), without touching a live player's replays.
+    protected replayKind: 'run' | 'bot' | 'tournament' = 'run';
     // Built once in handleFightEnd, before any end_battle broadcast — included in every
     // end_battle payload and the saved replay doc. null until the fight actually concludes.
     protected fightStatsPayload: FightStatsMessage | null = null;
@@ -1024,6 +1028,7 @@ export class FightRoom extends BaseRoom {
                 events: this.recorder.events,
                 truncated: this.recorder.truncated,
                 stats: this.fightStatsPayload ?? undefined,
+                kind: this.replayKind,
             }).catch(err => console.error('[FightRoom] replay save failed:', err));
         }
     }
@@ -1105,7 +1110,10 @@ export class FightRoom extends BaseRoom {
         };
     }
 
-    private handleSelectLossReward(client: Client, message: SelectLossRewardMessage) {
+    // protected (not private): BotFightRoom (src/bot/BotFightRoom.ts) subclasses this room to
+    // drive full runs headlessly and calls this directly with the bot policy's choice — same
+    // reasoning as the other protected fight-state fields/methods above.
+    protected handleSelectLossReward(client: Client, message: SelectLossRewardMessage) {
         const state = this.state;
         if (!state.lossRewardPending || !state.lossRewardOptions) {
             client.send('error', 'No loss reward to choose.');

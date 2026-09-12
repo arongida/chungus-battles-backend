@@ -6,7 +6,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import { timingSafeEqual } from 'crypto';
+import { timingSafeEqual, randomUUID } from 'crypto';
 import type { Response, NextFunction } from 'express';
 
 // The game's real frontend origins — GitHub Pages (production), fly.io-hosted frontend
@@ -55,7 +55,10 @@ import { getReplaysByOriginalPlayer, getReplayById, getGameStats, pruneSeasonRep
 import { SEASONS } from './common/seasons';
 import { definedRarityTiers, ITEM_SKILLS } from './items/behavior/itemSkillBalance';
 import { TournamentFightRoom } from './tournament/TournamentFightRoom';
+import { BotDraftRoom } from './bot/BotDraftRoom';
+import { BotFightRoom } from './bot/BotFightRoom';
 import { executeTournament, isTournamentRunning, prepareTournament } from './tournament/TournamentRunner';
+import { executeBotBatch, getBotBatchStatus, isBotBatchRunning, stopBotBatch } from './bot/BotRunner';
 import { getTournamentBySeason, listTournaments } from './tournament/db/Tournament';
 import type { Request } from 'express';
 
@@ -147,6 +150,11 @@ export const server = defineServer({
         // by TournamentRunner.ts to run headless season-end tournament fights. Registered here
         // because that's what makes the room name resolvable to matchMaker.createRoom at all.
         tournament_fight: defineRoom(TournamentFightRoom),
+        // Never joined by a client (maxClients = 0) — created directly via matchMaker.createRoom
+        // by src/bot/BotRunner.ts to play full runs headlessly (matchmaking-variety + balance
+        // telemetry bots). Same registration-only reasoning as tournament_fight above.
+        bot_draft: defineRoom(BotDraftRoom),
+        bot_fight: defineRoom(BotFightRoom),
     },
 
     express: (app) => {
@@ -206,7 +214,10 @@ export const server = defineServer({
             const level = req.query.level !== undefined ? parseQueryInt(req.query.level, 0) : undefined;
             const minWins = req.query.minWins !== undefined ? parseQueryInt(req.query.minWins, 0) : undefined;
             const rankForOriginalPlayerId = req.query.rankForOriginalPlayerId !== undefined ? parseQueryInt(req.query.rankForOriginalPlayerId, 0) || undefined : undefined;
-            const result = await getLeaderboard({ limit, skip, gameVersion: currentVersion ? GAME_VERSION : undefined, name, avatar, minRound, level, minWins, rankForOriginalPlayerId });
+            // Bots stay visible on the leaderboard by default (isBot unset = unfiltered) — this
+            // param exists for analysis, e.g. isBot=false to see humans only.
+            const isBot = req.query.isBot === 'true' ? true : req.query.isBot === 'false' ? false : undefined;
+            const result = await getLeaderboard({ limit, skip, gameVersion: currentVersion ? GAME_VERSION : undefined, name, avatar, minRound, level, minWins, rankForOriginalPlayerId, isBot });
             res.status(200).json(result);
         }));
 
@@ -366,6 +377,39 @@ export const server = defineServer({
             if (!season || Number.isNaN(season)) return res.status(400).send({ error: 'season required' });
             const result = await pruneSeasonReplays(season);
             res.status(200).json(result);
+        }));
+
+        // Kicks off a batch of bot runs (src/bot/BotRunner.ts) — matchmaking-variety and
+        // balance-telemetry play. Same fire-and-forget-after-202 shape as /admin/tournament: the
+        // batch itself (minutes to hours, depending on `runs`) runs in the background after the
+        // response is sent. Guarded to one batch per process for the same reason
+        // /admin/tournament is (fly.io's shared-CPU machines — see BotRunner.ts's comment).
+        app.post('/admin/bots', strictLimiter, asyncHandler(async (req, res) => {
+            if (!isAuthorizedAdmin(req)) return res.status(401).send({ error: 'unauthorized' });
+            if (isBotBatchRunning()) return res.status(409).send({ error: 'A bot batch is already running in this process.' });
+
+            const runs = req.body?.runs !== undefined ? Number(req.body.runs) : 10;
+            if (!Number.isFinite(runs) || runs < 1 || runs > 1000) return res.status(400).send({ error: 'runs must be between 1 and 1000' });
+            const policyId = req.body?.policyId !== undefined ? String(req.body.policyId) : undefined;
+            const timeScale = req.body?.timeScale !== undefined ? Number(req.body.timeScale) : undefined;
+
+            const batchId = randomUUID();
+            res.status(202).json({ batchId, runs });
+            executeBotBatch(batchId, { runs, policyId, timeScale })
+                .catch(err => console.error(`[BotRunner] batch ${batchId} failed:`, err));
+        }));
+
+        app.get('/admin/bots/status', asyncHandler(async (req, res) => {
+            if (!isAuthorizedAdmin(req)) return res.status(401).send({ error: 'unauthorized' });
+            res.status(200).json(getBotBatchStatus());
+        }));
+
+        // Cooperative — the run currently in progress finishes normally rather than being torn
+        // down mid-fight (see stopBotBatch's doc comment); only the runs after it are skipped.
+        app.post('/admin/bots/stop', strictLimiter, asyncHandler(async (req, res) => {
+            if (!isAuthorizedAdmin(req)) return res.status(401).send({ error: 'unauthorized' });
+            const stopped = stopBotBatch();
+            res.status(200).json({ stopped });
         }));
 
         /**
