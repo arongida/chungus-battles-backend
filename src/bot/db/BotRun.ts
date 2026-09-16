@@ -65,6 +65,17 @@ export interface BotRunEquippedSummary {
     class: string;
 }
 
+/** Measured per-talent contribution at the end of a run — the ground truth a policy's talent
+ *  valuations can be checked against (a talent the policy rates highly but that never actually
+ *  fires is a stale hint, not a good pick). */
+export interface BotRunTalentEffectiveness {
+    talentId: number;
+    totalActivations: number;
+    totalDamageDealt: number;
+    totalHealingDone: number;
+    totalGoldGained: number;
+}
+
 const BotDecisionSchema = new Schema<BotDecisionRecord>(
     { step: Number, type: String, itemId: Number, uid: Number, talentId: Number, slot: String, rejected: Boolean, reason: String, latencyMs: Number },
     { _id: false },
@@ -97,6 +108,12 @@ const BotRunSchema = new Schema({
     batchId: String,
     policyId: { type: String, required: true },
     policyVersion: String,
+    // Set by policies that vary their weights per run (heuristic-v2). Null on v1 rows, which is
+    // itself a useful grouping — see getArchetypeWinRates.
+    archetypeId: String,
+    seed: Number,
+    // Identifies the tunable set, so a tuning pass is separable without bumping policyVersion.
+    policyConfigHash: String,
     startedAt: { type: Date, default: Date.now },
     finishedAt: Date,
     gameVersion: Number,
@@ -118,10 +135,18 @@ const BotRunSchema = new Schema({
     losses: Number,
     finalTalentIds: [Number],
     finalEquipped: [{ slot: String, itemId: Number, rarity: Number, skillId: Number, class: String, _id: false }],
+    finalTalentEffectiveness: [{
+        talentId: Number, totalActivations: Number, totalDamageDealt: Number,
+        totalHealingDone: Number, totalGoldGained: Number, _id: false,
+    }],
+    // Talent/skill ids the policy had no valuation for. Nonzero means the catalogs have drifted
+    // behind the game — visible in production telemetry even if CI never ran.
+    unknownHintIds: [Number],
     rounds: [BotRoundSchema],
 });
 
-BotRunSchema.index({ policyId: 1, startedAt: -1 });
+// Prefixed on policyId, so it also serves the policy-only queries the old index covered.
+BotRunSchema.index({ policyId: 1, archetypeId: 1, startedAt: -1 });
 BotRunSchema.index({ gameVersion: 1, outcome: 1 });
 
 export const botRunModel = mongoose.model('BotRun', BotRunSchema);
@@ -139,6 +164,8 @@ export interface CreateBotRunInput {
     playerId: number;
     name: string;
     avatarUrl: string;
+    archetypeId?: string;
+    seed?: number;
 }
 
 export async function createBotRunDoc(data: CreateBotRunInput): Promise<void> {
@@ -148,6 +175,8 @@ export async function createBotRunDoc(data: CreateBotRunInput): Promise<void> {
         outcome: 'aborted', // overwritten by finishBotRun; a crash mid-run leaves this as the honest last-known outcome
         finalTalentIds: [],
         finalEquipped: [],
+        finalTalentEffectiveness: [],
+        unknownHintIds: [],
         rounds: [],
     });
 }
@@ -165,6 +194,9 @@ export interface FinishBotRunInput {
     losses: number;
     finalTalentIds: number[];
     finalEquipped: BotRunEquippedSummary[];
+    finalTalentEffectiveness?: BotRunTalentEffectiveness[];
+    unknownHintIds?: number[];
+    policyConfigHash?: string;
 }
 
 export async function finishBotRun(runId: string, data: FinishBotRunInput): Promise<void> {
@@ -189,12 +221,14 @@ export interface TalentWinRateRow {
 export async function getTalentWinRates(opts: {
     gameVersion?: number;
     policyId?: string;
+    archetypeId?: string;
     minRuns?: number;
 } = {}): Promise<TalentWinRateRow[]> {
-    const { gameVersion, policyId, minRuns = 20 } = opts;
+    const { gameVersion, policyId, archetypeId, minRuns = 20 } = opts;
     const match: Record<string, any> = { outcome: { $in: ['win', 'dead'] } };
     if (gameVersion !== undefined) match.gameVersion = gameVersion;
     if (policyId !== undefined) match.policyId = policyId;
+    if (archetypeId !== undefined) match.archetypeId = archetypeId;
 
     const pipeline: PipelineStage[] = [
         { $match: match },
@@ -228,11 +262,13 @@ export async function getItemFrequencyAtRound(opts: {
     minRound: number;
     gameVersion?: number;
     policyId?: string;
+    archetypeId?: string;
 }): Promise<ItemFrequencyRow[]> {
-    const { minRound, gameVersion, policyId } = opts;
+    const { minRound, gameVersion, policyId, archetypeId } = opts;
     const runMatch: Record<string, any> = { finalRound: { $gte: minRound } };
     if (gameVersion !== undefined) runMatch.gameVersion = gameVersion;
     if (policyId !== undefined) runMatch.policyId = policyId;
+    if (archetypeId !== undefined) runMatch.archetypeId = archetypeId;
 
     const pipeline: PipelineStage[] = [
         { $match: runMatch },
@@ -262,11 +298,13 @@ export interface RoundFightHealthRow {
 export async function getPerRoundFightHealth(opts: {
     gameVersion?: number;
     policyId?: string;
+    archetypeId?: string;
 } = {}): Promise<RoundFightHealthRow[]> {
-    const { gameVersion, policyId } = opts;
+    const { gameVersion, policyId, archetypeId } = opts;
     const match: Record<string, any> = {};
     if (gameVersion !== undefined) match.gameVersion = gameVersion;
     if (policyId !== undefined) match.policyId = policyId;
+    if (archetypeId !== undefined) match.archetypeId = archetypeId;
 
     const pipeline: PipelineStage[] = [
         ...(Object.keys(match).length ? [{ $match: match }] as PipelineStage[] : []),
@@ -289,6 +327,108 @@ export async function getPerRoundFightHealth(opts: {
         },
         { $sort: { _id: 1 } }, // post-group result has at most a few dozen rows (one per round reached)
         { $project: { _id: 0, round: '$_id', fights: 1, wins: 1, winRate: 1, vsBot: 1, vsBotRate: 1, avgDurationMs: 1 } },
+    ];
+    return botRunModel.aggregate(pipeline).exec();
+}
+
+export interface ArchetypeWinRateRow {
+    archetypeId: string | null;
+    runs: number;
+    wins: number;
+    winRate: number;
+    avgRound: number;
+    avgFinalLevel: number;
+}
+
+/** Win rate per build archetype. Rows from a policy that doesn't vary its build (heuristic-v1)
+ *  group under a null archetypeId, which is a useful baseline row rather than a gap. */
+export async function getArchetypeWinRates(opts: {
+    gameVersion?: number;
+    policyId?: string;
+    minRuns?: number;
+} = {}): Promise<ArchetypeWinRateRow[]> {
+    const { gameVersion, policyId, minRuns = 10 } = opts;
+    const match: Record<string, any> = { outcome: { $in: ['win', 'dead'] } };
+    if (gameVersion !== undefined) match.gameVersion = gameVersion;
+    if (policyId !== undefined) match.policyId = policyId;
+
+    const pipeline: PipelineStage[] = [
+        { $match: match },
+        {
+            $group: {
+                _id: { $ifNull: ['$archetypeId', null] },
+                runs: { $sum: 1 },
+                wins: { $sum: { $cond: [{ $eq: ['$outcome', 'win'] }, 1, 0] } },
+                avgRound: { $avg: '$finalRound' },
+                avgFinalLevel: { $avg: '$finalLevel' },
+            },
+        },
+        { $match: { runs: { $gte: minRuns } } },
+        { $addFields: { winRate: { $divide: ['$wins', '$runs'] } } },
+        { $sort: { winRate: -1 } }, // at most one row per archetype
+        { $project: { _id: 0, archetypeId: '$_id', runs: 1, wins: 1, winRate: 1, avgRound: 1, avgFinalLevel: 1 } },
+    ];
+    return botRunModel.aggregate(pipeline).exec();
+}
+
+export interface PolicyComparisonRow {
+    policyId: string;
+    policyVersion: string;
+    archetypeId: string | null;
+    policyConfigHash: string | null;
+    runs: number;
+    wins: number;
+    winRate: number;
+    avgRound: number;
+    unknownHintRuns: number;
+}
+
+/**
+ * The head-to-head readout for a policy A/B. Group by policy first, then archetype, so a v2 lift
+ * can be attributed rather than just observed.
+ *
+ * Caveat when reading it: matchmaking draws opponents from all same-round characters, so two
+ * policies run CONCURRENTLY fight each other's bots and their win rates stop being independent.
+ * Run the arms as alternating batches, and sanity-check vsBotRate per policy with
+ * getPerRoundFightHealth before believing a delta.
+ */
+export async function getPolicyComparison(opts: {
+    gameVersion?: number;
+    minRuns?: number;
+} = {}): Promise<PolicyComparisonRow[]> {
+    const { gameVersion, minRuns = 10 } = opts;
+    const match: Record<string, any> = { outcome: { $in: ['win', 'dead'] } };
+    if (gameVersion !== undefined) match.gameVersion = gameVersion;
+
+    const pipeline: PipelineStage[] = [
+        { $match: match },
+        {
+            $group: {
+                _id: {
+                    policyId: '$policyId',
+                    policyVersion: '$policyVersion',
+                    archetypeId: { $ifNull: ['$archetypeId', null] },
+                    policyConfigHash: { $ifNull: ['$policyConfigHash', null] },
+                },
+                runs: { $sum: 1 },
+                wins: { $sum: { $cond: [{ $eq: ['$outcome', 'win'] }, 1, 0] } },
+                avgRound: { $avg: '$finalRound' },
+                unknownHintRuns: {
+                    $sum: { $cond: [{ $gt: [{ $size: { $ifNull: ['$unknownHintIds', []] } }, 0] }, 1, 0] },
+                },
+            },
+        },
+        { $match: { runs: { $gte: minRuns } } },
+        { $addFields: { winRate: { $divide: ['$wins', '$runs'] } } },
+        { $sort: { winRate: -1 } }, // a handful of rows: policies x archetypes
+        {
+            $project: {
+                _id: 0,
+                policyId: '$_id.policyId', policyVersion: '$_id.policyVersion',
+                archetypeId: '$_id.archetypeId', policyConfigHash: '$_id.policyConfigHash',
+                runs: 1, wins: 1, winRate: 1, avgRound: 1, unknownHintRuns: 1,
+            },
+        },
     ];
     return botRunModel.aggregate(pipeline).exec();
 }

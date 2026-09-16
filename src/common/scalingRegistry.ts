@@ -4,7 +4,7 @@
 // scalingGraph.ts itself stays a leaf (types + the sort algorithm only) so those two files can
 // import IT without a cycle back through this one.
 
-import { ScalingNodeDef, ScalingNodeId, buildScalingOrder, skillNode, talentNode } from './scalingGraph';
+import { ScalingDeclaration, ScalingNodeDef, ScalingNodeId, buildScalingOrder, skillNode, talentNode } from './scalingGraph';
 import { ITEM_SKILLS } from '../items/behavior/itemSkillBalance';
 import { TALENT_SCALING } from '../talents/behavior/talentScaling';
 
@@ -35,4 +35,12 @@ export const SCALING_SKILL_IDS: Set<number> = new Set(
 /** Talent IDs that are scaling sources — same purpose as SCALING_SKILL_IDS above, talent side. */
 export const SCALING_TALENT_IDS: Set<number> = new Set(
   Object.keys(TALENT_SCALING).map(Number)
+);
+
+/** The same declarations keyed by node id. The read/write pairs are a machine-readable synergy
+ *  graph — "this source turns max HP into strength" — which the bot policy (src/bot/v2/synergy.ts)
+ *  reads to recognize combinations like Strong -> Bulwark -> Titan's Might without hand-authoring
+ *  them. Built from the same nodeDefs array as SCALING_ORDER, so it can never disagree with it. */
+export const SCALING_DECLARATIONS: Map<ScalingNodeId, ScalingDeclaration> = new Map(
+  nodeDefs.map((d) => [d.id, { reads: d.reads, writes: d.writes, after: d.after }])
 );

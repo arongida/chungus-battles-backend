@@ -58,7 +58,11 @@ import { TournamentFightRoom } from './tournament/TournamentFightRoom';
 import { BotDraftRoom } from './bot/BotDraftRoom';
 import { BotFightRoom } from './bot/BotFightRoom';
 import { executeTournament, isTournamentRunning, prepareTournament } from './tournament/TournamentRunner';
-import { executeBotBatch, getBotBatchStatus, isBotBatchRunning, stopBotBatch } from './bot/BotRunner';
+import {
+  DEFAULT_POLICY_ID, executeBotBatch, getBotBatchStatus, isBotBatchRunning, isKnownPolicyId,
+  listPolicyIds, stopBotBatch,
+} from './bot/BotRunner';
+import { ARCHETYPE_IDS, ArchetypeId, isArchetypeId } from './bot/v2/archetypes';
 import { getTournamentBySeason, listTournaments } from './tournament/db/Tournament';
 import type { Request } from 'express';
 
@@ -392,16 +396,31 @@ export const server = defineServer({
             if (!Number.isFinite(runs) || runs < 1 || runs > 1000) return res.status(400).send({ error: 'runs must be between 1 and 1000' });
             const policyId = req.body?.policyId !== undefined ? String(req.body.policyId) : undefined;
             const timeScale = req.body?.timeScale !== undefined ? Number(req.body.timeScale) : undefined;
+            const archetypeId = req.body?.archetypeId !== undefined ? String(req.body.archetypeId) : undefined;
+
+            // Validated before the 202: an unknown id used to silently fall back to the default
+            // policy while the telemetry recorded the requested one, quietly invalidating whatever
+            // comparison the batch was run for.
+            if (policyId !== undefined && !isKnownPolicyId(policyId)) {
+                return res.status(400).send({ error: `unknown policyId '${policyId}'`, known: listPolicyIds() });
+            }
+            if (archetypeId !== undefined && !isArchetypeId(archetypeId)) {
+                return res.status(400).send({ error: `unknown archetypeId '${archetypeId}'`, known: ARCHETYPE_IDS });
+            }
 
             const batchId = randomUUID();
-            res.status(202).json({ batchId, runs });
-            executeBotBatch(batchId, { runs, policyId, timeScale })
+            res.status(202).json({ batchId, runs, policyId: policyId ?? DEFAULT_POLICY_ID, archetypeId });
+            executeBotBatch(batchId, { runs, policyId, timeScale, archetypeId: archetypeId as ArchetypeId })
                 .catch(err => console.error(`[BotRunner] batch ${batchId} failed:`, err));
         }));
 
         app.get('/admin/bots/status', asyncHandler(async (req, res) => {
             if (!isAuthorizedAdmin(req)) return res.status(401).send({ error: 'unauthorized' });
-            res.status(200).json(getBotBatchStatus());
+            res.status(200).json({
+                ...getBotBatchStatus(),
+                availablePolicyIds: listPolicyIds(),
+                availableArchetypeIds: ARCHETYPE_IDS,
+            });
         }));
 
         // Cooperative — the run currently in progress finishes normally rather than being torn

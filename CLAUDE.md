@@ -157,7 +157,7 @@ Stats are **recalculated from scratch on every tick**:
 | `strength`         | Max damage roll                              |
 | `accuracy`         | Min damage roll (`accuracy ≤ strength`)      |
 | `defense`          | Damage reduction: `damage * (100 / (100 + defense))` |
-| `attackSpeed`      | Attacks per second (min 0.1)                 |
+| `attackSpeed`      | A **multiplier**, not a rate. A weapon swings at `weapon.baseAttackSpeed * player.attackSpeed`, clamped to a 0.1 floor **per weapon** (`FightRoom.startSingleWeaponTimer`). Shields have `baseAttackSpeed 0` and never swing; a player with no swinging weapon gets a fist (0.8) |
 | `maxHp` / `hp`     | HP capped at maxHp                           |
 | `dodgeRate`        | Dodge chance: `1 - 100/(100 + dodgeRate)`    |
 | `income`           | Bonus gold per round                         |
@@ -171,7 +171,7 @@ Stats are **recalculated from scratch on every tick**:
 - XP to level: `12 + level*4` (cumulative)
 - Win condition: beat the current highest win record (tracked globally)
 - Lose condition: `lives <= 0`
-- Gold per round: `round + 3 + income`
+- Gold per fight: `Math.floor(player.income)`, and `baseStats.income += 1` after every fight — so +1 income is worth +1 gold per remaining fight
 - XP per round: `round * 2`
 
 ### Items

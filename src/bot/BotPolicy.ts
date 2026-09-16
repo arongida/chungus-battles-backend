@@ -16,7 +16,7 @@
  *    calls instead of one per decision.
  */
 
-export const OBSERVATION_SCHEMA_VERSION = 1 as const;
+export const OBSERVATION_SCHEMA_VERSION = 2 as const;
 
 export type EquipSlotName = 'armor' | 'helmet' | 'mainHand' | 'offHand';
 
@@ -48,9 +48,22 @@ export interface ItemView {
     equipOptions: string[]; // slot names, plus the pseudo-slot 'drink' for potions
     affectedStats: Partial<StatBlock>;
     affectedEnemyStats: Partial<StatBlock>;
+    // Weapon damage profile. All four are inputs to FightRoom.tryWeaponAttack's roll:
+    //   min = baseMinDamage + accuracy
+    //   max = baseMaxDamage + bonusMaxDamage + strength * strengthScaling
+    // baseAttackSpeed is a per-weapon MULTIPLICAND, not a rate: the swing interval comes from
+    // `baseAttackSpeed * player.attackSpeed`, clamped at 0.1 per weapon. A shield's 0 is what
+    // keeps it out of the attack timers entirely.
     baseMinDamage: number;
     baseMaxDamage: number;
     baseAttackSpeed: number;
+    strengthScaling: number;
+    bonusMaxDamage: number;
+    // Trigger metadata — ACTIVE items (Wand of Fire, Flowering Staff, Magic Ring) proc at
+    // `activationRate * (100 + cooldownReduction)/100` per second; without it cooldownReduction
+    // can't be priced against anything.
+    triggerTypes: string[];
+    activationRate: number;
     // Shop-slot-only fields (0/false on an owned inventory/equipped item).
     upgradePreview: boolean;
     previewBaseRarity: number;
@@ -62,6 +75,16 @@ export interface ItemView {
     skillDescription: string;
     futureSkillId: number;
     futureSkillName: string;
+    // The skill's LIVE measured output while equipped (written by the aura pass). A policy that
+    // also estimates the skill's value from its own definition must not double-count these.
+    skillAffectedStats: Partial<StatBlock>;
+    skillAffectedEnemyStats: Partial<StatBlock>;
+    // Second skill slot — Weapon Whisperer grants a whole extra skill, so an item carrying one is
+    // worth roughly twice the skill value of an otherwise identical item.
+    skillId2: number;
+    skillName2: string;
+    skillAffectedStats2: Partial<StatBlock>;
+    skillAffectedEnemyStats2: Partial<StatBlock>;
     sold: boolean;
     equipped: boolean;
 }
@@ -75,6 +98,22 @@ export interface TalentView {
     triggerTypes: string[];
     affectedStats: Partial<StatBlock>;
     affectedEnemyStats: Partial<StatBlock>;
+    // The only numeric parameters most talents have: 37 of the 47 offerable talents carry no
+    // affectedStats at all, and their whole effect is `base`/`scaling` applied by their behavior
+    // function at `activationRate`. Any policy that scores talents needs these.
+    activationRate: number;
+    base: number;
+    scaling: number;
+    // Measured lifetime contribution. Only ever nonzero for a talent the player OWNS — the global
+    // talent documents an offer is built from carry no counters, so these read 0 on every offered
+    // talent. Use for keep/sell reasoning, telemetry and catalog calibration; never as an input to
+    // the pick decision, where they are structurally always 0.
+    totalActivations: number;
+    totalDamageDealt: number;
+    totalHealingDone: number;
+    totalGoldGained: number;
+    totalXpGained: number;
+    totalHealingPrevented: number;
 }
 
 export interface PlayerView {
@@ -106,6 +145,8 @@ export interface PlayerView {
     misconductFreeClaim: boolean;
     storeCreditFreeClaim: boolean;
     storeCreditFreeClaimCap: number;
+    /** Whether the shop is currently locked — without it, emitting lock_shop/unlock_shop oscillates. */
+    shopLocked: boolean;
     equipped: Partial<Record<EquipSlotName, ItemView>>;
     inventory: ItemView[];
     talents: TalentView[];
@@ -189,10 +230,22 @@ export type BotAction =
 
 export type LossRewardChoice = 'gold' | 'xp' | 'item_upgrade';
 
+/** Drained by the runner at the end of a run and recorded on the BotRun doc. Lets a policy report
+ *  gaps in its own knowledge (a talent it had no hint for) as telemetry rather than silence. */
+export interface PolicyDiagnostics {
+    unknownHintIds: number[];
+    /** Identifies the tunable set this run used, so a tuning pass stays separable in aggregations
+     *  without hand-bumping `version`. */
+    policyConfigHash?: string;
+}
+
 export interface BotPolicy {
     /** Stable id recorded on every telemetry doc — e.g. 'heuristic-v1', later 'llm-sonnet-v2'. */
     readonly id: string;
     readonly version: string;
+    /** Set only by a policy that varies its weights per run — recorded for per-archetype telemetry. */
+    readonly archetypeId?: string;
+    readonly seed?: number;
 
     /**
      * Plans the next chunk of the CURRENT draft phase as an ordered batch. The driver applies
@@ -208,4 +261,7 @@ export interface BotPolicy {
     onFightResult?(obs: FightResultObservation): void | Promise<void>;
     /** Optional. Lets a policy persist cross-run state (e.g. a trained policy's replay buffer). */
     onRunEnd?(obs: RunEndObservation): void | Promise<void>;
+
+    /** Optional. Called once at the end of a run; whatever is returned is recorded on the BotRun. */
+    drainDiagnostics?(): PolicyDiagnostics;
 }

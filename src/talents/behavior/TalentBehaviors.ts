@@ -283,12 +283,12 @@ export const TalentBehaviors = {
         });
     },
 
-    // Scam (reworked Season 24): the merchant/fence economy active. Every activation cons
-    // `talent.base` gold out of the mark — but the mark wises up, and `talent.scaling` strength is
-    // handed to the enemy for the rest of the fight, stacking with every scam. That escalating
-    // buff is the required downside (see CLAUDE.md's Talent Design Guidelines): a long fight pays
-    // well AND arms the person trying to kill you. Mirrors SNITCH, which does the same thing in
-    // reverse via affectedEnemyStats.
+    // Scam (reworked Season 24, gold-drain removed Season 27): the merchant/fence economy
+    // active. Every activation grants `talent.base` gold — but the mark wises up, and
+    // `talent.scaling` strength is handed to the enemy for the rest of the fight, stacking with
+    // every scam. That escalating buff is the required downside (see CLAUDE.md's Talent Design
+    // Guidelines): a long fight pays well AND arms the person trying to kill you. No longer
+    // reduces the enemy's gold — it's a pure self-gain funded by the strength downside.
     [TalentType.SCAM]: (context: TalentBehaviorContext) => {
         const { attacker, defender, client, talent, trigger } = context;
 
@@ -299,11 +299,10 @@ export const TalentBehaviors = {
 
         const gold = talent.base;
         attacker.gold += gold;
-        if (defender.gold > 0) defender.gold -= Math.min(gold, defender.gold);
         talent.affectedEnemyStats.strength += talent.scaling;
 
         track(talent, 1, 0, 0, gold, 0, { client, playerId: attacker.playerId });
-        client.send('combat_log', { text: `${attacker.name} scams ${gold} gold out of ${defender.name}, who wises up (+${talent.scaling} strength)!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, goldDelta: gold } as CombatLogMessage);
+        client.send('combat_log', { text: `${attacker.name} scams ${gold} gold, and ${defender.name} wises up (+${talent.scaling} strength)!`, kind: 'reward', talentId: talent.talentId, attackerId: attacker.playerId, defenderId: defender.playerId, goldDelta: gold } as CombatLogMessage);
         client.send('trigger_talent', {
             playerId: attacker.playerId,
             talentId: TalentType.SCAM,

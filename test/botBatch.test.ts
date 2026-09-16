@@ -1,4 +1,7 @@
-import { executeBotBatch, getBotBatchStatus, isBotBatchRunning, stopBotBatch } from '../src/bot/BotRunner';
+import {
+    executeBotBatch, getBotBatchStatus, isBotBatchRunning, isKnownPolicyId, listPolicyIds,
+    resolvePolicy, stopBotBatch,
+} from '../src/bot/BotRunner';
 
 // Pure guard-logic tests for BotRunner's batch orchestration — no live MongoDB or Colyseus room
 // required (like matchmaking.test.ts). executeBotBatch's "already running" guard is checked
@@ -18,14 +21,19 @@ describe('BotRunner batch orchestration', () => {
         expect(getBotBatchStatus()).toEqual({ running: false });
         expect(stopBotBatch()).toBe(false);
 
-        const first = executeBotBatch('batch-1', { runs: 5, policyId: 'heuristic-v1' });
+        const first = executeBotBatch('batch-1', {
+            runs: 5,
+            policyId: 'heuristic-v2',
+            archetypeId: 'tank-paladin',
+        });
         first.catch(() => {}); // will eventually reject (no DB connection in this suite) — expected, not under test
 
         expect(isBotBatchRunning()).toBe(true);
         const status = getBotBatchStatus();
         expect(status.running).toBe(true);
         expect(status.batchId).toBe('batch-1');
-        expect(status.policyId).toBe('heuristic-v1');
+        expect(status.policyId).toBe('heuristic-v2');
+        expect(status.archetypeId).toBe('tank-paladin');
         expect(status.runsTotal).toBe(5);
         expect(status.runsDone).toBe(0);
 
@@ -38,5 +46,35 @@ describe('BotRunner batch orchestration', () => {
         // elapses, ~10s by default) rather than leaving it to settle in the background after the
         // test returns — that would leak a live timer past this test's lifetime for no reason.
         await first.catch(() => {});
+    });
+});
+
+describe('resolvePolicy', () => {
+    it('returns the requested policy', () => {
+        expect(resolvePolicy('heuristic-v1').id).toBe('heuristic-v1');
+        expect(resolvePolicy('heuristic-v2').id).toBe('heuristic-v2');
+    });
+
+    it('defaults to v1 when no id is given, so existing callers are unchanged', () => {
+        expect(resolvePolicy().id).toBe('heuristic-v1');
+    });
+
+    // Falling back silently was the old behavior, and it was worse than useless: the telemetry
+    // recorded 'heuristic-v1' for a batch the caller believed was running something else.
+    it('throws on an unknown id instead of falling back', () => {
+        expect(() => resolvePolicy('heuristic-v3')).toThrow(/Unknown policyId/);
+        expect(isKnownPolicyId('heuristic-v3')).toBe(false);
+        expect(listPolicyIds()).toEqual(expect.arrayContaining(['heuristic-v1', 'heuristic-v2']));
+    });
+
+    it('threads the seed and archetype into a v2 policy', () => {
+        const policy = resolvePolicy('heuristic-v2', { seed: 42, archetypeId: 'tank-paladin' });
+        expect(policy.seed).toBe(42);
+        expect(policy.archetypeId).toBe('tank-paladin');
+    });
+
+    it('derives the archetype from the seed when none is named', () => {
+        expect(resolvePolicy('heuristic-v2', { seed: 99 }).archetypeId)
+            .toBe(resolvePolicy('heuristic-v2', { seed: 99 }).archetypeId);
     });
 });
