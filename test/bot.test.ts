@@ -9,7 +9,8 @@ import { BotFightRoom } from '../src/bot/BotFightRoom';
 import { HeuristicPolicy } from '../src/bot/HeuristicPolicy';
 import { replayModel } from '../src/replay/db/Replay';
 import { waitFor } from './helpers/waitFor';
-import { runBotOnce } from '../src/bot/BotRunner';
+import { isKnownPolicyId, listPolicyIds, resolvePolicy, runBotOnce } from '../src/bot/BotRunner';
+import { HeuristicPolicyV2 } from '../src/bot/v2/HeuristicPolicyV2';
 import { botRunModel } from '../src/bot/db/BotRun';
 
 // Same safe speed cap TournamentRunner.DEFAULT_TIME_SCALE / room.test.ts's TEST_FIGHT_TIME_SCALE
@@ -184,6 +185,33 @@ describe('bot module (headless rooms + BotRunner, driven directly against a live
 
             const replays = await replayModel.find({ originalPlayerId: result.originalPlayerId, kind: 'bot' }).lean();
             expect(replays.length).toBeGreaterThanOrEqual(3);
+        }, 120000);
+
+        // The v2 twin. `rejected` is computed by the runner on every action (it diffs the whole
+        // observation before/after) and nothing else reads it — which makes it the cheapest real
+        // signal that a policy is emitting actions the server silently refuses.
+        it('plays 3 rounds under heuristic-v2 without the server rejecting its actions', async () => {
+            const policy = new HeuristicPolicyV2({ seed: 20260916 });
+            const result = await runBotOnce({ policy, maxRounds: 3, timeScale: TEST_FIGHT_TIME_SCALE });
+            runIds.push(result.runId);
+
+            expect(result.outcome).toBe('aborted');
+            expect(result.finalRound).toBe(4);
+
+            const runDoc = await botRunModel.findOne({ runId: result.runId }).lean();
+            expect(runDoc).not.toBeNull();
+            expect(runDoc!.policyId).toBe('heuristic-v2');
+            // The archetype and its seed are what make a surprising result reproducible.
+            expect(runDoc!.archetypeId).toBe(policy.archetypeId);
+            expect(runDoc!.seed).toBe(20260916);
+            // Every talent and skill the run met had a catalog entry.
+            expect(runDoc!.unknownHintIds).toEqual([]);
+
+            const decisions = (runDoc!.rounds as any[]).flatMap((r) => r.decisions ?? []);
+            expect(decisions.length).toBeGreaterThan(0);
+            const rejected = decisions.filter((d: any) => d.rejected);
+            const rejectedRate = rejected.length / decisions.length;
+            expect(rejectedRate).toBeLessThan(0.05);
         }, 120000);
 
         it('a real client can still join draft_room normally while a bot run is in progress', async () => {

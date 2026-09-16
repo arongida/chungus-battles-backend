@@ -12,23 +12,55 @@ import { PlayerAvatar } from '../players/types/PlayerTypes';
 // leaderboard (the isBot flag is the discriminator, not the name), and every combination below
 // is verified clean against isNameClean in test/botIdentity.test.ts.
 const ADJECTIVES = [
-    'Bold', 'Brave', 'Clever', 'Cunning', 'Daring', 'Eager', 'Fierce', 'Gritty', 'Hardy', 'Iron',
-    'Lucky', 'Mighty', 'Nimble', 'Plucky', 'Quick', 'Rowdy', 'Sturdy', 'Swift', 'Tough', 'Wily',
+    'Agile', 'Amber', 'Ashen', 'Bold', 'Brave', 'Bright', 'Calm', 'Clever', 'Cunning', 'Daring',
+    'Eager', 'Fierce', 'Flint', 'Grand', 'Gritty', 'Hardy', 'Iron', 'Keen', 'Lucky', 'Lunar',
+    'Mighty', 'Nimble', 'Noble', 'Plucky', 'Quick', 'Rapid', 'Rowdy', 'Royal', 'Silent', 'Sly',
+    'Steel', 'Stormy', 'Sturdy', 'Swift', 'Tough', 'Vivid', 'Wild', 'Wily', 'Wise', 'Zesty',
 ];
 const NOUNS = [
-    'Badger', 'Falcon', 'Goblin', 'Hawk', 'Hound', 'Jackal', 'Knight', 'Lynx', 'Otter', 'Panther',
-    'Raven', 'Ronin', 'Sparrow', 'Tiger', 'Viper', 'Wolf', 'Wombat', 'Yak', 'Zealot', 'Badgerling',
+    'Badger', 'Bear', 'Boar', 'Cobra', 'Crow', 'Drake', 'Eagle', 'Falcon', 'Finch', 'Fox',
+    'Gecko', 'Goblin', 'Hawk', 'Heron', 'Hound', 'Ibex', 'Jackal', 'Knight', 'Koala', 'Lion',
+    'Lynx', 'Mantis', 'Mole', 'Moose', 'Newt', 'Otter', 'Owl', 'Panther', 'Puma', 'Raven',
+    'Ronin', 'Shark', 'Sparrow', 'Stag', 'Stoat', 'Tiger', 'Toad', 'Viper', 'Weasel', 'Wolf',
+    'Wombat', 'Yak', 'Zealot', 'Badgerling',
 ];
+
+/** Plain suffixes keep the archetype recognizable while reading like a character title. */
+const ARCHETYPE_NAME_SUFFIXES: Record<string, string> = {
+    balanced: 'Balanced',
+    'dodge-rogue': 'Rogue',
+    'bruiser-warrior': 'Bruiser',
+    'tank-paladin': 'Paladin',
+    'economy-merchant': 'Merchant',
+    'active-caster': 'Caster',
+    highroller: 'Highroller',
+};
+
+const candidateCache = new Map<string, string[]>();
 
 function randomFrom<T>(arr: T[]): T {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-/** A short, ordinary-looking display name — capped at 24 chars to match DraftRoom.onJoin's own
- *  truncation (DraftRoom.ts:146), though every generated combination is already well under it. */
-export function generateBotName(): string {
-    const name = `${randomFrom(ADJECTIVES)} ${randomFrom(NOUNS)} ${Math.floor(Math.random() * 900) + 100}`;
-    return name.slice(0, 24);
+/** Every possible name for an archetype, pre-filtered against the public name rules. Exported so
+ * tests can prove the full generator space rather than relying on random samples. */
+export function listBotNameCandidates(archetypeId?: string): string[] {
+    const key = archetypeId ?? '';
+    const cached = candidateCache.get(key);
+    if (cached) return cached;
+
+    const suffix = archetypeId ? ARCHETYPE_NAME_SUFFIXES[archetypeId] : undefined;
+    const candidates = ADJECTIVES.flatMap(adjective => NOUNS.map(noun =>
+        [adjective, noun, suffix].filter(Boolean).join(' '),
+    )).filter(name => name.length <= 24 && isNameClean(name));
+    if (candidates.length === 0) throw new Error(`No valid bot names for archetype '${archetypeId}'.`);
+    candidateCache.set(key, candidates);
+    return candidates;
+}
+
+/** A readable character name with enough combinations to avoid the old numbered-name feel. */
+export function generateBotName(archetypeId?: string): string {
+    return randomFrom(listBotNameCandidates(archetypeId));
 }
 
 export function pickBotAvatar(): PlayerAvatar {
@@ -48,14 +80,14 @@ export interface BotIdentity {
  *  headless bot has no reason to round-trip through its own HTTP server. Retries name generation
  *  against isNameClean defensively (every static combination is already pre-verified clean, but
  *  this keeps the contract honest if the word lists ever grow). */
-export async function mintBotIdentity(): Promise<BotIdentity> {
+export async function mintBotIdentity(archetypeId?: string): Promise<BotIdentity> {
     const playerId = await getNextPlayerId();
     const playerToken = generatePlayerToken();
     await reservePlayerId(playerId, playerToken);
 
-    let name = generateBotName();
+    let name = generateBotName(archetypeId);
     for (let attempt = 0; attempt < 5 && !isNameClean(name); attempt++) {
-        name = generateBotName();
+        name = generateBotName(archetypeId);
     }
 
     return { playerId, playerToken, name, avatarUrl: pickBotAvatar() };

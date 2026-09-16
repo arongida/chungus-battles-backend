@@ -4,6 +4,9 @@ import { BotDraftRoom } from './BotDraftRoom';
 import { BotFightRoom } from './BotFightRoom';
 import { BotPolicy, BotAction, DraftObservation } from './BotPolicy';
 import { HeuristicPolicy } from './HeuristicPolicy';
+import { HeuristicPolicyV2 } from './v2/HeuristicPolicyV2';
+import { ArchetypeId } from './v2/archetypes';
+import { hashSeed } from './v2/rng';
 import { buildDraftObservation } from './observation';
 import { createHeadlessClient } from '../tournament/HeadlessClient';
 import { mintBotIdentity } from './botIdentity';
@@ -11,7 +14,7 @@ import { getPlayer } from '../players/db/Player';
 import { GAME_VERSION, WINS_TO_WIN } from '../common/types';
 import {
     BotDecisionRecord, BotFightRecord, BotRoundRecord, BotRunEquippedSummary,
-    createBotRunDoc, finishBotRun, pushBotRound,
+    BotRunTalentEffectiveness, createBotRunDoc, finishBotRun, pushBotRound,
 } from './db/BotRun';
 
 // A hard safety cap on decisions within one draft phase — a real round rarely needs more than
@@ -39,6 +42,10 @@ export interface BotRunOptions {
     batchId?: string;
     timeScale?: number;
     maxRounds?: number;
+    policyId?: string;
+    /** Drives the policy's archetype roll. Recorded on the run so a result can be replayed. */
+    seed?: number;
+    archetypeId?: ArchetypeId;
 }
 
 export interface BotRunResult {
@@ -184,6 +191,19 @@ function summarizeEquipped(equipped: any): BotRunEquippedSummary[] {
     return out;
 }
 
+/** Measured lifetime contribution of each talent the run finished with. This is the ground truth a
+ *  catalog hint can be calibrated against later: a hint that scores a talent highly while its
+ *  measured damage stays near zero is a stale hint. */
+function summarizeTalentEffectiveness(talents: any[]): BotRunTalentEffectiveness[] {
+    return talents.map((t: any) => ({
+        talentId: t.talentId,
+        totalActivations: t.totalActivations ?? 0,
+        totalDamageDealt: t.totalDamageDealt ?? 0,
+        totalHealingDone: t.totalHealingDone ?? 0,
+        totalGoldGained: t.totalGoldGained ?? 0,
+    }));
+}
+
 // ---------------------------------------------------------------------------------------------
 // Batch orchestration — runs many runBotOnce() calls in sequence, guarded so only one batch runs
 // at a time per process (same reasoning, and same pattern, as TournamentRunner's
@@ -194,6 +214,8 @@ function summarizeEquipped(equipped: any): BotRunEquippedSummary[] {
 interface BotBatchState {
     batchId: string;
     policyId: string;
+    /** Undefined means the policy rolls an archetype independently for each run. */
+    archetypeId?: ArchetypeId;
     runsTotal: number;
     runsDone: number;
     cancelled: boolean;
@@ -210,6 +232,7 @@ export interface BotBatchStatus {
     running: boolean;
     batchId?: string;
     policyId?: string;
+    archetypeId?: ArchetypeId;
     runsTotal?: number;
     runsDone?: number;
     startedAt?: Date;
@@ -217,8 +240,8 @@ export interface BotBatchStatus {
 
 export function getBotBatchStatus(): BotBatchStatus {
     if (!currentBatch) return { running: false };
-    const { batchId, policyId, runsTotal, runsDone, startedAt } = currentBatch;
-    return { running: true, batchId, policyId, runsTotal, runsDone, startedAt };
+    const { batchId, policyId, archetypeId, runsTotal, runsDone, startedAt } = currentBatch;
+    return { running: true, batchId, policyId, archetypeId, runsTotal, runsDone, startedAt };
 }
 
 /** Sets a cooperative cancel flag, checked between runs (not between rounds — a run already in
@@ -230,11 +253,38 @@ export function stopBotBatch(): boolean {
     return true;
 }
 
-// Only 'heuristic-v1' exists today. A future LLM-backed or trained policy registers here by
-// policyId — the admin route and BotPolicy interface are already shaped for that, nothing about
-// this lookup needs to change when one is added.
-function resolvePolicy(policyId?: string): BotPolicy {
-    return new HeuristicPolicy();
+export interface PolicyResolveOptions {
+    seed?: number;
+    archetypeId?: ArchetypeId;
+}
+
+export const DEFAULT_POLICY_ID = 'heuristic-v1';
+
+// A future LLM-backed or trained policy registers here by policyId — the admin route and the
+// BotPolicy interface are already shaped for that.
+const POLICY_FACTORIES: Record<string, (opts: PolicyResolveOptions) => BotPolicy> = {
+    'heuristic-v1': () => new HeuristicPolicy(),
+    'heuristic-v2': (opts) => new HeuristicPolicyV2({ seed: opts.seed, archetypeId: opts.archetypeId }),
+};
+
+export function listPolicyIds(): string[] {
+    return Object.keys(POLICY_FACTORIES);
+}
+
+export function isKnownPolicyId(policyId: string): boolean {
+    return Object.prototype.hasOwnProperty.call(POLICY_FACTORIES, policyId);
+}
+
+/** Throws on an unknown id rather than falling back: a typo'd policyId used to silently run v1 and
+ *  then record `heuristic-v1` on the telemetry, which looks correct and quietly invalidates the
+ *  comparison you ran the batch for. Callers validate before starting a batch. */
+export function resolvePolicy(policyId?: string, opts: PolicyResolveOptions = {}): BotPolicy {
+    const id = policyId ?? DEFAULT_POLICY_ID;
+    const factory = POLICY_FACTORIES[id];
+    if (!factory) {
+        throw new Error(`Unknown policyId '${id}'. Known policies: ${listPolicyIds().join(', ')}`);
+    }
+    return factory(opts);
 }
 
 /**
@@ -242,16 +292,30 @@ function resolvePolicy(policyId?: string): BotPolicy {
  * Throws synchronously if a batch is already running in this process — callers (the /admin/bots
  * route) should treat that as a 409, exactly like /admin/tournament's isTournamentRunning check.
  */
-export async function executeBotBatch(batchId: string, opts: { runs: number; policyId?: string; timeScale?: number }): Promise<void> {
+export async function executeBotBatch(
+    batchId: string,
+    opts: { runs: number; policyId?: string; timeScale?: number; archetypeId?: ArchetypeId },
+): Promise<void> {
     if (currentBatch) {
         throw new Error(`A bot batch (${currentBatch.batchId}) is already running in this process.`);
     }
-    const policy = resolvePolicy(opts.policyId);
-    currentBatch = { batchId, policyId: policy.id, runsTotal: opts.runs, runsDone: 0, cancelled: false, startedAt: new Date() };
+    // Validate before claiming the batch slot, so a bad id fails loudly and leaves nothing behind.
+    const policyId = opts.policyId ?? DEFAULT_POLICY_ID;
+    resolvePolicy(policyId, { seed: 0, archetypeId: opts.archetypeId });
+
+    currentBatch = {
+        batchId, policyId, archetypeId: opts.archetypeId,
+        runsTotal: opts.runs, runsDone: 0, cancelled: false, startedAt: new Date(),
+    };
     try {
         for (let i = 0; i < opts.runs; i++) {
             if (currentBatch.cancelled) break;
-            await runBotOnce({ policy, batchId, timeScale: opts.timeScale });
+            // Resolved per run, not once for the batch: an archetype-varying policy must roll a
+            // fresh identity each run. The seed is derived so the whole batch replays from
+            // (batchId, runs, policyId).
+            const seed = hashSeed(batchId, i);
+            const policy = resolvePolicy(policyId, { seed, archetypeId: opts.archetypeId });
+            await runBotOnce({ policy, batchId, timeScale: opts.timeScale, seed });
             currentBatch.runsDone++;
         }
     } finally {
@@ -268,11 +332,12 @@ export async function executeBotBatch(batchId: string, opts: { runs: number; pol
  * for SESSION_CLAIM_TTL_MS.
  */
 export async function runBotOnce(opts: BotRunOptions = {}): Promise<BotRunResult> {
-    const policy = opts.policy ?? new HeuristicPolicy();
+    const seed = opts.seed ?? hashSeed(randomUUID());
+    const policy = opts.policy ?? resolvePolicy(opts.policyId, { seed, archetypeId: opts.archetypeId });
     const timeScale = opts.timeScale ?? DEFAULT_TIME_SCALE;
     const maxRounds = opts.maxRounds ?? MAX_ROUNDS_PER_RUN;
     const runId = randomUUID();
-    const identity = await mintBotIdentity();
+    const identity = await mintBotIdentity(policy.archetypeId);
     const env: 'dev' | 'prod' = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
 
     await createBotRunDoc({
@@ -288,6 +353,8 @@ export async function runBotOnce(opts: BotRunOptions = {}): Promise<BotRunResult
         playerId: identity.playerId,
         name: identity.name,
         avatarUrl: identity.avatarUrl,
+        archetypeId: policy.archetypeId,
+        seed: policy.seed ?? seed,
     });
 
     let outcome: 'win' | 'dead' | 'aborted' | 'error' = 'aborted';
@@ -298,6 +365,7 @@ export async function runBotOnce(opts: BotRunOptions = {}): Promise<BotRunResult
     let losses = 0;
     let finalTalentIds: number[] = [];
     let finalEquipped: BotRunEquippedSummary[] = [];
+    let finalTalentEffectiveness: BotRunTalentEffectiveness[] = [];
 
     try {
         for (let i = 0; i < maxRounds; i++) {
@@ -363,6 +431,7 @@ export async function runBotOnce(opts: BotRunOptions = {}): Promise<BotRunResult
             if (savedPlayer) {
                 finalTalentIds = (savedPlayer.talents ?? []).map((t: any) => t.talentId);
                 finalEquipped = summarizeEquipped(savedPlayer.equippedItems ?? {});
+                finalTalentEffectiveness = summarizeTalentEffectiveness(savedPlayer.talents ?? []);
             }
 
             if (fightOutcome.gameWinPending || wins >= WINS_TO_WIN) {
@@ -380,7 +449,13 @@ export async function runBotOnce(opts: BotRunOptions = {}): Promise<BotRunResult
         console.error(`[BotRunner] run ${runId} failed:`, err);
     }
 
-    await finishBotRun(runId, { outcome, errorMessage, finalRound, finalLevel, wins, losses, finalTalentIds, finalEquipped });
+    const diagnostics = policy.drainDiagnostics?.();
+    await finishBotRun(runId, {
+        outcome, errorMessage, finalRound, finalLevel, wins, losses, finalTalentIds, finalEquipped,
+        finalTalentEffectiveness,
+        unknownHintIds: diagnostics?.unknownHintIds,
+        policyConfigHash: diagnostics?.policyConfigHash,
+    });
 
     return { runId, playerId: identity.playerId, originalPlayerId: identity.playerId, outcome, finalRound, errorMessage };
 }

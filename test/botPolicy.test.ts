@@ -3,67 +3,13 @@ import {
     chooseScoredBuy, chooseSellAction, chooseTalentAction, chooseXpPurchase, effectivePrice,
     isFreeClaimEligible, nextDraftAction, scoreShopItem,
 } from '../src/bot/HeuristicPolicy';
-import { BotAction, DraftObservation, ItemView, LossRewardObservation, PlayerView, TalentView } from '../src/bot/BotPolicy';
+import { BotAction, DraftObservation, ItemView, TalentView } from '../src/bot/BotPolicy';
+import {
+    makeDraftObs, makeItem, makeLossRewardObs, makePlayer, makeTalent,
+} from './helpers/botFixtures';
 
 // Pure unit tests for the heuristic bot policy — no live MongoDB or Colyseus room required (like
 // matchmaking.test.ts), since every function under test takes plain observation objects.
-
-function makeItem(overrides: Partial<ItemView> = {}): ItemView {
-    return {
-        uid: 1, itemId: 1, name: 'Test Item', price: 10, sellPrice: 7, rarity: 1, tier: 1,
-        type: 'weapon', class: '', tags: [], equipOptions: ['mainHand'],
-        affectedStats: { strength: 3 }, affectedEnemyStats: {},
-        baseMinDamage: 0, baseMaxDamage: 0, baseAttackSpeed: 0,
-        upgradePreview: false, previewBaseRarity: 0, luckyFind: false, luckyFindSteps: 0,
-        skillId: 0, skillName: '', skillDescription: '', futureSkillId: 0, futureSkillName: '',
-        sold: false, equipped: false,
-        ...overrides,
-    };
-}
-
-function makeTalent(overrides: Partial<TalentView> = {}): TalentView {
-    return {
-        talentId: 1, name: 'Test Talent', tier: 1, tags: [], triggerTypes: [],
-        affectedStats: { strength: 2 }, affectedEnemyStats: {},
-        ...overrides,
-    };
-}
-
-function makePlayer(overrides: Partial<PlayerView> = {}): PlayerView {
-    return {
-        playerId: 1, originalPlayerId: 1, name: 'Bot', avatarUrl: 'assets/warrior_01.png',
-        round: 3, level: 1, xp: 0, maxXp: 10, gold: 20, lives: 4, wins: 0, losses: 0,
-        stats: {
-            maxHp: 200, hp: 200, strength: 5, accuracy: 2, defense: 0, attackSpeed: 1,
-            dodgeRate: 0, hpRegen: 0, income: 4, cooldownReduction: 0,
-        },
-        refreshShopCost: 2, freeRerollCharges: 0, freeRerolls: false, rerollsThisRound: 0,
-        luckyFindChance: 0.1, potionCapacity: 1, pendingPotionEffects: [],
-        comradeFreeClaim: false, goldGenieFreeClaim: false, luckyFindFreeClaim: false,
-        misconductFreeClaim: false, storeCreditFreeClaim: false, storeCreditFreeClaimCap: 0,
-        equipped: {}, inventory: [], talents: [],
-        ...overrides,
-    };
-}
-
-function makeDraftObs(overrides: Partial<DraftObservation> = {}): DraftObservation {
-    return {
-        schemaVersion: 1, runId: 'test-run', step: 0, round: 3,
-        player: makePlayer(),
-        shop: [], availableTalents: [], remainingTalentPoints: 0, talentRerollUsed: [],
-        canUndoSell: false, nextEnemy: null, nextEnemyRevealLevel: -1,
-        nextEnemyTalentClasses: [], nextEnemyItemClasses: [],
-        ...overrides,
-    };
-}
-
-function makeLossRewardObs(overrides: Partial<LossRewardObservation> = {}): LossRewardObservation {
-    return {
-        schemaVersion: 1, runId: 'test-run', round: 3, player: makePlayer(),
-        goldAmount: 20, xpAmount: 30, itemUpgradeAvailable: false, itemUpgradeCount: 0,
-        ...overrides,
-    };
-}
 
 describe('isFreeClaimEligible / effectivePrice', () => {
     // Mirrors DraftRoom.buyItem's mutually-exclusive priority order EXACTLY (DraftRoom.ts:548-553):
