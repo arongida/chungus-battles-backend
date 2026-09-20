@@ -10,6 +10,7 @@ import { ensurePotionEffect, ensureShieldSkill, reconcileItemSkill, refreshFutur
 import { Player } from '../players/schema/PlayerSchema';
 import { Item } from '../items/schema/ItemSchema';
 import { delay } from '../common/utils';
+import { recalculatePlayerStats } from '../common/statsUtils';
 import { isNameClean } from '../common/profanity';
 import { getRandomTalents } from '../talents/db/Talent';
 import { Dispatcher } from '@colyseus/command';
@@ -263,9 +264,10 @@ export class DraftRoom extends BaseRoom {
 
     /** Pre-selects the next fight opponent at draft start and locks it in (persisted on the
      *  player doc via setNextFightEnemy), then syncs a server-side-redacted preview on
-     *  DraftState. Round 1 is always Joe (deterministic avatar, full reveal); rounds >= 2 get
-     *  identity-only redaction. Pure state assignment — the 500ms deferred client.send gotcha
-     *  in onJoin doesn't apply here. */
+     *  DraftState. Round 1 is always Joe (deterministic avatar). Every round gets a full reveal —
+     *  the opponent's exact stats, talents and equipped items — so the player can counter-build.
+     *  Pure state assignment — the 500ms deferred client.send gotcha in onJoin doesn't apply
+     *  here. */
     private async prepareNextEnemyPreview(round: number, playerId: number, loadedPlayer: Player) {
         let enemy: Player = null;
         if (round === 1) {
@@ -282,7 +284,16 @@ export class DraftRoom extends BaseRoom {
                 await setNextFightEnemy(playerId, enemy?.playerId ?? null, round, enemy?.originalPlayerId);
             }
         }
-        const revealLevel = round === 1 ? EnemyRevealLevel.FULL : EnemyRevealLevel.IDENTITY;
+        // The preview now shows exact numbers, so they have to be the numbers the fight will use:
+        // the DB snapshot holds raw persisted stats, while both rooms rebuild every derived stat
+        // each tick (UpdateStatsCommand). buildJoe already does this for round 1 — recomputing
+        // here generalises it to rounds >= 2 and is a no-op for Joe (recalculatePlayerStats always
+        // rebuilds from baseStats). No enemy argument: that would fold in the player's
+        // affectedEnemyStats debuffs, which are stale anyway since this runs once at onJoin,
+        // before any shopping. The panel shows the opponent's own build; the player's debuffs and
+        // FIGHT_START triggers still land at fight time.
+        if (enemy) recalculatePlayerStats(enemy);
+        const revealLevel = EnemyRevealLevel.FULL;
         this.state.nextEnemy = buildEnemyPreview(enemy, revealLevel);
         this.state.nextEnemyRevealLevel = revealLevel;
         // Talent/item classes are revealed at every level (harmless at FULL, where the

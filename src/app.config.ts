@@ -63,6 +63,7 @@ import {
   listPolicyIds, stopBotBatch,
 } from './bot/BotRunner';
 import { ARCHETYPE_IDS, ArchetypeId, isArchetypeId } from './bot/v2/archetypes';
+import { getArchetypeWinRates, getPolicyComparison } from './bot/db/BotRun';
 import { getTournamentBySeason, listTournaments } from './tournament/db/Tournament';
 import type { Request } from 'express';
 
@@ -420,6 +421,29 @@ export const server = defineServer({
                 ...getBotBatchStatus(),
                 availablePolicyIds: listPolicyIds(),
                 availableArchetypeIds: ARCHETYPE_IDS,
+            });
+        }));
+
+        // The A/B readout. Without this the comparison aggregations are only reachable from a
+        // local script with a DB connection, which makes running a batch on the deployed dev app
+        // pointless — you could start it but never read the result.
+        app.get('/admin/bots/comparison', asyncHandler(async (req, res) => {
+            if (!isAuthorizedAdmin(req)) return res.status(401).send({ error: 'unauthorized' });
+            const gameVersion = req.query.gameVersion !== undefined ? Number(req.query.gameVersion) : GAME_VERSION;
+            const minRuns = parseQueryInt(req.query.minRuns, 10);
+            const [policies, archetypes] = await Promise.all([
+                getPolicyComparison({ gameVersion, minRuns }),
+                getArchetypeWinRates({ gameVersion, minRuns }),
+            ]);
+            res.status(200).json({
+                gameVersion,
+                minRuns,
+                policies,
+                archetypes,
+                // Arms run at the same time fight each other's bots (matchmaking draws from all
+                // same-round characters), so a delta between concurrently-run policies is not a
+                // clean read — interleave short batches instead, and sanity-check vsBotRate.
+                note: 'Run arms as alternating batches, never concurrently.',
             });
         }));
 
