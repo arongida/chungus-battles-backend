@@ -36,6 +36,22 @@ describe('cross-source capability synergy', () => {
         expect(bestSlotFor(flexible, ctx).power).toBeGreaterThan(bestSlotFor(flexible, plain).power);
     });
 
+    // Not just "on or off": the payoff has to track HOW MUCH poison the build applies, or two
+    // sources would look no better than one and the bot would stop building into the theme.
+    it('scales the consumer with the amount of poison supplied', () => {
+        const talent = makeTalent({ talentId: TalentType.POISON_2, triggerTypes: [TriggerType.ON_ATTACK], activationRate: 2 });
+        const oneSource = buildDecisionContext(
+            makeDraftObs({ player: makePlayer({ equipped: { mainHand: source } }) }),
+            ARCHETYPES.balanced,
+        );
+        const twoSources = buildDecisionContext(
+            makeDraftObs({ player: makePlayer({ equipped: { mainHand: source }, talents: [talent] }) }),
+            ARCHETYPES.balanced,
+        );
+        expect(twoSources.activation.enemyPoisonStacks).toBeGreaterThan(oneSource.activation.enemyPoisonStacks);
+        expect(bestSlotFor(consumer, twoSources).power).toBeGreaterThan(bestSlotFor(consumer, oneSource).power);
+    });
+
     it('does not retain poison credit when its only supplier is replaced', () => {
         const poison = context({ mainHand: source });
         const noSource = context({ mainHand: { ...source, skillId: 0 } });

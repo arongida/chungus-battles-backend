@@ -1,21 +1,25 @@
 /**
  * Turns "what does this item/talent actually do for THIS build" into a power-unit number.
  *
- * Four independent signals, each an ADDEND on top of marginalPower (never a multiplier on it — a
+ * Five independent signals, each an ADDEND on top of marginalPower (never a multiplier on it — a
  * multiplier would let one mis-tuned hint swing a decision by an order of magnitude):
  *
  *  1. Activation realism (expectedActivations)  — derived, no catalog. How often the effect
  *     actually fires for this build. An on-dodge proc at 0 dodge fires never, and is worth 0.
  *  2. Effect value (skillCatalog / talentCatalog) — per-proc damage/EHP/gold, multiplied by (1).
- *  3. Scaling-graph synergy (scalingSynergy)    — derived from SCALING_DECLARATIONS. Values a
+ *  3. DoT supply and payoff (buildSupply/withSupply) — sources declare the poison/burn stacks they
+ *     apply; consumers are then valued against what the build can really apply. This is what makes
+ *     "Plague Bearer plus a poison source" a recognized combination rather than two unrelated
+ *     cards, in both directions (the policy's capabilityPayoff handles source-while-owning-payoff).
+ *  4. Scaling-graph synergy (scalingSynergy)    — derived from SCALING_DECLARATIONS. Values a
  *     source by the stat it feeds on, and rewards chains where one source writes what another reads.
- *  4. Tag affinity (affinityBonus)              — concentration in a class/subclass, bounded to a
+ *  5. Tag affinity (affinityBonus)              — concentration in a class/subclass, bounded to a
  *     fraction of the candidate's own value so it only re-ranks near-ties.
  *
  * Note on items: only talents carry subclass tags in the database (assassin, berserker, fence,
  * moneybag, thief, paladin); items carry class and type tags only. Item <-> talent synergy
- * therefore flows through (3) and through SkillHint.wants, not through shared subclass tags —
- * don't go looking for subclass tags on items, they aren't there.
+ * therefore flows through (3) and (4), not through shared subclass tags — don't go looking for
+ * subclass tags on items, they aren't there.
  */
 import { DraftObservation, ItemView, PlayerView, StatBlock, TalentView } from '../BotPolicy';
 import { TriggerType } from '../../common/types';
