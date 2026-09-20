@@ -11,13 +11,25 @@ export enum EnemyRevealLevel {
 const CLASS_NAMES: string[] = Object.values(ItemClass); // rogue | warrior | merchant
 
 /** Builds the server-side-redacted next-enemy preview synced on DraftState. Redaction happens
- *  here, before anything reaches the wire — the client never receives hidden data (anti-cheat). */
+ *  here, before anything reaches the wire — the client never receives hidden data (anti-cheat).
+ *  FULL is what every round ships today (see DraftRoom.prepareNextEnemyPreview); IDENTITY is kept
+ *  for a future partial-reveal tier and is currently unused. */
 export function buildEnemyPreview(enemy: Player, level: EnemyRevealLevel): Player {
     const preview = new Player();
     if (!enemy) return preview;
     if (level >= EnemyRevealLevel.FULL) {
+        // Combat build only: stats, talents and equipped items — everything the player needs to
+        // plan a counter-build. The opponent's economy and off-build gear are not part of "the
+        // fight you're about to have", so they're stripped here rather than shipped unrendered.
+        // copyFrom pushes the SOURCE's own Item/Talent instances into these collections, so only
+        // clear the preview's copies — never mutate the items themselves.
         preview.copyFrom(enemy);
         preview.sessionId = '';
+        preview.gold = 0;
+        preview.xp = 0;
+        preview.lives = 0;
+        preview.inventory.clear();
+        preview.lockedShop.clear();
         return preview;
     }
     if (level >= EnemyRevealLevel.IDENTITY) {

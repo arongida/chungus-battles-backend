@@ -21,6 +21,7 @@ export const SEASONS: SeasonInfo[] = [
     number: 27,
     name: 'Fine Print',
     changes: [
+      "The next-opponent preview now shows their full build — exact stats, talents and equipped items — instead of only talent/item class counts.",
       'Excess accuracy converts evenly into strength and accuracy, preserving average damage instead of being capped.',
       'Stuns no longer interrupt HP regeneration.',
       'Joker deals its first pair of cards immediately when picked.',
