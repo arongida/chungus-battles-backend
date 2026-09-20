@@ -970,7 +970,7 @@ export const TalentBehaviors = {
 
     [TalentType.DUAL_WIELD]:
         (context: TalentBehaviorContext) => {
-            const { attacker } = context;
+            const { attacker, shop } = context;
 
             // Remove ghost copies that leaked into inventory (e.g. from a prior setItemUnequipped)
             for (let i = attacker.inventory.length - 1; i >= 0; i--) {
@@ -998,12 +998,27 @@ export const TalentBehaviors = {
                 return;
             }
 
-            // Ghost already matches — no need to re-equip, just refresh speed bonus
-            if (offHandIsGhost && offHand.itemId === mainHand.itemId && offHand.rarity === mainHand.rarity) {
+            // Mid-fight the off-hand attack timer closes over the ghost OBJECT it was started
+            // with (FightRoom.startSingleWeaponTimer), so re-equipping the slot there churns
+            // synced state without changing a single swing — identity is as deep as it's worth
+            // looking outside the shop. `!shop` is this file's usual draft/fight discriminator.
+            if (offHandIsGhost && !shop && offHand.itemId === mainHand.itemId && offHand.rarity === mainHand.rarity) {
                 return;
             }
 
-            attacker.setItemEquipped(clonedAsGhost(mainHand), EquipSlot.OFF_HAND);
+            // In the draft room, re-mirror whenever anything the ghost carries has drifted.
+            // Identity used to be the whole check, which left a stale mirror in the off hand
+            // whenever an equipped item's numbers changed in place while its id and rarity stayed
+            // put — Gambler's Dice gaining permanent income after every won fight, Soulstealer
+            // Scythe banking souls — until the player happened to re-equip the weapon by hand.
+            // Everything that drifts does so at FIGHT_END or mid-fight, so the next shop phase
+            // re-mirrors it before it can matter.
+            const mirror = clonedAsGhost(mainHand);
+            if (offHandIsGhost && ghostMirrorSignature(offHand) === ghostMirrorSignature(mirror)) {
+                return;
+            }
+
+            attacker.setItemEquipped(mirror, EquipSlot.OFF_HAND);
         },
 
     [TalentType.SHARPENING_STONE]:
@@ -1574,6 +1589,17 @@ export function migrateLegacyMartialFists(player: Player): void {
  *  which Item fields must not be .assign()ed from a toJSON() snapshot. Do not re-inline a
  *  local copy of it: this function has now been broken twice (once per skill slot added to
  *  Item) by a hand-maintained field list drifting out of sync. */
+/** A Dual Wield off-hand ghost, reduced to a comparable string so a live mirror can be diffed
+ *  against a freshly built one. Only `uid` (reassigned by every cloneItem) and `equipped` (set by
+ *  setItemEquipped after the clone is built) differ between a stored mirror and a fresh one by
+ *  construction — everything else clonedAsGhost already normalizes, which is exactly why this
+ *  compares whole items instead of a hand-listed set of fields: that list is the drift the header
+ *  comment on test/itemClone.test.ts is about. */
+function ghostMirrorSignature(item: Item): string {
+    const { uid, equipped, ...mirrored } = item.toJSON() as any;
+    return JSON.stringify(mirrored);
+}
+
 function clonedAsGhost(source: Item): Item {
     const ghost = cloneItem(source);
     ghost.price = 0;

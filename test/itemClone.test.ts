@@ -118,4 +118,48 @@ describe('DUAL_WIELD talent behavior', () => {
         expect(offHand!.itemId).toBe(attacker.equippedItems.get(EquipSlot.MAIN_HAND)!.itemId);
         expect(offHand!.tags?.includes('dual_wield_copy')).toBe(true);
     });
+
+    // The mirror used to be compared by itemId + rarity only, so an item whose numbers changed in
+    // place while equipped — Gambler's Dice gaining permanent income after every won fight — left
+    // a stale ghost in the off hand until the player happened to re-equip the weapon by hand.
+    // `shop` is what scopes the re-mirror to the draft room (see the behavior's comment).
+    const draftContext = (attacker: Player) => ({ attacker, shop: [] }) as any;
+
+    it('re-mirrors the off hand when the main hand gains stats in place during draft', () => {
+        const attacker = buildAttackerWithMainHandWeapon();
+        TalentBehaviors[TalentType.DUAL_WIELD](draftContext(attacker));
+
+        const mainHand = attacker.equippedItems.get(EquipSlot.MAIN_HAND)!;
+        mainHand.affectedStats.income += 2; // a won fight, via Gambler's Dice
+        TalentBehaviors[TalentType.DUAL_WIELD](draftContext(attacker));
+
+        const offHand = attacker.equippedItems.get(EquipSlot.OFF_HAND)!;
+        expect(offHand.affectedStats.income).toBe(mainHand.affectedStats.income);
+        expect(offHand.tags?.includes('dual_wield_copy')).toBe(true);
+    });
+
+    // The re-mirror must be change-driven, not unconditional: this behavior runs on every aura
+    // tick, and re-cloning each second would churn synced state for no reason.
+    it('leaves the existing ghost untouched when nothing changed', () => {
+        const attacker = buildAttackerWithMainHandWeapon();
+        TalentBehaviors[TalentType.DUAL_WIELD](draftContext(attacker));
+        const firstGhost = attacker.equippedItems.get(EquipSlot.OFF_HAND);
+
+        TalentBehaviors[TalentType.DUAL_WIELD](draftContext(attacker));
+
+        expect(attacker.equippedItems.get(EquipSlot.OFF_HAND)).toBe(firstGhost);
+    });
+
+    // Mid-fight the off-hand attack timer closes over the ghost object it was started with, so
+    // swapping the slot there would churn state without changing a single swing.
+    it('does not re-mirror mid-fight', () => {
+        const attacker = buildAttackerWithMainHandWeapon();
+        TalentBehaviors[TalentType.DUAL_WIELD]({ attacker } as any);
+        const ghost = attacker.equippedItems.get(EquipSlot.OFF_HAND);
+
+        attacker.equippedItems.get(EquipSlot.MAIN_HAND)!.affectedStats.income += 2;
+        TalentBehaviors[TalentType.DUAL_WIELD]({ attacker } as any);
+
+        expect(attacker.equippedItems.get(EquipSlot.OFF_HAND)).toBe(ghost);
+    });
 });
