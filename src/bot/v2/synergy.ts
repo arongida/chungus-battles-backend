@@ -21,7 +21,9 @@
  * therefore flows through (3) and (4), not through shared subclass tags — don't go looking for
  * subclass tags on items, they aren't there.
  */
-import { DraftObservation, ItemView, PlayerView, StatBlock, TalentView } from '../BotPolicy';
+import { BotClass, DraftObservation, ItemView, PlayerView, StatBlock, TalentView } from '../BotPolicy';
+import { TalentType } from '../../talents/types/TalentTypes';
+import { baseRerollCost, estimateWinRate, expectedRerolls, remainingFights } from './economy';
 import { TriggerType } from '../../common/types';
 import { POISON_DURATION_MS } from '../../common/poisonBalance';
 import { BURN_DURATION_MS } from '../../items/behavior/uniqueItemBalance';
@@ -34,14 +36,12 @@ import { SKILL_HINTS, SkillHint, skillTriggerTypes, valuesFor } from './skillCat
 import { TALENT_HINTS, TalentContext } from './talentCatalog';
 import { ArchetypeWeights, statAffinity, tagAffinity, triggerAffinity } from './archetypes';
 
-/** Swings per second the reference enemy is assumed to take. The scouted-enemy fields could refine
- *  this later; a nominal rate is enough for ranking, since it scales every on-attacked effect
- *  equally. */
-const ENEMY_NOMINAL_ATTACK_RATE = 1.0;
 /** Damage one poison stack ticks per second (poisonBalance.ts's per-tick damage). */
 const POISON_DAMAGE_PER_STACK_PER_SECOND = 1;
 /** Ceiling on the affinity bonus, as a fraction of the candidate's own value. */
 const MAX_AFFINITY_FRACTION = 0.35;
+/** Concentration credited to the avatar's own class tag before any pick has been made. */
+const OWN_CLASS_BASE_SHARE = 0.2;
 /** Per-stat nominal scale used to normalize "how much fuel does this build have" to ~[0,1]. */
 const STAT_NOMINAL: Partial<Record<StatKey, number>> = {
     maxHp: 1500, defense: 200, dodgeRate: 150, hpRegen: 30, strength: 80, accuracy: 60, income: 20,
@@ -83,6 +83,24 @@ export interface ActivationContext {
     averageShopPrice: number;
     round: number;
     level: number;
+    /**
+     * The talents of the board being EVALUATED (a candidate talent included), not the live board.
+     * This is what lets one talent's downside be priced against the rest of the build: Comrade's
+     * reroll tax is nothing next to Fortune's Fool, Berserk loves Fortune's Fool's missing HP.
+     */
+    talentIds: Set<number>;
+    remainingFights: number;
+    winRate: number;
+    /** Rerolls a round, and how many of them cost gold (see economy.expectedRerolls). */
+    rerollsPerRound: number;
+    paidRerollsPerRound: number;
+    /** Reroll price without the Comrade/VIP surcharges — what a free reroll saves. */
+    baseRerollCost: number;
+    /** Share of max HP the build starts a fight at (Fortune's Fool pays for rerolls in HP). */
+    startHpFraction: number;
+    /** 0 when unknown — the generic reference has no strength. */
+    enemyStrength: number;
+    enemyClass?: BotClass;
 }
 
 /** Uniques that apply a DoT through their own item behavior instead of a rolled skill, so there is
@@ -178,9 +196,13 @@ export function buildSupply(obs: DraftObservation, ctx: ActivationContext): Supp
     return supply;
 }
 
-function buildBaseActivationContext(obs: DraftObservation, ctx: PowerContext): ActivationContext {
+function buildBaseActivationContext(obs: DraftObservation, ctx: PowerContext, live: PlayerView): ActivationContext {
     const { stats, weapons, ref, fightSeconds } = ctx;
-    const enemyAttackRate = ENEMY_NOMINAL_ATTACK_RATE;
+    const enemyAttackRate = ref.attackRate;
+    const talents = obs.player.talents;
+    const rerolls = expectedRerolls(talents);
+    const fool = talents.find((t) => t.talentId === TalentType.FORTUNES_FOOL);
+    const hpLost = fool ? Math.min(fool.scaling || 0.99, (fool.base || 0.05) * rerolls.rerolls) : 0;
     const ownAttackRate = weapons.reduce((sum, w) => sum + Math.max(0.1, w.baseAttackSpeed * stats.attackSpeed), 0)
         || Math.max(0.1, 0.8 * stats.attackSpeed);
     const rawDps = estimateDps(stats, weapons, { defense: 0, dodgeRate: 0 });
@@ -210,14 +232,26 @@ function buildBaseActivationContext(obs: DraftObservation, ctx: PowerContext): A
             : 0,
         round: obs.round,
         level: obs.player.level,
+        talentIds: new Set(talents.map((t) => t.talentId)),
+        remainingFights: remainingFights(obs.player),
+        winRate: estimateWinRate(obs.player),
+        rerollsPerRound: rerolls.rerolls,
+        paidRerollsPerRound: rerolls.paid,
+        // From the LIVE player: refreshShopCost only carries the surcharges of talents actually owned.
+        baseRerollCost: baseRerollCost(live),
+        startHpFraction: 1 - hpLost,
+        enemyStrength: ref.strength,
+        enemyClass: obs.nextEnemyBuild?.avatarClass,
     };
 }
 
-export function buildActivationContext(obs: DraftObservation, ctx: PowerContext): ActivationContext {
+/** `live` is the player as observed, when `obs` is a hypothetical board (a candidate talent added)
+ *  — the fields read straight off the shop economy must come from the real one. */
+export function buildActivationContext(obs: DraftObservation, ctx: PowerContext, live: PlayerView = obs.player): ActivationContext {
     // Two phases: the DoT supply is computed from sources that themselves need a context (their
     // proc rates depend on attack speed and dodge), so build a supply-free context first and fold
     // the result back in. Supply never feeds its own computation, so one pass is enough.
-    const base = buildBaseActivationContext(obs, ctx);
+    const base = buildBaseActivationContext(obs, ctx, live);
     return withSupply(base, buildSupply(obs, base));
 }
 
@@ -359,12 +393,16 @@ export function buildAffinity(player: PlayerView): Map<string, number> {
  */
 export function affinityBonus(
     tags: string[], ownValue: number, affinity: Map<string, number>, archetype: ArchetypeWeights,
+    ownClass?: BotClass,
 ): number {
     if (tags.length === 0) return 0;
     let fraction = 0;
     for (const tag of tags) {
         if (!AFFINITY_TAGS.has(tag)) continue;
-        fraction += (affinity.get(tag) ?? 0) * tagAffinity(archetype, tag);
+        // The avatar's own class counts as already committed to, so the preference applies from
+        // the first pick rather than only once the build happens to have concentrated in it.
+        const share = (affinity.get(tag) ?? 0) + (tag === ownClass ? OWN_CLASS_BASE_SHARE : 0);
+        fraction += share * tagAffinity(archetype, tag, ownClass);
     }
     return Math.abs(ownValue) * Math.min(MAX_AFFINITY_FRACTION, fraction);
 }

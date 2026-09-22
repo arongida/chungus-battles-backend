@@ -15,8 +15,10 @@ import { DraftState } from '../rooms/schema/DraftState';
 import { AffectedStats } from '../common/schema/AffectedStatsSchema';
 import { TalentType } from '../talents/types/TalentTypes';
 import { parseJokerPendingCards } from '../talents/behavior/jokerState';
+import { PlayerAvatar } from '../players/types/PlayerTypes';
+import { EnemyRevealLevel } from '../players/EnemyPreview';
 import {
-    DraftObservation, EnemyPreviewView, EquipSlotName, ItemView, JokerPendingCard,
+    BotClass, DraftObservation, EnemyBuildView, EnemyPreviewView, EquipSlotName, ItemView, JokerPendingCard,
     LossRewardObservation, OBSERVATION_SCHEMA_VERSION, PlayerView, StatBlock, TalentView,
 } from './BotPolicy';
 
@@ -107,6 +109,24 @@ function buildEquippedView(equippedItems: MapSchema<Item>): Partial<Record<Equip
     return out;
 }
 
+const AVATAR_CLASS: Record<string, BotClass> = {
+    [PlayerAvatar.THIEF]: 'rogue',
+    [PlayerAvatar.WARRIOR]: 'warrior',
+    [PlayerAvatar.MERCHANT]: 'merchant',
+};
+
+export function avatarToClass(avatarUrl: string): BotClass | undefined {
+    return AVATAR_CLASS[avatarUrl];
+}
+
+function statBlockOf(player: Player): StatBlock {
+    return {
+        maxHp: player.maxHp, hp: player.hp, strength: player.strength, accuracy: player.accuracy,
+        defense: player.defense, attackSpeed: player.attackSpeed, dodgeRate: player.dodgeRate,
+        hpRegen: player.hpRegen, income: player.income, cooldownReduction: player.cooldownReduction,
+    };
+}
+
 export function buildPlayerView(player: Player): PlayerView {
     return {
         playerId: player.playerId,
@@ -121,11 +141,8 @@ export function buildPlayerView(player: Player): PlayerView {
         lives: player.lives,
         wins: player.wins,
         losses: player.losses,
-        stats: {
-            maxHp: player.maxHp, hp: player.hp, strength: player.strength, accuracy: player.accuracy,
-            defense: player.defense, attackSpeed: player.attackSpeed, dodgeRate: player.dodgeRate,
-            hpRegen: player.hpRegen, income: player.income, cooldownReduction: player.cooldownReduction,
-        },
+        avatarClass: avatarToClass(player.avatarUrl),
+        stats: statBlockOf(player),
         refreshShopCost: player.refreshShopCost,
         freeRerollCharges: player.freeRerollCharges,
         freeRerolls: player.freeRerolls,
@@ -149,6 +166,19 @@ export function buildPlayerView(player: Player): PlayerView {
 function buildEnemyPreviewView(nextEnemy: Player, revealLevel: number): EnemyPreviewView | null {
     if (revealLevel < 0 || !nextEnemy?.name) return null;
     return { name: nextEnemy.name, avatarUrl: nextEnemy.avatarUrl, level: nextEnemy.level, round: nextEnemy.round };
+}
+
+/** The preview is already stat-recalculated and stripped to the combat build server-side
+ *  (EnemyPreview.buildEnemyPreview), so this is exactly what a human sees in the scouting panel. */
+function buildEnemyBuildView(nextEnemy: Player, revealLevel: number): EnemyBuildView | null {
+    if (revealLevel < EnemyRevealLevel.FULL || !nextEnemy?.name) return null;
+    return {
+        avatarClass: avatarToClass(nextEnemy.avatarUrl),
+        level: nextEnemy.level,
+        stats: statBlockOf(nextEnemy),
+        equipped: buildEquippedView(nextEnemy.equippedItems),
+        talents: nextEnemy.talents.map(buildTalentView),
+    };
 }
 
 // Joker's pending cards are encoded onto the talent's own `tags` array (see
@@ -177,6 +207,7 @@ export function buildDraftObservation(state: DraftState, runId: string, step: nu
         nextEnemyRevealLevel: state.nextEnemyRevealLevel,
         nextEnemyTalentClasses: toStringArray(state.nextEnemyTalentClasses as any),
         nextEnemyItemClasses: toStringArray(state.nextEnemyItemClasses as any),
+        nextEnemyBuild: buildEnemyBuildView(state.nextEnemy, state.nextEnemyRevealLevel),
         jokerPendingCards: extractJokerPendingCards(state.player),
     };
 }

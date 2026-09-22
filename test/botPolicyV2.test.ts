@@ -1,3 +1,4 @@
+import { mulberry32 } from '../src/bot/v2/rng';
 import {
     bestSlotFor, buildDecisionContext, chooseJokerPick, chooseLossReward, chooseTalentAction,
     HeuristicPolicyV2, itemCombatValue, nextDraftAction, scoreBuys, scoreReroll, scoreSells,
@@ -600,6 +601,40 @@ describe('nextDraftAction convergence', () => {
         const stuck: string[] = [];
         for (let seed = 0; seed < 200; seed++) {
             let obs = randomObservation(seed);
+            const archetype = rollArchetype(seed);
+            let steps = 0;
+            let action = nextDraftAction(buildDecisionContext(obs, archetype));
+            while (action.type !== 'end_draft' && steps < 40) {
+                obs = apply(obs, action);
+                action = nextDraftAction(buildDecisionContext(obs, archetype));
+                steps++;
+            }
+            if (action.type !== 'end_draft') stuck.push(`seed ${seed}: still doing ${action.type} after ${steps} steps`);
+        }
+        expect(stuck).toEqual([]);
+    });
+
+    it('still converges when a scouted next enemy shifts the reference', () => {
+        const stuck: string[] = [];
+        for (let seed = 0; seed < 100; seed++) {
+            const base = randomObservation(seed);
+            const rand = mulberry32(seed + 5000);
+            let obs: DraftObservation = {
+                ...base,
+                nextEnemyRevealLevel: 100,
+                nextEnemyBuild: {
+                    avatarClass: (['rogue', 'warrior', 'merchant'] as const)[seed % 3],
+                    level: base.player.level,
+                    stats: {
+                        ...base.player.stats,
+                        defense: rand() * 150, dodgeRate: rand() * 150, strength: 5 + rand() * 80,
+                        attackSpeed: 0.8 + rand() * 1.5, maxHp: 200 + rand() * 1500,
+                    },
+                    equipped: { mainHand: makeWeapon({ uid: 9000, itemId: 9000 }) },
+                    talents: [],
+                },
+                player: { ...base.player, lives: 1 + (seed % 4) },
+            };
             const archetype = rollArchetype(seed);
             let steps = 0;
             let action = nextDraftAction(buildDecisionContext(obs, archetype));

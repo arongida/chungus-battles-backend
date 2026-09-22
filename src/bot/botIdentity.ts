@@ -7,6 +7,7 @@ import { getNextPlayerId } from '../players/db/Player';
 import { generatePlayerToken, reservePlayerId } from '../players/db/PlayerToken';
 import { isNameClean } from '../common/profanity';
 import { PlayerAvatar } from '../players/types/PlayerTypes';
+import { BotClass } from './BotPolicy';
 
 // Deliberately plain, readable words — bots are meant to look like ordinary characters on the
 // leaderboard (the isBot flag is the discriminator, not the name), and every combination below
@@ -63,6 +64,16 @@ export function generateBotName(archetypeId?: string): string {
     return randomFrom(listBotNameCandidates(archetypeId));
 }
 
+const CLASS_AVATAR: Record<BotClass, PlayerAvatar> = {
+    rogue: PlayerAvatar.THIEF,
+    warrior: PlayerAvatar.WARRIOR,
+    merchant: PlayerAvatar.MERCHANT,
+};
+
+export function classToAvatar(cls: BotClass): PlayerAvatar {
+    return CLASS_AVATAR[cls];
+}
+
 export function pickBotAvatar(): PlayerAvatar {
     const avatars = Object.values(PlayerAvatar);
     return randomFrom(avatars);
@@ -80,7 +91,7 @@ export interface BotIdentity {
  *  headless bot has no reason to round-trip through its own HTTP server. Retries name generation
  *  against isNameClean defensively (every static combination is already pre-verified clean, but
  *  this keeps the contract honest if the word lists ever grow). */
-export async function mintBotIdentity(archetypeId?: string): Promise<BotIdentity> {
+export async function mintBotIdentity(archetypeId?: string, avatarClass?: BotClass): Promise<BotIdentity> {
     const playerId = await getNextPlayerId();
     const playerToken = generatePlayerToken();
     await reservePlayerId(playerId, playerToken);
@@ -90,5 +101,7 @@ export async function mintBotIdentity(archetypeId?: string): Promise<BotIdentity
         name = generateBotName(archetypeId);
     }
 
-    return { playerId, playerToken, name, avatarUrl: pickBotAvatar() };
+    // A class-playing policy gets its own class; one without (v1) keeps a random avatar.
+    const avatarUrl = avatarClass ? classToAvatar(avatarClass) : pickBotAvatar();
+    return { playerId, playerToken, name, avatarUrl };
 }

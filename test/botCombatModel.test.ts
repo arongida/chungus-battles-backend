@@ -172,7 +172,7 @@ describe('addAffected', () => {
 });
 
 describe('estimatePower — diminishing returns and balance pressure', () => {
-    const ref = { defense: 20, dodgeRate: 0, dps: 30, ehp: 600 };
+    const ref = { defense: 20, dodgeRate: 0, dps: 30, ehp: 600, attackRate: 1, strength: 0 };
 
     it('has diminishing returns on defense', () => {
         const low = stats({ defense: 0 });

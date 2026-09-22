@@ -19,11 +19,11 @@
  */
 import { evaluateLoadout } from './loadout';
 import {
-    BotAction, BotPolicy, DraftObservation, EquipSlotName, ItemView, LossRewardChoice,
+    BotAction, BotClass, BotPolicy, DraftObservation, EquipSlotName, ItemView, LossRewardChoice,
     LossRewardObservation, PolicyDiagnostics, StatBlock, TalentView,
 } from '../BotPolicy';
 import {
-    buildPowerContext, marginalPower, PowerContext,
+    addAffected, buildPowerContext, marginalPower, PowerContext, rawStatsFromPlayer,
 } from './combatModel';
 import {
     ActivationContext, affinityBonus, buildActivationContext, buildAffinity,
@@ -31,10 +31,10 @@ import {
     talentScalingSynergy, valueItemSkills, valueTalent,
 } from './synergy';
 import {
-    goldToPowerRate, isRerollFree, levelUpGoldCost, levelUpValue, MAX_REROLLS_PER_ROUND,
+    CLASS_LEVEL_UP_STATS, goldToPowerRate, isRerollFree, levelUpGoldCost, levelUpValue, MAX_REROLLS_PER_ROUND,
     remainingFights, rerollExpectedGain, economyUrgency,
 } from './economy';
-import { ARCHETYPES, ArchetypeId, ArchetypeWeights, rollArchetype } from './archetypes';
+import { ArchetypeId, ArchetypeWeights, rollClassAndArchetype } from './archetypes';
 import { ScalingNodeId } from '../../common/scalingGraph';
 import { TalentType } from '../../talents/types/TalentTypes';
 
@@ -45,6 +45,10 @@ const ACTION_EPSILON = 0.05;
 /** A swap must beat the incumbent by this much power. Absolute, not a ratio: a ratio misbehaves
  *  when the incumbent's own contribution is zero or negative, which v1 had to special-case. */
 const EQUIP_HYSTERESIS_ABS = 0.5;
+/** When a swap trades combat power against gold, its net gain must also clear this fraction of the
+ *  smaller side. The gold->power rate is re-read off the shop every observation and moves with the
+ *  board, so a near-even trade can come out positive in BOTH directions (equip, then unequip, ...). */
+const SWAP_TRADEOFF_MARGIN = 0.1;
 /** Talent-reroll threshold, as a fraction of the median value of the other offered slots. */
 const TALENT_REROLL_FRACTION = 0.6;
 /** Used when every offered talent is unmapped, so a full offer of unknowns still gets picked from. */
@@ -54,7 +58,7 @@ const STATS_PER_FIGHT_DISCOUNT = 0.6;
 const MAX_LEVEL = 5;
 
 export const POLICY_TUNABLES = {
-    ACTION_EPSILON, EQUIP_HYSTERESIS_ABS, TALENT_REROLL_FRACTION,
+    ACTION_EPSILON, EQUIP_HYSTERESIS_ABS, SWAP_TRADEOFF_MARGIN, TALENT_REROLL_FRACTION,
     UNKNOWN_TALENT_FALLBACK_POWER, STATS_PER_FIGHT_DISCOUNT,
 };
 
@@ -77,6 +81,8 @@ export interface DecisionContext {
     power: PowerContext;
     activation: ActivationContext;
     archetype: ArchetypeWeights;
+    /** The avatar's class — own-class tags are preferred. */
+    ownClass?: BotClass;
     affinity: Map<string, number>;
     ownedScaling: Set<ScalingNodeId>;
     /** Power per gold at today's shop prices. */
@@ -95,14 +101,18 @@ function assertFinite(n: number, label: string): number {
     return n;
 }
 
+/** `scoutWeight` overrides the stakes-based blend toward the scouted enemy — 1 for one-fight
+ *  decisions (potions). */
 export function buildDecisionContext(
     obs: DraftObservation, archetype: ArchetypeWeights, onUnknown?: (id: number) => void,
+    scoutWeight?: number,
 ): DecisionContext {
-    const power = buildPowerContext(obs);
+    const power = buildPowerContext(obs, scoutWeight);
     const activation = buildActivationContext(obs, power);
     const urgency = economyUrgency(obs.player, archetype.riskTolerance);
     const partial: DecisionContext = {
         obs, power, activation, archetype,
+        ownClass: obs.player.avatarClass,
         affinity: buildAffinity(obs.player),
         ownedScaling: ownedScalingNodes(obs.player),
         rate: 0,
@@ -162,13 +172,42 @@ function skillPowerOf(item: ItemView, ctx: DecisionContext): number {
     });
 }
 
-/** Taking an equipped item off. The mirror image of equipping it, so "worth unequipping" and
- *  "worth equipping" can never both be true. */
-function removalGainFor(item: ItemView, ctx: DecisionContext): number {
-    const slot = Object.entries(ctx.obs.player.equipped).find(([, owned]) => owned?.uid === item.uid)?.[0];
-    const before = boardFor(ctx);
-    const after = boardFor(ctx, null, slot as EquipSlotName);
-    return (after.power - before.power) * ctx.combatWeight + economyDelta(before, after, ctx);
+/** The observation as it will look once `slot` is emptied into the inventory. Its live stats lose
+ *  the item's own grants, the same subtraction evaluateLoadout makes for an equipped item. */
+function observationWithout(obs: DraftObservation, slot: EquipSlotName): DraftObservation {
+    const item = obs.player.equipped[slot];
+    const raw = rawStatsFromPlayer(obs.player);
+    for (const d of [item.affectedStats, item.skillAffectedStats, item.skillAffectedStats2]) addAffected(raw, d, -1);
+    const stats: StatBlock = {
+        maxHp: raw.maxHp, hp: obs.player.stats.hp, strength: raw.strength, accuracy: raw.accuracy,
+        defense: raw.defense, attackSpeed: raw.attackSpeedMultiplier, dodgeRate: raw.dodgeRate,
+        hpRegen: raw.hpRegen, income: raw.income, cooldownReduction: raw.cooldownReduction,
+    };
+    const equipped = { ...obs.player.equipped };
+    delete equipped[slot];
+    return {
+        ...obs,
+        player: { ...obs.player, stats, equipped, inventory: [...obs.player.inventory, { ...item, equipped: false }] },
+    };
+}
+
+/**
+ * Taking an equipped item off, priced as the exact negative of equipping it from the state where it
+ * is already off — same board pair, same gold->power rate. Pricing it from the CURRENT state
+ * instead let the rate (re-read off the shop, and so board-dependent) differ between the two
+ * states, and a combat-for-gold item could then look worth equipping AND worth removing.
+ */
+function removalGainFor(item: ItemView, slot: EquipSlotName, ctx: DecisionContext): number {
+    const off = buildDecisionContext(observationWithout(ctx.obs, slot), ctx.archetype, ctx.onUnknown);
+    return swapGain(-equipGainFor(item, slot, off) * off.combatWeight, -equipEconomyGain(item, slot, off));
+}
+
+/** Net gain of a swap, less the tradeoff margin when combat and economy pull opposite ways. */
+function swapGain(combat: number, economy: number): number {
+    const tradeoff = Math.sign(combat) * Math.sign(economy) < 0
+        ? SWAP_TRADEOFF_MARGIN * Math.min(Math.abs(combat), Math.abs(economy))
+        : 0;
+    return combat + economy - tradeoff;
 }
 
 function economyDelta(before: ReturnType<typeof evaluateLoadout>, after: ReturnType<typeof evaluateLoadout>, ctx: DecisionContext): number {
@@ -225,7 +264,7 @@ export function itemCombatValue(item: ItemView, ctx: DecisionContext): number {
     // A skill this item will unlock at a higher rarity is real, but only if it gets there.
     if (!item.skillId && item.futureSkillId) value *= 1 + 0.05 * ctx.archetype.skillPremium;
     if (item.skillId) value *= 1 + 0.05 * (ctx.archetype.skillPremium - 1);
-    value += affinityBonus(item.class ? [item.class] : [], value, ctx.affinity, ctx.archetype);
+    value += affinityBonus(item.class ? [item.class] : [], value, ctx.affinity, ctx.archetype, ctx.ownClass);
 
     return assertFinite(value, `itemCombatValue(${item.itemId})`);
 }
@@ -265,36 +304,44 @@ export function effectivePrice(item: ItemView, obs: DraftObservation): number {
 
 // --- talents ----------------------------------------------------------------------------------
 
+/**
+ * A per-fight accrual as the board will carry it. Income is averaged over the horizon (it pays out
+ * once per fight as it accumulates, and the economy term multiplies by remainingFights again);
+ * combat stats keep the existing discounted total.
+ */
+export function accruedStats(perFight: Partial<StatBlock> | undefined, fights: number): Partial<StatBlock> | undefined {
+    if (!perFight) return undefined;
+    return Object.fromEntries(
+        Object.entries(perFight).map(([k, v]) => [
+            k,
+            k === 'attackSpeed' ? 1 + (v - 1) * fights * STATS_PER_FIGHT_DISCOUNT
+                : k === 'income' ? v * fights / 2
+                    : v * fights * STATS_PER_FIGHT_DISCOUNT,
+        ]),
+    );
+}
+
 /** Full value of a talent: its stats through the power model, plus what its behavior does. */
 export function talentValue(talent: TalentView, ctx: DecisionContext): number | null {
     const behavior = valueTalent(talent, ctx.activation, ctx.archetype, ctx.onUnknown);
     if (!behavior) return null;
 
-    const perFight = behavior.statsPerFight;
-    const accrued: Partial<StatBlock> | undefined = perFight
-        ? Object.fromEntries(
-            Object.entries(perFight).map(([k, v]) => [
-                k,
-                k === 'attackSpeed'
-                    ? 1 + (v - 1) * ctx.remainingFights * STATS_PER_FIGHT_DISCOUNT
-                    : v * ctx.remainingFights * STATS_PER_FIGHT_DISCOUNT,
-            ]),
-        )
-        : undefined;
-
     const others = ctx.obs.player.talents.filter(t => t.talentId !== talent.talentId);
     const before = others.length === ctx.obs.player.talents.length ? boardFor(ctx)
         : evaluateLoadout(ctx.obs, ctx.obs.player.equipped, ctx.archetype, others, ctx.onUnknown);
+    // Permanent accrual is folded into the evaluated board rather than priced on its own, so it
+    // interacts with the rest of the build: lost income drains income scalers and eases Comrade's
+    // tax, stolen strength feeds strength scalers.
     const after = evaluateLoadout(ctx.obs, ctx.obs.player.equipped, ctx.archetype,
-        [...others, talent], ctx.onUnknown);
-    let value = after.power - before.power + marginalPower(ctx.power, { addStats: [accrued] });
+        [...others, talent], ctx.onUnknown, accruedStats(behavior.statsPerFight, ctx.remainingFights));
+    let value = after.power - before.power;
 
     value += talentScalingSynergy(talent, ctx.power.stats, ctx.ownedScaling);
 
     const gold = ((after.goldPerRound - before.goldPerRound + after.income - before.income) * ctx.remainingFights + behavior.goldOnce) * ctx.rate;
     const xp = behavior.xpPerRound * ctx.remainingFights * ctx.rate * 0.5;
     value += (gold + xp) * ctx.economyWeight;
-    value += affinityBonus(talent.tags, value, ctx.affinity, ctx.archetype);
+    value += affinityBonus(talent.tags, value, ctx.affinity, ctx.archetype, ctx.ownClass);
 
     return assertFinite(value, `talentValue(${talent.talentId})`);
 }
@@ -394,8 +441,17 @@ export function scoreLevelUp(ctx: DecisionContext): ScoredAction | null {
         ? [...owned].sort((a, b) => a - b)[Math.floor(owned.length / 2)]
         : UNKNOWN_TALENT_FALLBACK_POWER;
 
-    const score = levelUpValue(player, expectedTalentPower, ctx.rate) - cost * ctx.rate;
+    const score = levelUpValue(player, expectedTalentPower, ctx.rate, classLevelUpPower(ctx)) - cost * ctx.rate;
     return { action: { type: 'level_up', reason: `cost=${cost}` }, score };
+}
+
+/** Power (plus income, via the economy rate) of the avatar class's per-level stat grant. */
+export function classLevelUpPower(ctx: DecisionContext): number {
+    const grant = ctx.ownClass ? CLASS_LEVEL_UP_STATS[ctx.ownClass] : undefined;
+    if (!grant) return 0;
+    const combat = marginalPower(ctx.power, { addStats: [grant] }) * ctx.combatWeight;
+    const income = (grant.income ?? 0) * ctx.remainingFights * ctx.rate * ctx.economyWeight;
+    return combat + income;
 }
 
 export function scoreEquips(ctx: DecisionContext): ScoredAction[] {
@@ -403,7 +459,7 @@ export function scoreEquips(ctx: DecisionContext): ScoredAction[] {
     for (const item of ctx.obs.player.inventory) {
         for (const slot of equipSlots(item)) {
             // Compare complete before/after loadouts, including displaced economy effects.
-            const gain = equipGainFor(item, slot, ctx) * ctx.combatWeight + equipEconomyGain(item, slot, ctx);
+            const gain = swapGain(equipGainFor(item, slot, ctx) * ctx.combatWeight, equipEconomyGain(item, slot, ctx));
             if (gain <= EQUIP_HYSTERESIS_ABS) continue;
             out.push({ action: { type: 'equip', uid: item.uid, slot, reason: `gain=${gain.toFixed(2)}` }, score: gain });
         }
@@ -422,7 +478,7 @@ export function scoreUnequips(ctx: DecisionContext): ScoredAction[] {
     for (const [slotName, item] of Object.entries(ctx.obs.player.equipped)) {
         if (!item || wantsSlot.has(slotName)) continue;
         const slot = slotName as EquipSlotName;
-        const removalGain = removalGainFor(item, ctx);
+        const removalGain = removalGainFor(item, slot, ctx);
         if (removalGain <= EQUIP_HYSTERESIS_ABS) continue;
         out.push({
             action: { type: 'unequip', uid: item.uid, slot, reason: `gain=${removalGain.toFixed(2)}` },
@@ -437,8 +493,12 @@ export function scoreDrink(ctx: DecisionContext): ScoredAction | null {
     if (player.pendingPotionEffects.length >= player.potionCapacity) return null;
     const potions = player.inventory.filter((item) => isPotion(item));
     if (potions.length === 0) return null;
+    // A potion lasts one fight, so it is scored against the scouted enemy alone.
+    const fightCtx = ctx.obs.nextEnemyBuild
+        ? buildDecisionContext(ctx.obs, ctx.archetype, ctx.onUnknown, 1)
+        : ctx;
     const best = potions
-        .map((item) => ({ item, value: itemCombatValue(item, ctx) }))
+        .map((item) => ({ item, value: itemCombatValue(item, fightCtx) }))
         .sort((a, b) => b.value - a.value)[0];
     if (best.value <= 0) return null;
     return {
@@ -501,6 +561,7 @@ export function chooseLossReward(obs: LossRewardObservation, archetype: Archetyp
             schemaVersion: obs.schemaVersion, runId: obs.runId, step: 0, round: obs.round,
             player: obs.player, shop: [], availableTalents: [], remainingTalentPoints: 0,
             talentRerollUsed: [], canUndoSell: false, nextEnemy: null, nextEnemyRevealLevel: -1,
+            nextEnemyBuild: null,
             nextEnemyTalentClasses: [], nextEnemyItemClasses: [],
         },
         archetype,
@@ -512,7 +573,7 @@ export function chooseLossReward(obs: LossRewardObservation, archetype: Archetyp
     if (obs.player.level < MAX_LEVEL) {
         const xpNeeded = Math.max(1, obs.player.maxXp - obs.player.xp);
         const levelsWorth = Math.min(1, obs.xpAmount / xpNeeded);
-        xpScore = levelsWorth * levelUpValue(obs.player, UNKNOWN_TALENT_FALLBACK_POWER * 4, ctx.rate);
+        xpScore = levelsWorth * levelUpValue(obs.player, UNKNOWN_TALENT_FALLBACK_POWER * 4, ctx.rate, classLevelUpPower(ctx));
     }
 
     let upgradeScore = 0;
@@ -535,12 +596,14 @@ export function chooseLossReward(obs: LossRewardObservation, archetype: Archetyp
 export interface HeuristicPolicyV2Options {
     seed?: number;
     archetypeId?: ArchetypeId;
+    avatarClass?: BotClass;
 }
 
 export class HeuristicPolicyV2 implements BotPolicy {
     readonly id = 'heuristic-v2';
-    readonly version = '2.0.0';
+    readonly version = '2.1.0';
     readonly archetypeId: ArchetypeId;
+    readonly avatarClass: BotClass;
     readonly seed: number;
 
     private readonly archetype: ArchetypeWeights;
@@ -548,8 +611,12 @@ export class HeuristicPolicyV2 implements BotPolicy {
 
     constructor(opts: HeuristicPolicyV2Options = {}) {
         this.seed = opts.seed ?? 0;
-        this.archetype = opts.archetypeId ? ARCHETYPES[opts.archetypeId] : rollArchetype(this.seed);
+        // Class first, then an archetype that class can play — BotRunner creates the character
+        // with this class, so the build and the avatar's own bonuses pull the same way.
+        const rolled = rollClassAndArchetype(this.seed, { archetypeId: opts.archetypeId, avatarClass: opts.avatarClass });
+        this.archetype = rolled.archetype;
         this.archetypeId = this.archetype.id;
+        this.avatarClass = rolled.avatarClass;
     }
 
     async decideDraft(obs: DraftObservation): Promise<BotAction[]> {

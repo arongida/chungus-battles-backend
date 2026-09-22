@@ -24,6 +24,7 @@ import { StatBlock, TalentView } from '../BotPolicy';
 import { FIRE_WITH_FIRE_MAX_STACKS } from '../../items/behavior/uniqueItemBalance';
 import { TalentType } from '../../talents/types/TalentTypes';
 import type { ActivationContext, Supply } from './synergy';
+import { BASE_REROLLS_PER_ROUND, VIP_PASS_REROLL_SURCHARGE } from './economy';
 
 /** An ActivationContext plus how many times the talent under evaluation fires per fight. */
 export interface TalentContext extends ActivationContext {
@@ -82,6 +83,35 @@ function extraWeaponDamage(ctx: TalentContext, fraction = 1): number {
 const BURN_DAMAGE_PER_STACK_PER_SECOND = 2;
 const BURN_DURATION_SECONDS = 3;
 
+/** Share of a fight spent below a given HP fraction, starting at `startHp`: HP drains roughly
+ *  linearly, and a won fight ends before it hits 0 — the 2/3 puts a full-HP start at Berserk's old
+ *  flat 40% uptime for its 60% threshold. */
+function uptimeBelow(threshold: number, startHp: number): number {
+    return Math.min(1, threshold / Math.max(0.05, startHp)) * (2 / 3);
+}
+
+function logistic(x: number): number {
+    return 1 / (1 + Math.exp(-x));
+}
+
+/** Probability the build's strength beats the enemy's at any moment. Unknown enemy: a coin flip. */
+function strongerChance(ctx: TalentContext): number {
+    if (!(ctx.enemyStrength > 0)) return 0.5;
+    const spread = Math.max(5, ctx.enemyStrength * 0.15);
+    return logistic((ctx.stats.strength - ctx.enemyStrength) / spread);
+}
+
+/** Wit's End's per-win payout in gold-equivalent, by the loser's class (TalentBehaviors WITS_END):
+ *  merchant +3 permanent income, warrior 10 gold, rogue 16 xp (xp at half a gold, as elsewhere). */
+function witsEndPayout(cls: string | undefined, ctx: TalentContext): number {
+    switch (cls) {
+        case 'merchant': return 3 * ctx.remainingFights * 0.5;
+        case 'warrior': return 10;
+        case 'rogue': return 16 * 0.5;
+        default: return (3 * ctx.remainingFights * 0.5 + 10 + 8) / 3;
+    }
+}
+
 /** A talent the shop can never offer (tier 99/999, or a legacy id kept for old save data). Present
  *  so the coverage test stays strict, and so a talent that somehow IS owned scores 0 rather than
  *  falling back to a median that would overvalue it. */
@@ -109,8 +139,11 @@ export const TALENT_HINTS: Record<number, TalentHint> = {
     },
     [TalentType.COMRADE]: {
         kind: 'economy',
-        // One free item per shop, paid for with a reroll surcharge equal to income.
-        goldPerRound: (t, ctx) => ctx.averageShopPrice - ctx.stats.income,
+        // One free item per shop, paid for with a surcharge equal to income on every PAID reroll.
+        // Both halves read the evaluated board, so low income (Robbery, Misconduct, -income items)
+        // and free rerolls (Fortune's Fool, Bargain Hunter) each shrink the tax.
+        goldPerRound: (t, ctx) =>
+            ctx.averageShopPrice - Math.floor(Math.max(0, ctx.stats.income)) * ctx.paidRerollsPerRound,
     },
     [TalentType.GAMBLER]: {
         kind: 'enabler',
@@ -163,8 +196,12 @@ export const TALENT_HINTS: Record<number, TalentHint> = {
     },
     [TalentType.WITS_END]: {
         kind: 'economy',
-        // Class-dependent payout (income / gold / xp); averaged across the three.
-        goldPerRound: (t, ctx) => t.base * 2,
+        // Class-dependent payout on a win. Future opponents are unknown, so the per-round value is
+        // the class average; the scouted opponent adjusts this one fight.
+        goldPerRound: (t, ctx) => witsEndPayout(undefined, ctx) * ctx.winRate,
+        goldOnce: (t, ctx) => ctx.enemyClass
+            ? (witsEndPayout(ctx.enemyClass, ctx) - witsEndPayout(undefined, ctx)) * ctx.winRate
+            : 0,
     },
     [TalentType.FUTURE_NOW]: {
         kind: 'economy',
@@ -172,7 +209,10 @@ export const TALENT_HINTS: Record<number, TalentHint> = {
     },
     [TalentType.ROBBERY]: {
         kind: 'economy',
-        goldPerRound: (t, ctx) => ctx.averageShopPrice - 1,
+        goldPerRound: (t, ctx) => ctx.averageShopPrice,
+        // Every steal costs 1 income for good — a compounding loss, and one that drains every
+        // income scaler on the board (priced by folding the accrual into the evaluated board).
+        statsPerFight: () => ({ income: -1 }),
     },
     [TalentType.DUAL_WIELD]: {
         kind: 'enabler',
@@ -183,13 +223,17 @@ export const TALENT_HINTS: Record<number, TalentHint> = {
     },
     [TalentType.WARRIOR_2]: { // Bully
         kind: 'combat',
-        // Only lands while your strength exceeds the enemy's — call that a coin flip.
-        ehpPerProc: (t, ctx) => t.base * ctx.ref.dps * 0.5,
+        // Only lands while your strength exceeds the enemy's: read off the scouted enemy when
+        // there is one, a coin flip otherwise.
+        ehpPerProc: (t, ctx) => t.base * ctx.ref.dps * strongerChance(ctx),
         wants: ['strength', 'cooldownReduction'],
     },
     [TalentType.BARGAIN_HUNTER]: {
         kind: 'economy',
-        goldPerRound: (t, ctx) => t.base * ctx.refreshShopCost,
+        // Saves the rerolls the build would have paid for at the un-surcharged price. The
+        // surcharges it also cancels (Comrade, VIP) show up as THOSE talents' value rising on the
+        // evaluated board, so they are not counted here as well.
+        goldPerRound: (t, ctx) => BASE_REROLLS_PER_ROUND * ctx.baseRerollCost,
     },
     [TalentType.POISON_2]: {
         kind: 'combat',
@@ -260,9 +304,9 @@ export const TALENT_HINTS: Record<number, TalentHint> = {
     },
     [TalentType.FORTUNES_FOOL]: {
         kind: 'economy',
-        goldPerRound: (t, ctx) => 3 * ctx.refreshShopCost,
-        // Each reroll costs starting HP next fight — assume a few rerolls a round.
-        ehpPerProc: (t, ctx) => -Math.min(t.scaling, 3 * t.base) * ctx.stats.maxHp,
+        // Same saving as Bargain Hunter. The HP it charges per reroll lands as a lower
+        // startHpFraction on the evaluated board (loadout.ts), which Berserk then reads as uptime.
+        goldPerRound: (t, ctx) => BASE_REROLLS_PER_ROUND * ctx.baseRerollCost,
     },
     [TalentType.JUST_A_SCRATCH]: {
         kind: 'economy',
@@ -310,21 +354,28 @@ export const TALENT_HINTS: Record<number, TalentHint> = {
     },
     [TalentType.VIP_PASS]: {
         kind: 'economy',
-        // A guaranteed upgrade slot each shop, minus the reroll surcharge.
-        goldPerRound: (t, ctx) => ctx.averageShopPrice * 0.3 - 1,
+        // A guaranteed upgrade slot each shop, minus the surcharge on every PAID reroll.
+        goldPerRound: (t, ctx) => ctx.averageShopPrice * 0.3 - VIP_PASS_REROLL_SURCHARGE * ctx.paidRerollsPerRound,
     },
     [TalentType.BERSERK]: {
         kind: 'combat',
-        // Only live below the HP threshold — roughly the back half of a fight.
-        auraStats: (t, ctx) => ({
-            attackSpeed: 1 + t.scaling * 0.4,
-            strength: ctx.stats.strength * t.scaling * 0.4,
-        }),
+        // Only live below the HP threshold. Starting a fight short on HP (Fortune's Fool) or
+        // hurting yourself (Stab) buys uptime — the downsides elsewhere are this talent's fuel.
+        auraStats: (t, ctx) => {
+            const selfDamage = ctx.talentIds.has(TalentType.STAB) ? 0.1 : 0;
+            const uptime = uptimeBelow(t.activationRate || 0.6, ctx.startHpFraction - selfDamage);
+            return {
+                attackSpeed: 1 + t.scaling * uptime,
+                strength: ctx.stats.strength * t.scaling * uptime,
+            };
+        },
         wants: ['strength', 'attackSpeed'],
     },
     [TalentType.MISCONDUCT]: {
         kind: 'economy',
-        goldPerRound: (t, ctx) => ctx.averageShopPrice - 1,
+        goldPerRound: (t, ctx) => ctx.averageShopPrice,
+        // Same permanent -1 income per steal as Robbery.
+        statsPerFight: () => ({ income: -1 }),
     },
 
     // =========================================================================== TIER 5 ====
