@@ -13,8 +13,9 @@
  *     the horizon is the only unknown, and remainingFights() estimates it.
  *   - A run ends at WINS_TO_WIN wins or 0 lives, whichever comes first.
  */
-import { DraftObservation, PlayerView } from '../BotPolicy';
+import { BotClass, DraftObservation, PlayerView, StatBlock, TalentView } from '../BotPolicy';
 import { WINS_TO_WIN } from '../../common/types';
+import { TalentType } from '../../talents/types/TalentTypes';
 
 /** Non-warrior start; warriors get 5. Only used to scale urgency, so the 1-life difference on a
  *  warrior just makes it very slightly more cautious than it needs to be. */
@@ -52,6 +53,24 @@ export const MAX_REROLLS_PER_ROUND = 6;
 const SHOP_TIER_VALUE: Record<number, number> = { 2: 6, 3: 8, 4: 10, 5: 12 };
 
 const XP_PER_GOLD = 1; // buy_xp is 4 gold -> 4 xp
+
+/** Rerolls a round the bot is assumed to take while each one costs gold. */
+export const BASE_REROLLS_PER_ROUND = 1.5;
+/** Rerolls a round once they are free — more digging, still bounded by MAX_REROLLS_PER_ROUND and
+ *  (for Fortune's Fool) by the HP each one costs. */
+export const FREE_REROLLS_PER_ROUND = 3;
+/** Mirrors ShopUpgradeUtils' BARGAIN_HUNTER_FREE_REROLLS / VIP_PASS_REROLL_SURCHARGE — not imported,
+ *  because that module drags in the Mongoose item models. */
+export const BARGAIN_HUNTER_FREE_REROLLS = 3;
+export const VIP_PASS_REROLL_SURCHARGE = 1;
+
+/** Stats each class gains on EVERY level up. Mirrors DraftRoom.levelUp's class switch (plus the
+ *  flat +20 max HP every class gets) — keep in step with it. */
+export const CLASS_LEVEL_UP_STATS: Record<BotClass, Partial<StatBlock>> = {
+    warrior: { maxHp: 80, strength: 6 },
+    rogue: { maxHp: 20, attackSpeed: 1.2, dodgeRate: 10 },
+    merchant: { maxHp: 40, income: 2 },
+};
 
 export function clamp(x: number, lo: number, hi: number): number {
     return Math.min(hi, Math.max(lo, x));
@@ -145,11 +164,45 @@ export function levelUpGoldCost(player: PlayerView): number {
 
 /**
  * Value of reaching the next level: the talent point it grants (priced by the caller, which knows
- * the talent catalog) plus the better shop it unlocks.
+ * the talent catalog), the better shop it unlocks, and — passed in by the caller, which has the
+ * power model — the class's level-up stat grant.
  */
-export function levelUpValue(player: PlayerView, expectedTalentPower: number, rate: number): number {
+export function levelUpValue(player: PlayerView, expectedTalentPower: number, rate: number, classStatPower = 0): number {
     const nextLevel = player.level + 1;
-    return expectedTalentPower + (SHOP_TIER_VALUE[nextLevel] ?? 0) * rate;
+    return expectedTalentPower + (SHOP_TIER_VALUE[nextLevel] ?? 0) * rate + classStatPower;
+}
+
+export interface RerollExpectation {
+    /** Rerolls a round the build is expected to take. */
+    rerolls: number;
+    /** How many of those are paid for — the ones a reroll surcharge (Comrade, VIP) actually taxes. */
+    paid: number;
+}
+
+/**
+ * Rerolls a round for a given talent set. This is what makes the reroll-tax talents interact:
+ * Comrade's surcharge and VIP's +1 bite only on PAID rerolls, so Fortune's Fool (every reroll free)
+ * or Bargain Hunter (the first few free) turns their downside off.
+ */
+export function expectedRerolls(talents: TalentView[]): RerollExpectation {
+    if (talents.some((t) => t.talentId === TalentType.FORTUNES_FOOL)) {
+        return { rerolls: FREE_REROLLS_PER_ROUND, paid: 0 };
+    }
+    if (talents.some((t) => t.talentId === TalentType.BARGAIN_HUNTER)) {
+        const free = BARGAIN_HUNTER_FREE_REROLLS;
+        const rerolls = Math.max(BASE_REROLLS_PER_ROUND, Math.min(FREE_REROLLS_PER_ROUND, free));
+        return { rerolls, paid: Math.max(0, rerolls - free) };
+    }
+    return { rerolls: BASE_REROLLS_PER_ROUND, paid: BASE_REROLLS_PER_ROUND };
+}
+
+/** The reroll price with the talent surcharges taken back out — what a free reroll really saves.
+ *  `refreshShopCost` is read live and already includes Comrade's income and VIP's +1. */
+export function baseRerollCost(player: PlayerView): number {
+    let cost = player.refreshShopCost;
+    if (player.talents.some((t) => t.talentId === TalentType.COMRADE)) cost -= Math.floor(Math.max(0, player.stats.income));
+    if (player.talents.some((t) => t.talentId === TalentType.VIP_PASS)) cost -= VIP_PASS_REROLL_SURCHARGE;
+    return Math.max(1, cost);
 }
 
 /**
@@ -164,6 +217,16 @@ export function economyUrgency(player: PlayerView, riskTolerance = 1): { economy
         economyWeight: clamp(livesFraction * horizon * riskTolerance, 0.2, 1.6),
         combatWeight: 1 + (1 - livesFraction) / riskTolerance,
     };
+}
+
+/**
+ * How much of the reference enemy should be the actual scouted opponent rather than the generic
+ * round curve. The build has to last every remaining fight, so a long run leans generic; when one
+ * more loss could end the run, this fight is the one that matters.
+ */
+export function scoutWeight(player: PlayerView): number {
+    const livesFraction = clamp(player.lives / NOMINAL_STARTING_LIVES, 0, 1);
+    return clamp(1 / remainingFights(player) + (1 - livesFraction) * 0.4, 0.2, 0.8);
 }
 
 /** Convenience for scorers that only have the observation to hand. */

@@ -2,7 +2,7 @@
 import { DraftObservation, PlayerView, StatBlock, TalentView } from '../BotPolicy';
 import { ARCHETYPES, ArchetypeWeights } from './archetypes';
 import {
-    addAffected, buildPowerContext, cloneRaw, estimateDps, estimatePower, fightSeconds, normalize,
+    addAffected, buildPowerContext, cloneRaw, estimateDps, estimatePower, fightSeconds, mitigation, normalize,
     PowerContext, rawStatsFromPlayer, weaponProfiles,
 } from './combatModel';
 import { buildActivationContext, valueSkill, valueTalent } from './synergy';
@@ -13,6 +13,9 @@ export function evaluateLoadout(
     obs: DraftObservation, equipped: PlayerView['equipped'],
     archetype: ArchetypeWeights = ARCHETYPES.balanced, talents: TalentView[] = obs.player.talents,
     onUnknown?: (id: number) => void,
+    /** Stats the board is expected to drift by (a talent's permanent per-fight accrual), folded in
+     *  BEFORE the aura passes so scalers see it — Robbery's lost income drains Income Inequality. */
+    extraStats?: Partial<StatBlock>,
 ) {
     const raw = rawStatsFromPlayer(obs.player);
     // Remove measured output before estimating it again. Include both Weapon Whisperer slots.
@@ -38,6 +41,7 @@ export function evaluateLoadout(
         }
     }
     for (const item of Object.values(equipped)) if (item) addAffected(raw, item.affectedStats, 1);
+    addAffected(raw, extraStats, 1);
     const target = { ...obs, player: { ...obs.player, equipped, talents } };
     const ref = buildPowerContext(obs).ref;
     const weapons = weaponProfiles(equipped);
@@ -52,7 +56,7 @@ export function evaluateLoadout(
 
     // Same-node duplicates share an input snapshot, exactly as the server's scaling pass does.
     for (const node of SCALING_ORDER) {
-        const activation = buildActivationContext(target, powerContext());
+        const activation = buildActivationContext(target, powerContext(), obs.player);
         const grants: Partial<StatBlock>[] = [];
         for (const { item, id } of slots) {
             if (skillNode(id) === node) grants.push(valueSkill(id, item.rarity, activation, archetype, item, false).auraStats);
@@ -63,7 +67,7 @@ export function evaluateLoadout(
         for (const grant of grants) addAffected(raw, grant, 1);
     }
     // Combat-only auras use one simultaneous estimate to avoid self-feeding feedback loops.
-    const auraContext = buildActivationContext(target, powerContext());
+    const auraContext = buildActivationContext(target, powerContext(), obs.player);
     for (const { item, id } of slots) {
         if (!SCALING_SKILL_IDS.has(id)) addAffected(raw, valueSkill(id, item.rarity, auraContext, archetype, item, false).auraStats, 1);
     }
@@ -71,7 +75,7 @@ export function evaluateLoadout(
         if (!SCALING_TALENT_IDS.has(talent.talentId)) addAffected(raw, valueTalent(talent, auraContext, archetype)?.auraStats, 1);
     }
     const power = powerContext();
-    const activation = buildActivationContext(target, power);
+    const activation = buildActivationContext(target, power, obs.player);
     let damage = 0, ehp = 0, goldPerRound = 0;
     for (const { item, id } of slots) {
         const value = valueSkill(id, item.rarity, activation, archetype, item, false, onUnknown);
@@ -86,6 +90,8 @@ export function evaluateLoadout(
         ehp += value.ehpPerFight;
         goldPerRound += value.goldPerRound;
     }
+    // Starting a fight below full HP (Fortune's Fool) is lost effective HP.
+    ehp -= (1 - activation.startHpFraction) * power.stats.maxHp / mitigation(power.stats);
     for (const source of [...Object.values(equipped).filter(Boolean), ...talents]) {
         const debuff = source.affectedEnemyStats;
         const speed = Math.min(0.9, Math.max(0, 1 - (debuff.attackSpeed || 1)));

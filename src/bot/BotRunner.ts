@@ -337,7 +337,7 @@ export async function runBotOnce(opts: BotRunOptions = {}): Promise<BotRunResult
     const timeScale = opts.timeScale ?? DEFAULT_TIME_SCALE;
     const maxRounds = opts.maxRounds ?? MAX_ROUNDS_PER_RUN;
     const runId = randomUUID();
-    const identity = await mintBotIdentity(policy.archetypeId);
+    const identity = await mintBotIdentity(policy.archetypeId, policy.avatarClass);
     const env: 'dev' | 'prod' = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
 
     await createBotRunDoc({

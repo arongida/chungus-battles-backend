@@ -16,7 +16,11 @@
  *    calls instead of one per decision.
  */
 
-export const OBSERVATION_SCHEMA_VERSION = 2 as const;
+export const OBSERVATION_SCHEMA_VERSION = 3 as const;
+
+/** A character's class is its avatar (THIEF/WARRIOR/MERCHANT), named here by the matching
+ *  item/talent class tag. */
+export type BotClass = 'rogue' | 'warrior' | 'merchant';
 
 export type EquipSlotName = 'armor' | 'helmet' | 'mainHand' | 'offHand';
 
@@ -129,6 +133,8 @@ export interface PlayerView {
     lives: number;
     wins: number;
     losses: number;
+    /** Optional so hand-built fixtures without it still type-check; observation.ts always sets it. */
+    avatarClass?: BotClass;
     stats: StatBlock;
     // Shop-economy fields the 1s draft aura tick finalizes — see the driver's readiness gate.
     // A policy reading these before that tick has run will see base/stale values.
@@ -159,6 +165,15 @@ export interface EnemyPreviewView {
     round: number;
 }
 
+/** The next opponent's combat build, exactly as the FULL-reveal preview shows it to a human. */
+export interface EnemyBuildView {
+    avatarClass?: BotClass;
+    level: number;
+    stats: StatBlock;
+    equipped: Partial<Record<EquipSlotName, ItemView>>;
+    talents: TalentView[];
+}
+
 export interface JokerPendingCard {
     stat: string;
     amount: number;
@@ -181,6 +196,8 @@ export interface DraftObservation {
     nextEnemyRevealLevel: number;
     nextEnemyTalentClasses: string[];
     nextEnemyItemClasses: string[];
+    /** Set only at a FULL reveal (nextEnemyRevealLevel >= 100). */
+    nextEnemyBuild?: EnemyBuildView | null;
     jokerPendingCards?: JokerPendingCard[];
 }
 
@@ -246,6 +263,8 @@ export interface BotPolicy {
     /** Set only by a policy that varies its weights per run — recorded for per-archetype telemetry. */
     readonly archetypeId?: string;
     readonly seed?: number;
+    /** Set only by a policy that plays a specific class — the runner creates the character with it. */
+    readonly avatarClass?: BotClass;
 
     /**
      * Plans the next chunk of the CURRENT draft phase as an ordered batch. The driver applies

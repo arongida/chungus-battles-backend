@@ -28,7 +28,8 @@
  * marginal estimate for a CANDIDATE scaling source is understated, and synergy.ts prices those
  * explicitly via the scaling graph.
  */
-import { DraftObservation, EquipSlotName, ItemView, PlayerView, StatBlock } from '../BotPolicy';
+import { DraftObservation, EnemyBuildView, EquipSlotName, ItemView, PlayerView, StatBlock } from '../BotPolicy';
+import { scoutWeight } from './economy';
 
 // --- tunables -------------------------------------------------------------------------------
 
@@ -171,7 +172,16 @@ export interface ReferenceEnemy {
     dodgeRate: number;
     dps: number;
     ehp: number;
+    /** Swings per second across all of the enemy's weapons — drives on-attacked/on-dodge procs. */
+    attackRate: number;
+    /** 0 when unknown (the generic curve has no opinion on it). */
+    strength: number;
 }
+
+/** The generic curve assumes one swing per second. */
+export const NOMINAL_ENEMY_ATTACK_RATE = 1.0;
+/** Nominal fight length used to fold a scouted enemy's regen into its HP pool. */
+const SCOUT_NOMINAL_FIGHT_SECONDS = 20;
 
 /** Fraction of an incoming hit that survives mitigation. Defense and dodge are the SAME reducer
  *  (`100/(100+x)` each) and they multiply — so +100 defense and +100 dodge are worth exactly the
@@ -247,7 +257,55 @@ export function referenceEnemy(round: number): ReferenceEnemy {
         dodgeRate: REF_DODGE_PER_ROUND * r,
         dps: REF_DPS_BASE + REF_DPS_PER_ROUND * r,
         ehp: REF_EHP_BASE + REF_EHP_PER_ROUND * r,
+        attackRate: NOMINAL_ENEMY_ATTACK_RATE,
+        strength: 0,
     };
+}
+
+/**
+ * The actual next opponent, in the same units as referenceEnemy: `dps` is raw pre-mitigation
+ * damage (the player's own defense/dodge is applied on the player's side), and `ehp` is HP over the
+ * enemy's own mitigation — the convention the generic curve was tuned under.
+ */
+export function scoutedEnemy(build: EnemyBuildView): ReferenceEnemy {
+    const stats = build.stats;
+    const weapons = swingingWeapons(weaponProfiles(build.equipped));
+    const attackRate = weapons.reduce((sum, w) => sum + Math.max(0.1, w.baseAttackSpeed * stats.attackSpeed), 0);
+    return {
+        defense: Math.max(0, stats.defense),
+        dodgeRate: Math.max(0, stats.dodgeRate),
+        dps: estimateDps(stats, weapons, { defense: 0, dodgeRate: 0 }),
+        ehp: (Math.max(1, stats.maxHp) + Math.max(0, stats.hpRegen) * SCOUT_NOMINAL_FIGHT_SECONDS) / mitigation(stats),
+        attackRate,
+        strength: Math.max(0, stats.strength),
+    };
+}
+
+/** Linear mix: `w` = 0 is the generic curve, 1 is the scouted enemy. Strength stays unknown (0)
+ *  only when there is no scouted enemy at all. */
+export function blendReference(generic: ReferenceEnemy, scouted: ReferenceEnemy | null, w: number): ReferenceEnemy {
+    if (!scouted || w <= 0) return generic;
+    const mix = (a: number, b: number) => a + (b - a) * w;
+    return {
+        defense: mix(generic.defense, scouted.defense),
+        dodgeRate: mix(generic.dodgeRate, scouted.dodgeRate),
+        dps: mix(generic.dps, scouted.dps),
+        ehp: mix(generic.ehp, scouted.ehp),
+        attackRate: mix(generic.attackRate, scouted.attackRate),
+        strength: scouted.strength,
+    };
+}
+
+/**
+ * The reference a decision is scored against. Still a function of the OBSERVATION only — the
+ * scouted enemy is fixed for the round and none of the bot's own actions can move it — so the
+ * no-oscillation argument above holds. `weight` defaults to the stakes-based blend (economy.ts's
+ * scoutWeight); a one-fight effect (a potion) passes 1.
+ */
+export function referenceFor(obs: DraftObservation, weight?: number): ReferenceEnemy {
+    const generic = referenceEnemy(obs.round);
+    if (!obs.nextEnemyBuild) return generic;
+    return blendReference(generic, scoutedEnemy(obs.nextEnemyBuild), weight ?? scoutWeight(obs.player));
 }
 
 // --- marginal evaluation --------------------------------------------------------------------
@@ -265,11 +323,11 @@ export interface PowerContext {
     fightSeconds: number;
 }
 
-export function buildPowerContext(obs: DraftObservation): PowerContext {
+export function buildPowerContext(obs: DraftObservation, scoutWeightOverride?: number): PowerContext {
     const raw = rawStatsFromPlayer(obs.player);
     const stats = normalize(cloneRaw(raw));
     const weapons = weaponProfiles(obs.player.equipped);
-    const ref = referenceEnemy(obs.round);
+    const ref = referenceFor(obs, scoutWeightOverride);
     const dps = estimateDps(stats, weapons, ref);
     return {
         round: obs.round,
