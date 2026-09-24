@@ -249,7 +249,7 @@ export class FightRoom extends BaseRoom {
             this.logCombat('broadcast', { text: `The battle will begin in ${secondsLeft} second(s)...`, kind: 'countdown' });
             // Greetings during the countdown (not at battle start) so the player has time to read
             // them before the fight's own effects crowd the avatars.
-            if (secondsLeft === 2) this.sayGreetings();
+            if (secondsLeft === 3) this.sayGreetings();
         }, 1000);
 
         this.clock.setTimeout(async () => {
