@@ -27,5 +27,8 @@ export class DraftState extends Schema {
     // the concrete talents/items. Duplicates kept so the client can show ×N counts.
     @type(['string']) nextEnemyTalentClasses: ArraySchema<string> = new ArraySchema<string>();
     @type(['string']) nextEnemyItemClasses: ArraySchema<string> = new ArraySchema<string>();
+    // Public profile of the character that owns the next opponent's snapshot (status, wins,
+    // badges — see social/badges.ts), JSON-encoded; '' for Joe or when unavailable.
+    @type('string') nextEnemyOwnerJson: string = '';
     playerClient: Client;
 }

@@ -66,6 +66,28 @@ export type SetFightSpeedMessage = {
   speed: number;
 };
 
+/** Draft -> server: pick one of the player's preset battle-cry lines (src/social/emotes.ts). */
+export type SetBattleCryMessage = {
+  slot: 'greeting' | 'victory' | 'defeat';
+  emoteId: string;
+};
+
+/** Fight -> server: a live preset reaction (emotes.ts slot 'reaction'). */
+export type SendEmoteMessage = {
+  emoteId: string;
+};
+
+/** Server -> client (broadcast, so it is recorded into the replay): a fighter says a preset
+ *  line. kind 'cry' = the fighter's own battle cry (greeting at battle start, victory/defeat
+ *  at the end); 'reaction' = a live reaction the human player sent. `remaining` (reactions
+ *  only) is how many more reactions this fight still allows. */
+export type EmoteMessage = {
+  playerId: number;
+  emoteId: string;
+  kind: 'cry' | 'reaction';
+  remaining?: number;
+};
+
 /** Resolution of the loss-reward choice; for item_upgrade reveals which item(s) got
  *  upgraded. `item` holds the first upgraded item for back-compat; `items` holds all of
  *  them (more than one when the player was on their last or second-to-last life). */
@@ -97,6 +119,8 @@ export type GameOverMessage = {
   message: string;
   replayId?: string;
   stats?: FightStatsMessage;
+  /** Who delivered the final blow — the nemesis. originalPlayerId is their live character. */
+  killer?: { name: string; avatarUrl: string; playerId: number; originalPlayerId: number };
 };
 
 export type CombatLogKind =

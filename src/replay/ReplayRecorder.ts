@@ -10,6 +10,9 @@ export interface ReplayInitialState {
     enemy: Record<string, any>;
     round: number;
     gameVersion: number;
+    // Public profile of the enemy snapshot's owner at fight time (social/badges.ts OwnerProfile),
+    // so a replay shows the same nameplate badges the live fight did.
+    enemyOwner?: Record<string, any>;
 }
 
 export class ReplayRecorder {

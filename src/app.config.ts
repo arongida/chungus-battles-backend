@@ -45,7 +45,8 @@ matchMaker.controller.getCorsHeaders = (headers: Headers) => {
 import {FightRoom} from './rooms/FightRoom';
 import {DraftRoom} from './rooms/DraftRoom';
 import {getNextPlayerId, getPlayer, getPlayerRank, getLeaderboard, getWallOfFame, getRunSummaries, clearAllSessionClaims, playerToPlainObject} from './players/db/Player';
-import {generatePlayerToken, reservePlayerId} from './players/db/PlayerToken';
+import {authenticatePlayerId, generatePlayerToken, reservePlayerId} from './players/db/PlayerToken';
+import { getGhostReport, getGhostReportCounts } from './social/db/GhostEncounter';
 import {GAME_VERSION} from './common/types';
 import { getAllItems } from "./items/db/Item";
 import { getItemRollPreview } from "./items/stats/itemRollPreview";
@@ -122,6 +123,13 @@ function parseQueryInt(value: unknown, fallback: number): number {
     if (value === undefined) return fallback;
     const n = Number(value);
     return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+}
+
+// ISO timestamp from a client's "last seen" marker; anything unparseable means "from the start".
+function parseSince(value: unknown): Date | undefined {
+    if (typeof value !== 'string' || !value) return undefined;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
 // Express 4 (unlike 5) does not forward a rejected promise from an async route handler to
@@ -335,6 +343,39 @@ export const server = defineServer({
             if (!originalPlayerId || Number.isNaN(originalPlayerId)) return res.status(400).send({ error: 'originalPlayerId required' });
             const result = await getGameStats(originalPlayerId);
             res.status(200).json(result);
+        }));
+
+        // "While you were away" — how this character's ghosts (matchmaking snapshots) fared in
+        // other players' fights, plus the preset reactions those players sent them. POST with the
+        // run's playerToken (same auth as a room join, see PlayerToken.authenticatePlayerId): the
+        // emotes were addressed to the character's owner, so only that browser reads them. A
+        // live character's playerId IS its originalPlayerId (see getNewPlayer), which is the id
+        // every one of its snapshots carries.
+        app.post('/ghostReport', asyncHandler(async (req, res) => {
+            const { playerId, playerToken, since, limit } = req.body ?? {};
+            let ownerId: number;
+            try {
+                ownerId = await authenticatePlayerId(playerId, playerToken);
+            } catch {
+                return res.status(401).send({ error: 'Invalid player credentials' });
+            }
+            const report = await getGhostReport(ownerId, parseSince(since), parseQueryInt(limit, 50));
+            res.status(200).json(report);
+        }));
+
+        // Unseen-encounter counts for the home screen's run list, one request for every stored
+        // run. Runs whose credentials don't check out are skipped silently (e.g. a stale
+        // localStorage entry) rather than failing the whole batch.
+        app.post('/ghostReportCounts', asyncHandler(async (req, res) => {
+            const runs = Array.isArray(req.body?.runs) ? req.body.runs.slice(0, 10) : [];
+            const queries: { ownerOriginalPlayerId: number; since?: Date }[] = [];
+            for (const run of runs) {
+                try {
+                    const ownerId = await authenticatePlayerId(run?.playerId, run?.playerToken);
+                    queries.push({ ownerOriginalPlayerId: ownerId, since: parseSince(run?.since) });
+                } catch { /* skip */ }
+            }
+            res.status(200).json(await getGhostReportCounts(queries));
         }));
 
         // --- Season-end Hall of Fame tournament -----------------------------------------------

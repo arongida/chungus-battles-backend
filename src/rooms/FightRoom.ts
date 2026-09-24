@@ -10,6 +10,8 @@ import { Dispatcher } from '@colyseus/command';
 import { ReplayRecorder } from '../replay/ReplayRecorder';
 import { StatsSyncRecorder } from '../replay/StatsSyncRecorder';
 import { saveReplay } from '../replay/db/Replay';
+import { appendGhostEncounterEmote, saveGhostEncounter } from '../social/db/GhostEncounter';
+import { getOwnerProfileJson } from '../social/badges';
 import { randomUUID } from 'crypto';
 import { ActiveTriggerCommand } from '../commands/triggers/ActiveTriggerCommand';
 import { FightStartTriggerCommand } from '../commands/triggers/FightStartTriggerCommand';
@@ -32,7 +34,8 @@ import { ItemSkillType } from '../items/types/ItemSkillTypes';
 import { ITEM_SKILLS, skillValues } from '../items/behavior/itemSkillBalance';
 import { crushingBlowCounters, openingActCounters } from '../items/behavior/itemSkillState';
 import { Talent } from '../talents/schema/TalentSchema';
-import { CombatLogMessage, FightSideStats, FightStatsMessage, GameOverMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
+import { CombatLogMessage, FightSideStats, FightStatsMessage, EmoteMessage, GameOverMessage, GameWinMessage, LossRewardResultMessage, RewardGainMessage, SelectLossRewardMessage, SendEmoteMessage, SetFightSpeedMessage, fmt } from '../common/MessageTypes';
+import { BattleCrySlot, isValidEmote, MAX_REACTIONS_PER_FIGHT, REACTION_COOLDOWN_MS } from '../social/emotes';
 import { track } from '../talents/behavior/TalentBehaviors';
 import { BURN_DAMAGE_PER_STACK, UNBLOCKABLE_WEAPON_IDS } from '../items/behavior/uniqueItemBalance';
 import { creditDotDamage } from '../common/dotSources';
@@ -91,12 +94,14 @@ export class FightRoom extends BaseRoom {
             return origBroadcast(type, message, options);
         };
 
-        // (Removed: an unvalidated, unbounded 'chat' echo handler used to live here. Nothing in
-        // the frontend ever sent it, and broadcast() above is replay-wrapped — every message it
-        // echoed was recorded into ReplayRecorder.events and persisted to Mongo via saveReplay,
-        // so a scripted client sending an oversized payload repeatedly could bloat replay
-        // documents. Delete stays deleted unless real chat is actually built, with real
-        // validation.)
+        // Live reactions — the only player-to-player channel. An unvalidated, unbounded 'chat'
+        // echo handler used to live here and was deleted: broadcast() above is replay-wrapped, so
+        // every echoed payload was persisted into the replay doc, and a scripted client could
+        // bloat it. This one only accepts preset reaction ids (src/social/emotes.ts), with a
+        // per-fight cap and a cooldown, so what reaches the replay is small and bounded.
+        this.onMessage('emote', (client, message: SendEmoteMessage) => {
+            this.handleEmote(client, message);
+        });
 
         this.onMessage('abandon_run', async (client) => {
             this.state.player.lives = 0;
@@ -229,6 +234,7 @@ export class FightRoom extends BaseRoom {
             let enemy = await this.pickEnemy(options.enemyPlayerId, player);
             //set up enemy state
             await this.setUpState(enemy, true);
+            this.state.enemyOwnerJson = await getOwnerProfileJson(this.state.enemy.originalPlayerId);
         }
 
         //set up initial room state
@@ -239,7 +245,11 @@ export class FightRoom extends BaseRoom {
         //start battle after 3 seconds
         let countdown = 3;
         const countdownTimer = this.clock.setInterval(() => {
-            this.logCombat('broadcast', { text: `The battle will begin in ${countdown--} second(s)...`, kind: 'countdown' });
+            const secondsLeft = countdown--;
+            this.logCombat('broadcast', { text: `The battle will begin in ${secondsLeft} second(s)...`, kind: 'countdown' });
+            // Greetings during the countdown (not at battle start) so the player has time to read
+            // them before the fight's own effects crowd the avatars.
+            if (secondsLeft === 2) this.sayGreetings();
         }, 1000);
 
         this.clock.setTimeout(async () => {
@@ -291,11 +301,7 @@ export class FightRoom extends BaseRoom {
                 stats: this.currentFightStats,
             } as GameWinMessage);
         } else if (this.state.player.lives <= 0) {
-            this.broadcast('game_over', {
-                message: 'You have lost the game!',
-                replayId: this.currentReplayId,
-                stats: this.currentFightStats,
-            } as GameOverMessage);
+            this.broadcast('game_over', this.buildGameOverPayload());
         } else if (this.state.lossRewardOptions) {
             // Reconnect after a loss: resend the pending options (or the resolved outcome).
             this.broadcast('end_battle', this.buildLossEndBattlePayload());
@@ -893,7 +899,16 @@ export class FightRoom extends BaseRoom {
             enemy: snapshotPlayer(this.state.enemy),
             round: this.state.player.round,
             gameVersion: GAME_VERSION,
+            enemyOwner: this.state.enemyOwnerJson ? JSON.parse(this.state.enemyOwnerJson) : undefined,
         });
+        // The live greetings went out during the countdown, before the recorder was running —
+        // write them into the replay at t≈0 so playback still shows them. Rooms that skip the
+        // countdown (e.g. TournamentFightRoom) greet here instead.
+        if (this.greetingsSaid) {
+            this.greetingPayloads().forEach(p => this.recorder.record('broadcast', 'emote', p));
+        } else {
+            this.sayGreetings();
+        }
 
         this.state.player.talents.forEach(t => t.resetCombatStats());
         this.state.enemy.talents.forEach(t => t.resetCombatStats());
@@ -949,6 +964,108 @@ export class FightRoom extends BaseRoom {
         this.statsSync.maybeRecord(this.recorder, this.clock.elapsedTime, this.state.player, this.state.enemy, true);
     }
 
+    // Reaction ids sent by the live player this fight, in order — delivered to the ghost's
+    // owner via the GhostEncounter doc (see saveGhostEncounter in handleFightEnd).
+    protected sentReactions: string[] = [];
+    private lastReactionAt = -Infinity;
+
+    protected handleEmote(client: Client, message: SendEmoteMessage) {
+        const emoteId = message?.emoteId;
+        if (!this.state.player?.playerId || !isValidEmote(emoteId, 'reaction')) {
+            client.send('error', 'Invalid emote.');
+            return;
+        }
+        // clock.currentTime is wall time (see patchClockTimeScale), so the cooldown doesn't
+        // shrink at 2x fight speed. Silently dropped rather than errored — spam-clicking isn't
+        // worth a toast.
+        const now = this.clock.currentTime;
+        if (this.sentReactions.length >= MAX_REACTIONS_PER_FIGHT || now - this.lastReactionAt < REACTION_COOLDOWN_MS) return;
+        this.lastReactionAt = now;
+        this.sentReactions.push(emoteId);
+        this.broadcast('emote', {
+            playerId: this.state.player.playerId,
+            emoteId,
+            kind: 'reaction',
+            remaining: MAX_REACTIONS_PER_FIGHT - this.sentReactions.length,
+        } as EmoteMessage);
+        this.onReactionSent(emoteId);
+    }
+
+    // A reaction sent after handleFightEnd already wrote the ghost encounter (typically "GG"
+    // from the post-fight modal) is appended to that doc; earlier ones ride along on the insert.
+    protected onReactionSent(emoteId: string) {
+        if (!this.ghostEncounterSaved) return;
+        const replayId = this.replayId;
+        // Chained on the insert so the $push can't race ahead of it.
+        this.ghostEncounterSaved
+            .then(() => appendGhostEncounterEmote(replayId, emoteId))
+            .catch(err => console.error('[FightRoom] ghost encounter emote append failed:', err));
+    }
+
+    private ghostEncounterSaved: Promise<void> | null = null;
+
+    // Tells the ghost's owner how their snapshot did (the "While you were away" report). Only for
+    // human-owned ghosts: Joe is synthetic and nobody reads a bot's report. Tournament fights
+    // never get here (TournamentFightRoom reimplements handleFightEnd).
+    private recordGhostEncounter() {
+        const ghost = this.state.enemy;
+        const player = this.state.player;
+        if (!this.recorder.initialState || this.replayKind === 'tournament') return;
+        if (!ghost?.playerId || ghost.playerId === JOE_PLAYER_ID || ghost.isBot) return;
+        const result = this.state.fightResult === FightResultType.WIN ? 'lose'
+            : this.state.fightResult === FightResultType.LOSE ? 'win'
+            : 'draw';
+        this.ghostEncounterSaved = saveGhostEncounter({
+            replayId: this.replayId,
+            ownerOriginalPlayerId: ghost.originalPlayerId,
+            ownerSnapshotRound: ghost.round,
+            opponentOriginalPlayerId: player.originalPlayerId,
+            opponentPlayerId: player.playerId,
+            opponentName: player.name,
+            opponentAvatarUrl: player.avatarUrl,
+            opponentIsBot: player.isBot ?? false,
+            result,
+            endedRun: result === 'win' && player.lives <= 0,
+            emotes: [...this.sentReactions],
+        }).catch(err => console.error('[FightRoom] ghost encounter save failed:', err));
+    }
+
+    // The enemy is who delivered the final blow whenever a run ends in this room (the loss is
+    // always to state.enemy) — named so the client can show a nemesis card.
+    private buildGameOverPayload(): GameOverMessage {
+        const killer = this.state.enemy;
+        return {
+            message: 'You have lost the game!',
+            replayId: this.currentReplayId,
+            stats: this.currentFightStats,
+            killer: killer?.playerId != null ? {
+                name: killer.name,
+                avatarUrl: killer.avatarUrl,
+                playerId: killer.playerId,
+                originalPlayerId: killer.originalPlayerId,
+            } : undefined,
+        };
+    }
+
+    protected sayBattleCry(fighter: Player, slot: BattleCrySlot) {
+        this.broadcast('emote', this.battleCryPayload(fighter, slot));
+    }
+
+    private battleCryPayload(fighter: Player, slot: BattleCrySlot): EmoteMessage {
+        return { playerId: fighter.playerId, emoteId: fighter.getBattleCry(slot), kind: 'cry' };
+    }
+
+    private greetingsSaid = false;
+
+    private greetingPayloads(): EmoteMessage[] {
+        return [this.battleCryPayload(this.state.player, 'greeting'), this.battleCryPayload(this.state.enemy, 'greeting')];
+    }
+
+    private sayGreetings() {
+        this.greetingsSaid = true;
+        this.greetingPayloads().forEach(p => this.broadcast('emote', p));
+    }
+
     //get player, enemy and talents from db and map them to the room state
     async setUpState(player: Player, isEnemy = false) {
         if (!isEnemy) {
@@ -979,6 +1096,16 @@ export class FightRoom extends BaseRoom {
         // FightEndTriggerCommand, so post-fight trigger heals don't leak into the totals.
         if (this.recorder.initialState) {
             this.fightStatsPayload = this.buildFightStatsPayload();
+        }
+
+        // Before the result handlers' end_battle/game_* broadcasts, so the lines pop at the KO
+        // (and are still inside the recorded replay — recorder.finalize() runs further down).
+        if (this.state.fightResult === FightResultType.WIN) {
+            this.sayBattleCry(this.state.player, 'victory');
+            this.sayBattleCry(this.state.enemy, 'defeat');
+        } else if (this.state.fightResult === FightResultType.LOSE) {
+            this.sayBattleCry(this.state.enemy, 'victory');
+            this.sayBattleCry(this.state.player, 'defeat');
         }
 
         switch (this.state.fightResult) {
@@ -1031,6 +1158,7 @@ export class FightRoom extends BaseRoom {
                 kind: this.replayKind,
             }).catch(err => console.error('[FightRoom] replay save failed:', err));
         }
+        this.recordGhostEncounter();
     }
 
     private async handleWin() {
@@ -1074,11 +1202,7 @@ export class FightRoom extends BaseRoom {
             this.state.player.killedByOriginalPlayerId = killer.originalPlayerId;
             this.state.player.killedByName = killer.name;
             incrementRunsEnded(killer.originalPlayerId); // fire-and-forget, like saveReplay
-            this.broadcast('game_over', {
-                message: 'You have lost the game!',
-                replayId: this.currentReplayId,
-                stats: this.currentFightStats,
-            } as GameOverMessage);
+            this.broadcast('game_over', this.buildGameOverPayload());
         } else {
             const goldAmount = this.state.player.lives === 1 ? 30
                              : this.state.player.lives === 2 ? 20

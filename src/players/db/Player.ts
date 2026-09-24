@@ -15,6 +15,7 @@ import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 import {recalculatePlayerStats} from "../../common/statsUtils";
 import {migrateLegacyItem, migrateLegacyTalent} from "../../common/reworkMigrations";
 import {getNextSequence} from "../../common/db/Counter";
+import {BattleCrySlot, DEFAULT_BATTLE_CRIES, randomBattleCries} from "../../social/emotes";
 
 
 const PlayerSchema = new Schema({
@@ -92,6 +93,12 @@ const PlayerSchema = new Schema({
     // always knowable. Bots stay on leaderboards/Wall of Fame (visible, not hidden) — this flag
     // exists purely so bot-vs-human data can be told apart in analysis, not to exclude bots.
     isBot: {type: Boolean, default: false},
+    // Battle cries (src/social/emotes.ts) — preset line ids, see PlayerSchema.battleCryGreeting.
+    // No Mongoose default on purpose: a doc saved before these existed loads with the field
+    // absent and falls back to the Player class default (DEFAULT_BATTLE_CRIES).
+    battleCryGreeting: String,
+    battleCryVictory: String,
+    battleCryDefeat: String,
 });
 
 // Backs the wall-of-fame aggregation sorts ({$sort: {wins:-1, originalPlayerId:-1, playerId:1}})
@@ -247,6 +254,14 @@ export function getPlayerSchemaObject(playerFromDb: any): Player {
     return newPlayerSchemaObject;
 }
 
+function battleCryFields(cries: Record<BattleCrySlot, string>) {
+    return {
+        battleCryGreeting: cries.greeting,
+        battleCryVictory: cries.victory,
+        battleCryDefeat: cries.defeat,
+    };
+}
+
 function getNewPlayer(playerId: number,
                       name: string,
                       sessionId: string,
@@ -262,6 +277,7 @@ function getNewPlayer(playerId: number,
         name: name,
         gold: startingGold,
         isBot: isBot,
+        ...battleCryFields(isBot ? randomBattleCries() : DEFAULT_BATTLE_CRIES),
         xp: 0,
         level: startingLevel,
         sessionId: sessionId,
@@ -633,6 +649,9 @@ export function playerToPlainObject(player: Player): Record<string, any> {
         killedByOriginalPlayerId: player.killedByOriginalPlayerId,
         killedByName: player.killedByName,
         isBot: player.isBot ?? false,
+        battleCryGreeting: player.battleCryGreeting,
+        battleCryVictory: player.battleCryVictory,
+        battleCryDefeat: player.battleCryDefeat,
         baseStats: player.baseStats?.toJSON() || {},
         equippedItems,
         inventory: player.inventory.map(item => item.toJSON()),
@@ -672,6 +691,9 @@ export function snapshotPlayer(player: Player): Record<string, any> {
         refreshShopCost: player.refreshShopCost,
         gameVersion: player.gameVersion,
         isBot: player.isBot ?? false,
+        battleCryGreeting: player.battleCryGreeting,
+        battleCryVictory: player.battleCryVictory,
+        battleCryDefeat: player.battleCryDefeat,
         baseStats: player.baseStats?.toJSON() || {},
         equippedItems,
         inventory: player.inventory.map(item => item.toJSON()),
