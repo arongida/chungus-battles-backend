@@ -22,7 +22,7 @@ import { OnSellTriggerCommand } from '../commands/triggers/OnSellTriggerCommand'
 import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
-import { RewardGainMessage, SetBattleCryMessage } from '../common/MessageTypes';
+import { QuipMessage, QuipTrigger, RewardGainMessage, SetBattleCryMessage } from '../common/MessageTypes';
 import { BATTLE_CRY_SLOTS, isValidEmote } from '../social/emotes';
 import { getOwnerProfileJson } from '../social/badges';
 import { ITEM_SKILLS } from '../items/behavior/itemSkillBalance';
@@ -63,7 +63,10 @@ export class DraftRoom extends BaseRoom {
             await this.buyItem(message.itemId, client);
         });
         this.onMessage('sell', async (client, message) => {
+            const owned = () => this.state.player?.inventory.some((i) => i.uid === message?.uid);
+            const hadItem = owned();
             await this.sellItem(message.uid);
+            if (hadItem && !owned()) this.quip('sell', client);
         });
         this.onMessage('undo_sell', (client) => {
             this.undoSell(client);
@@ -123,6 +126,13 @@ export class DraftRoom extends BaseRoom {
 
         this.setSimulationInterval(() => this.update(), 500);
         this.autoDispose = false;
+    }
+
+    // Shop quips: the player's own character reacts to what they just did (a speech bubble on the
+    // frontend, which owns the lines and decides whether/when to actually speak). Sent only to
+    // this client and never recorded; a no-op on the bots' headless client.
+    protected quip(trigger: QuipTrigger, client: Client | undefined = this.clients[0]) {
+        client?.send('quip', { trigger } as QuipMessage);
     }
 
     protected handleSetBattleCry(client: Client, message: SetBattleCryMessage) {
@@ -613,6 +623,7 @@ export class DraftRoom extends BaseRoom {
         // full-price sell value below), so it bypasses the affordability check separately.
         if (item.sold || (!misconductFree && this.state.player.gold < item.price)) {
             client.send('error', 'Not possible to buy item!');
+            if (!item.sold) this.quip('broke', client);
             return;
         }
         if (misconductFree) {
@@ -673,6 +684,7 @@ export class DraftRoom extends BaseRoom {
         // Other shop slots for the same item (or previews built off the item just
         // replaced/consumed) need to reflect the new owned rarity immediately.
         await this.revalidateUpgradePreviews();
+        this.quip('buy', client);
     }
 
     protected async sellItem(uid: number) {
@@ -868,6 +880,7 @@ export class DraftRoom extends BaseRoom {
         const freeReroll = this.state.player.freeRerolls || this.state.player.freeRerollCharges > 0;
         if (!freeReroll && this.state.player.gold < this.state.player.refreshShopCost) {
             client.send('error', 'Not enough gold!');
+            this.quip('broke', client);
             return;
         }
         if (this.state.player.freeRerolls) {
@@ -891,6 +904,7 @@ export class DraftRoom extends BaseRoom {
         this.state.shop.clear();
         this.invalidateUndoSell();
         await this.updateShop(this.state.shopSize);
+        this.quip('reroll', client);
     }
 
     protected async handleLockShop(client: Client) {
@@ -950,6 +964,7 @@ export class DraftRoom extends BaseRoom {
         if (!talent) return;
         this.state.remainingTalentPoints--;
         this.state.player.talents.push(talent);
+        this.quip('talent', client);
         if (talent.talentId === TalentType.JOKER) {
             dealJokerCards(talent, this.state.player.level);
             track(talent, 1);
@@ -1002,6 +1017,7 @@ export class DraftRoom extends BaseRoom {
         }
         if (this.state.player.gold < price) {
             client.send('error', 'Not enough gold!');
+            this.quip('broke', client);
             return;
         }
         this.state.player.gold -= price;
@@ -1024,6 +1040,7 @@ export class DraftRoom extends BaseRoom {
         }
         if (leveled) {
             await this.updateTalentSelection();
+            this.quip('level_up');
         }
     }
 

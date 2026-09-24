@@ -72,6 +72,11 @@ export type SetBattleCryMessage = {
   emoteId: string;
 };
 
+/** Draft server -> client: something just happened in the shop the player's own character can
+ *  quip about. Only the trigger is sent — the frontend owns the lines (common/social/quips.ts). */
+export type QuipTrigger = 'buy' | 'sell' | 'reroll' | 'level_up' | 'talent' | 'broke';
+export type QuipMessage = { trigger: QuipTrigger };
+
 /** Fight -> server: a live preset reaction (emotes.ts slot 'reaction'). */
 export type SendEmoteMessage = {
   emoteId: string;
