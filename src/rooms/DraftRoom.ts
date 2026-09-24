@@ -22,7 +22,9 @@ import { OnSellTriggerCommand } from '../commands/triggers/OnSellTriggerCommand'
 import { EquipSlot, ItemClass, ItemRarity } from "../items/types/ItemTypes";
 import { UpdateStatsCommand } from "../commands/UpdateStatsCommand";
 import { PlayerAvatar } from '../players/types/PlayerTypes';
-import { RewardGainMessage } from '../common/MessageTypes';
+import { RewardGainMessage, SetBattleCryMessage } from '../common/MessageTypes';
+import { BATTLE_CRY_SLOTS, isValidEmote } from '../social/emotes';
+import { getOwnerProfileJson } from '../social/badges';
 import { ITEM_SKILLS } from '../items/behavior/itemSkillBalance';
 import { recomputeStoreCreditClaim } from '../items/behavior/ItemSkillBehaviors';
 import { ItemSkillType } from '../items/types/ItemSkillTypes';
@@ -110,11 +112,26 @@ export class DraftRoom extends BaseRoom {
             client.send('game_over', 'You abandoned your run.');
         });
 
+        // Battle cries: preset lines only (src/social/emotes.ts). Persisted by the normal
+        // onLeave save and copied onto this round's matchmaking snapshot by copyPlayer.
+        this.onMessage('set_battle_cry', (client, message: SetBattleCryMessage) => {
+            this.handleSetBattleCry(client, message);
+        });
+
         //start clock for timings
         this.clock.start();
 
         this.setSimulationInterval(() => this.update(), 500);
         this.autoDispose = false;
+    }
+
+    protected handleSetBattleCry(client: Client, message: SetBattleCryMessage) {
+        const slot = message?.slot;
+        if (!this.state.player || !BATTLE_CRY_SLOTS.includes(slot) || !isValidEmote(message?.emoteId, slot)) {
+            client.send('error', 'Invalid battle cry.');
+            return;
+        }
+        this.state.player.setBattleCry(slot, message.emoteId);
     }
 
     update() {
@@ -304,6 +321,7 @@ export class DraftRoom extends BaseRoom {
             extractTalentClasses(enemy).forEach(c => this.state.nextEnemyTalentClasses.push(c));
             extractItemClasses(enemy).forEach(c => this.state.nextEnemyItemClasses.push(c));
         }
+        this.state.nextEnemyOwnerJson = enemy ? await getOwnerProfileJson(enemy.originalPlayerId) : '';
     }
 
     onDrop(client: Client) {

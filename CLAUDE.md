@@ -267,6 +267,11 @@ All served over HTTP on the same port as the WebSocket server.
 | GET    | `/topPlayers?numberOfPlayers=N`   | Top N players by wins (deduplicated by `originalPlayerId`) |
 | GET    | `/playerBuild?playerId=N`         | Full player document                     |
 | GET    | `/rank?playerId=N`                | Player rank, name, and win count         |
+| GET    | `/leaderboard`, `/wallOfFame`     | Paginated/filterable ranked lists (see `getLeaderboard`/`getWallOfFame`) |
+| GET    | `/runSummaries?playerIds=1,2`     | Lean per-run status for the frontend run list |
+| GET    | `/replays?originalPlayerId=N`, `/replays/:id` | Fight replay list / full replay |
+| POST   | `/ghostReport`                    | `{playerId, playerToken, since?, limit?}` → how this character's ghosts fared + reactions received (token-authenticated) |
+| POST   | `/ghostReportCounts`              | `{runs:[{playerId, playerToken, since?}]}` → unseen ghost-encounter counts per run |
 | GET    | `/colyseus`                       | Colyseus monitor dashboard               |
 | GET    | `/`                               | Colyseus playground (non-production only)|
 
@@ -289,12 +294,14 @@ All served over HTTP on the same port as the WebSocket server.
 | `joker_pick`     | `{ stat: string }`         | Pick one of Joker's two pending post-win cards (see `talents/behavior/jokerState.ts`) |
 | `lock-shop`      | —                          | Lock current shop items            |
 | `unlock-shop`    | —                          | Unlock shop                        |
+| `set_battle_cry` | `{ slot, emoteId }`        | Pick a preset battle cry (`greeting`/`victory`/`defeat`, ids from `src/social/emotes.ts`) |
 
 ### FightRoom — Client → Server
 
 | Message           | Payload               | Description                                             |
 |-------------------|-----------------------|---------------------------------------------------------|
 | `set_fight_speed` | `{ speed: number }`   | Set fight time scale (0.5, 1 or 2); synced as `FightState.timeScale` |
+| `emote`           | `{ emoteId: string }` | Preset reaction (slot `reaction` only), max 5/fight, 2s cooldown; broadcast + stored on the ghost owner's `GhostEncounter` |
 
 ### FightRoom — Server → Client
 
@@ -310,7 +317,32 @@ All served over HTTP on the same port as the WebSocket server.
 | `game_over`       | `GameOverMessage { message, replayId?, stats? }` | Run over — lives exhausted |
 | `game_win`        | `GameWinMessage { wins, losses, season, replayId?, stats? }` | Run over — hit `WINS_TO_WIN` |
 | `draft_log`       | `string`                         | Draft-phase log message          |
+| `emote`           | `EmoteMessage { playerId, emoteId, kind: 'cry'\|'reaction', remaining? }` | Speech bubble — battle cries at start/end, live reactions |
 | `error`           | `string`                         | Operation rejected               |
+
+---
+
+## Social Layer (`src/social/`)
+
+Async play means the opponent is always a snapshot ("ghost"), so the social features hang off
+the snapshot rather than live chat. **Preset lines only** — no free text (no accounts to back
+moderation).
+
+- `emotes.ts` — the catalog (ids → slot/text). Mirrored in the frontend's
+  `common/social/emote-catalog.ts`; `test/emoteCatalogParity.test.ts` enforces it. Ids are
+  persisted — never rename/delete, only add.
+- **Battle cries** — `Player.battleCryGreeting/Victory/Defeat` (`@type`, carried onto snapshots).
+  `FightRoom` broadcasts both greetings right after `recorder.start()` and the victory/defeat
+  lines in `handleFightEnd`, so replays include them.
+- **Reactions** — `FightRoom` `emote` handler (bounded: it's recorded into replays).
+- **Ghost report** — `db/GhostEncounter.ts`: one doc per fight against a human-owned ghost, from
+  the ghost's POV, keyed by the ghost's `originalPlayerId` (the owner's live character id).
+  Written in `FightRoom.recordGhostEncounter` (skips Joe, bot ghosts, tournaments). The owner's
+  browser reads it via `POST /ghostReport` with the run's `playerToken`.
+- **Owner profile / badges** — `badges.ts` `getOwnerProfile`: status + "Run Ender ×N"/"Champion"
+  badges of the character behind a ghost; synced as JSON on `FightState.enemyOwnerJson` /
+  `DraftState.nextEnemyOwnerJson` and stored in replay `initialState.enemyOwner`.
+- `game_over` carries `killer` (the nemesis).
 
 ---
 

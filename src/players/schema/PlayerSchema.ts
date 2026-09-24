@@ -16,6 +16,7 @@ import {getSkillSlot2View} from '../../items/skills/itemSkillSlot2View';
 import {FightStats} from "./FightStats";
 import {weaponWhispererSnapshots} from "../../talents/behavior/weaponWhispererState";
 import {addDotSource, creditHealingPrevented, DotSourceLedger, removeDotSource} from "../../common/dotSources";
+import {BattleCrySlot, DEFAULT_BATTLE_CRIES} from "../../social/emotes";
 
 export class Player extends Schema implements IStats {
     @type('number') playerId: number;
@@ -336,6 +337,15 @@ export class Player extends Schema implements IStats {
     // Mongo, re-seeded to BASE_POTION_CAPACITY every draft aura tick before aura talents run
     // (DraftAuraTriggerCommand), then Flash Sale (MERCHANT_1) adds to it while owned.
     @type('number') potionCapacity: number = 1;
+    // Battle cries (src/social/emotes.ts): preset line ids this character says in fights — the
+    // greeting at battle start, then the victory or defeat line when it ends. Set in the draft
+    // (DraftRoom 'set_battle_cry'), persisted, and carried onto every matchmaking snapshot, so a
+    // ghost speaks with its owner's chosen lines. @type (not plain) so copyFrom's toJSON round
+    // trip carries them, and so the draft UI can show the current pick. The defaults also cover
+    // snapshots saved before this field existed (absent from the lean doc -> class default).
+    @type('string') battleCryGreeting: string = DEFAULT_BATTLE_CRIES.greeting;
+    @type('string') battleCryVictory: string = DEFAULT_BATTLE_CRIES.victory;
+    @type('string') battleCryDefeat: string = DEFAULT_BATTLE_CRIES.defeat;
 
     private _poisonStack: number = 0;
 
@@ -831,6 +841,18 @@ export class Player extends Schema implements IStats {
 
     unlockShop() {
         this.lockedShop.clear();
+    }
+
+    getBattleCry(slot: BattleCrySlot): string {
+        if (slot === 'greeting') return this.battleCryGreeting || DEFAULT_BATTLE_CRIES.greeting;
+        if (slot === 'victory') return this.battleCryVictory || DEFAULT_BATTLE_CRIES.victory;
+        return this.battleCryDefeat || DEFAULT_BATTLE_CRIES.defeat;
+    }
+
+    setBattleCry(slot: BattleCrySlot, emoteId: string) {
+        if (slot === 'greeting') this.battleCryGreeting = emoteId;
+        else if (slot === 'victory') this.battleCryVictory = emoteId;
+        else this.battleCryDefeat = emoteId;
     }
 
     /**

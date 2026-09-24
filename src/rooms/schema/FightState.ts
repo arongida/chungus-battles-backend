@@ -12,6 +12,9 @@ export class FightState extends Schema {
     @type('number') endBurnCountdownMs: number = END_BURN_START_MS;
     @type('boolean') endBurnActive: boolean = false;
     @type('number') endBurnDamage: number = 10;
+    // Public profile of the character that owns the enemy snapshot (social/badges.ts), JSON-
+    // encoded; '' for Joe or when unavailable. Also copied into the replay's initialState.
+    @type('string') enemyOwnerJson: string = '';
     questItems: ArraySchema<Item> = new ArraySchema<Item>();
     battleStarted = false;
     skillsTimers: Delayed[] = [];
