@@ -245,7 +245,11 @@ export class FightRoom extends BaseRoom {
         //start battle after 3 seconds
         let countdown = 3;
         const countdownTimer = this.clock.setInterval(() => {
-            this.logCombat('broadcast', { text: `The battle will begin in ${countdown--} second(s)...`, kind: 'countdown' });
+            const secondsLeft = countdown--;
+            this.logCombat('broadcast', { text: `The battle will begin in ${secondsLeft} second(s)...`, kind: 'countdown' });
+            // Greetings during the countdown (not at battle start) so the player has time to read
+            // them before the fight's own effects crowd the avatars.
+            if (secondsLeft === 2) this.sayGreetings();
         }, 1000);
 
         this.clock.setTimeout(async () => {
@@ -897,9 +901,14 @@ export class FightRoom extends BaseRoom {
             gameVersion: GAME_VERSION,
             enemyOwner: this.state.enemyOwnerJson ? JSON.parse(this.state.enemyOwnerJson) : undefined,
         });
-        // Right after recorder.start() so both greetings land at t≈0 in the replay too.
-        this.sayBattleCry(this.state.player, 'greeting');
-        this.sayBattleCry(this.state.enemy, 'greeting');
+        // The live greetings went out during the countdown, before the recorder was running —
+        // write them into the replay at t≈0 so playback still shows them. Rooms that skip the
+        // countdown (e.g. TournamentFightRoom) greet here instead.
+        if (this.greetingsSaid) {
+            this.greetingPayloads().forEach(p => this.recorder.record('broadcast', 'emote', p));
+        } else {
+            this.sayGreetings();
+        }
 
         this.state.player.talents.forEach(t => t.resetCombatStats());
         this.state.enemy.talents.forEach(t => t.resetCombatStats());
@@ -1039,7 +1048,22 @@ export class FightRoom extends BaseRoom {
     }
 
     protected sayBattleCry(fighter: Player, slot: BattleCrySlot) {
-        this.broadcast('emote', { playerId: fighter.playerId, emoteId: fighter.getBattleCry(slot), kind: 'cry' } as EmoteMessage);
+        this.broadcast('emote', this.battleCryPayload(fighter, slot));
+    }
+
+    private battleCryPayload(fighter: Player, slot: BattleCrySlot): EmoteMessage {
+        return { playerId: fighter.playerId, emoteId: fighter.getBattleCry(slot), kind: 'cry' };
+    }
+
+    private greetingsSaid = false;
+
+    private greetingPayloads(): EmoteMessage[] {
+        return [this.battleCryPayload(this.state.player, 'greeting'), this.battleCryPayload(this.state.enemy, 'greeting')];
+    }
+
+    private sayGreetings() {
+        this.greetingsSaid = true;
+        this.greetingPayloads().forEach(p => this.broadcast('emote', p));
     }
 
     //get player, enemy and talents from db and map them to the room state
