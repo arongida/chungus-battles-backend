@@ -203,6 +203,10 @@ describe("social: rooms and REST", () => {
             expect.objectContaining({ playerId: challenger.playerId, emoteId: 'react_wp', kind: 'reaction' }),
         ]));
         const result = fightRoom.state.fightResult;
+        // One-bubble-at-a-time on the client relies on the local player's line coming first.
+        const cries = emotes.filter((e: any) => e.kind === 'cry');
+        expect(cries[0].playerId).toBe(challenger.playerId); // greetings
+        if (result !== FightResultType.DRAW) expect(cries[2].playerId).toBe(challenger.playerId); // end lines
         if (result === FightResultType.WIN) {
             expect(emotes).toContainEqual({ playerId: snapshot.playerId, emoteId: 'lose_remember', kind: 'cry' });
         } else if (result === FightResultType.LOSE) {

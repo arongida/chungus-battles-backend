@@ -1057,6 +1057,7 @@ export class FightRoom extends BaseRoom {
 
     private greetingsSaid = false;
 
+    // Player first, then enemy — see the ordering note in handleFightEnd.
     private greetingPayloads(): EmoteMessage[] {
         return [this.battleCryPayload(this.state.player, 'greeting'), this.battleCryPayload(this.state.enemy, 'greeting')];
     }
@@ -1100,12 +1101,14 @@ export class FightRoom extends BaseRoom {
 
         // Before the result handlers' end_battle/game_* broadcasts, so the lines pop at the KO
         // (and are still inside the recorded replay — recorder.finalize() runs further down).
+        // The local player's line always goes first: the client shows one bubble at a time in
+        // arrival order (TriggerAnimations.triggerSpeechBubble), so this reads "you, then them".
         if (this.state.fightResult === FightResultType.WIN) {
             this.sayBattleCry(this.state.player, 'victory');
             this.sayBattleCry(this.state.enemy, 'defeat');
         } else if (this.state.fightResult === FightResultType.LOSE) {
-            this.sayBattleCry(this.state.enemy, 'victory');
             this.sayBattleCry(this.state.player, 'defeat');
+            this.sayBattleCry(this.state.enemy, 'victory');
         }
 
         switch (this.state.fightResult) {
