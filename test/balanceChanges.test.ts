@@ -78,7 +78,7 @@ test.each([ItemRarity.LEGENDARY, ItemRarity.MYTHIC])('Fluid Motion rarity %i sta
 
 test('Joker offers an immediate choice, accepts it once, and cannot be selected twice', async () => {
     const p = player(); p.level = 3; const joker = talent(TalentType.JOKER);
-    const room = { state: { player: p, remainingTalentPoints: 1, availableTalents: new ArraySchema(joker) }, updateTalentSelection: jest.fn() };
+    const room = { state: { player: p, remainingTalentPoints: 1, availableTalents: new ArraySchema(joker) }, updateTalentSelection: jest.fn(), quip: jest.fn() };
     await (DraftRoom.prototype as any).selectTalent.call(room, TalentType.JOKER, client);
     const cards = parseJokerPendingCards(joker.tags); expect(cards).toHaveLength(2);
     await (DraftRoom.prototype as any).selectTalent.call(room, TalentType.JOKER, client);
