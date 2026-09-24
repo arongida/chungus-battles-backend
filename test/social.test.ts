@@ -3,7 +3,8 @@ import { server } from '../src/app.config';
 import { getNextPlayerId, getPlayer, playerModel } from "../src/players/db/Player";
 import { generatePlayerToken, reservePlayerId } from "../src/players/db/PlayerToken";
 import { FightResultType } from "../src/common/types";
-import { BATTLE_CRY_SLOTS, DEFAULT_BATTLE_CRIES, EMOTES, isValidEmote, MAX_REACTIONS_PER_FIGHT, randomBattleCries } from "../src/social/emotes";
+import { BATTLE_CRY_SLOTS, DEFAULT_BATTLE_CRIES, EMOTES, isValidEmote, MAX_REACTIONS_PER_FIGHT, randomBattleCries, seededBattleCries } from "../src/social/emotes";
+import { getPlayerSchemaObject } from "../src/players/db/Player";
 import { buildOwnerProfile } from "../src/social/badges";
 import { ghostEncounterModel } from "../src/social/db/GhostEncounter";
 import mongoose from 'mongoose';
@@ -17,6 +18,28 @@ describe("social: emote catalog", () => {
             const cries = randomBattleCries();
             BATTLE_CRY_SLOTS.forEach(slot => expect(isValidEmote(cries[slot], slot)).toBe(true));
         }
+    });
+
+    it("seeds stable, valid, varied lines for characters saved before battle cries existed", () => {
+        for (let id = 1; id <= 50; id++) {
+            const a = seededBattleCries(id);
+            expect(seededBattleCries(id)).toEqual(a);
+            BATTLE_CRY_SLOTS.forEach(slot => expect(isValidEmote(a[slot], slot)).toBe(true));
+        }
+        const greetings = new Set(Array.from({ length: 50 }, (_, i) => seededBattleCries(i + 1).greeting));
+        expect(greetings.size).toBeGreaterThan(3);
+
+        // A legacy doc (no battleCry* fields) loads with its seeded lines, the same for every
+        // snapshot of that character; stored lines always win.
+        const legacy = (playerId: number) => getPlayerSchemaObject({ playerId, originalPlayerId: 4242, name: 'Old', talents: [], inventory: [], lockedShop: [], equippedItems: {} });
+        const seeded = seededBattleCries(4242);
+        [legacy(4242), legacy(5000)].forEach(p => {
+            expect(p.battleCryGreeting).toBe(seeded.greeting);
+            expect(p.battleCryVictory).toBe(seeded.victory);
+            expect(p.battleCryDefeat).toBe(seeded.defeat);
+        });
+        const chosen = getPlayerSchemaObject({ playerId: 1, originalPlayerId: 1, battleCryGreeting: 'greet_nap', talents: [], inventory: [], lockedShop: [], equippedItems: {} });
+        expect(chosen.battleCryGreeting).toBe('greet_nap');
     });
 
     it("rejects wrong-slot, unknown, prototype and non-string ids", () => {
@@ -70,7 +93,7 @@ describe("social: rooms and REST", () => {
     const SERVER_MESSAGES = [
         'attack', 'damage', 'healing', 'combat_log', 'trigger_talent', 'trigger_item', 'end_battle',
         'game_over', 'game_win', 'draft_log', 'shop_floating', 'reward_gain', 'invulnerable',
-        'invulnerable_state', 'stunned_state', 'emote', 'loss_reward_result',
+        'invulnerable_state', 'stunned_state', 'emote', 'loss_reward_result', 'message',
     ];
 
     async function mintPlayerIdAndToken() {
@@ -85,10 +108,12 @@ describe("social: rooms and REST", () => {
         const room = await colyseus.createRoom("draft_room", {});
         const client = await colyseus.connectTo(room, { playerId, playerToken, name, avatarUrl: "assets/warrior_01.png" });
         const errors: string[] = [];
+        const quips: string[] = [];
         SERVER_MESSAGES.forEach(type => client.onMessage(type, () => {}));
         client.onMessage('error', (msg: string) => errors.push(msg));
+        client.onMessage('quip', (msg: { trigger: string }) => quips.push(msg.trigger));
         await waitFor(() => room.state.shop.length > 0, { timeout: 5000, message: 'draft room shop to populate' });
-        return { room, client, playerId, playerToken, errors };
+        return { room, client, playerId, playerToken, errors, quips };
     }
 
     async function joinFight(playerId: number, playerToken: string, enemyPlayerId?: number) {
@@ -119,17 +144,21 @@ describe("social: rooms and REST", () => {
     it("battle cries: rejects invalid picks, persists valid ones onto the matchmaking snapshot, and ghosts speak them in fights", async () => {
         // --- Ghost owner: set a custom greeting, leave -> copyPlayer writes a snapshot. ---
         const owner = await joinDraft("Ghost Owner");
-        expect(owner.room.state.player.battleCryGreeting).toBe(DEFAULT_BATTLE_CRIES.greeting);
+        // New characters start with a random (valid) set of lines.
+        const startGreeting = owner.room.state.player.battleCryGreeting;
+        expect(isValidEmote(startGreeting, 'greeting')).toBe(true);
+        expect(isValidEmote(owner.room.state.player.battleCryDefeat, 'defeat')).toBe(true);
 
         owner.client.send('set_battle_cry', { slot: 'greeting', emoteId: 'react_wp' }); // reaction id in a cry slot
         owner.client.send('set_battle_cry', { slot: 'reaction', emoteId: 'react_wp' }); // not a cry slot
         await waitFor(() => owner.errors.length === 2, { message: 'both invalid picks to be rejected' });
-        expect(owner.room.state.player.battleCryGreeting).toBe(DEFAULT_BATTLE_CRIES.greeting);
+        expect(owner.room.state.player.battleCryGreeting).toBe(startGreeting);
 
         owner.client.send('set_battle_cry', { slot: 'greeting', emoteId: 'greet_lunch' });
         owner.client.send('set_battle_cry', { slot: 'defeat', emoteId: 'lose_remember' });
-        await waitFor(() => owner.room.state.player.battleCryDefeat === 'lose_remember', { message: 'valid picks to apply' });
-        expect(owner.room.state.player.battleCryGreeting).toBe('greet_lunch');
+        // Wait on both: the random starting set may already contain either line.
+        await waitFor(() => owner.room.state.player.battleCryDefeat === 'lose_remember'
+            && owner.room.state.player.battleCryGreeting === 'greet_lunch', { message: 'valid picks to apply' });
 
         await owner.client.leave(true);
         const snapshot = await waitForValue(async () => playerModel.findOne(
@@ -140,6 +169,10 @@ describe("social: rooms and REST", () => {
 
         // --- Challenger fights that snapshot (dev-only enemy override). ---
         const challenger = await joinDraft("Challenger");
+        const challengerCries = {
+            greeting: challenger.room.state.player.battleCryGreeting,
+            defeat: challenger.room.state.player.battleCryDefeat,
+        };
         await challenger.client.leave(true);
         const { fightRoom, fightClient, errors } = await joinFight(challenger.playerId, challenger.playerToken, snapshot.playerId);
         expect(fightRoom.state.enemy.originalPlayerId).toBe(owner.playerId);
@@ -166,14 +199,14 @@ describe("social: rooms and REST", () => {
         const emotes = recorder.events.filter((e: any) => e.type === 'emote').map((e: any) => e.payload);
         expect(emotes).toEqual(expect.arrayContaining([
             { playerId: snapshot.playerId, emoteId: 'greet_lunch', kind: 'cry' },
-            { playerId: challenger.playerId, emoteId: DEFAULT_BATTLE_CRIES.greeting, kind: 'cry' },
+            { playerId: challenger.playerId, emoteId: challengerCries.greeting, kind: 'cry' },
             expect.objectContaining({ playerId: challenger.playerId, emoteId: 'react_wp', kind: 'reaction' }),
         ]));
         const result = fightRoom.state.fightResult;
         if (result === FightResultType.WIN) {
             expect(emotes).toContainEqual({ playerId: snapshot.playerId, emoteId: 'lose_remember', kind: 'cry' });
         } else if (result === FightResultType.LOSE) {
-            expect(emotes).toContainEqual({ playerId: challenger.playerId, emoteId: DEFAULT_BATTLE_CRIES.defeat, kind: 'cry' });
+            expect(emotes).toContainEqual({ playerId: challenger.playerId, emoteId: challengerCries.defeat, kind: 'cry' });
         }
 
         // Ghost encounter written from the ghost's point of view, carrying the reaction.
@@ -228,6 +261,21 @@ describe("social: rooms and REST", () => {
 
         await fightClient.leave(true);
     }, 60000);
+
+    it("shop quips: a successful buy and a broke reroll each send a quip trigger", async () => {
+        const p = await joinDraft("Quipper");
+        const item = p.room.state.shop.find((i: any) => i.price <= p.room.state.player.gold);
+        p.client.send('buy', { itemId: item.itemId });
+        await waitFor(() => p.quips.includes('buy'), { message: 'buy quip' });
+
+        p.room.state.player.gold = 0;
+        (p.room.state.player as any).freeRerolls = false;
+        p.room.state.player.freeRerollCharges = 0;
+        p.client.send('refresh_shop');
+        await waitFor(() => p.quips.includes('broke'), { message: 'broke quip' });
+        expect(p.quips).not.toContain('reroll');
+        await p.client.leave(true);
+    });
 
     it("fighting Joe writes no ghost encounter", async () => {
         const challenger = await joinDraft("Joe Fighter");

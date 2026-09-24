@@ -15,7 +15,7 @@ import {GAME_VERSION, WINS_TO_WIN} from "../../common/types";
 import {recalculatePlayerStats} from "../../common/statsUtils";
 import {migrateLegacyItem, migrateLegacyTalent} from "../../common/reworkMigrations";
 import {getNextSequence} from "../../common/db/Counter";
-import {BattleCrySlot, DEFAULT_BATTLE_CRIES, randomBattleCries} from "../../social/emotes";
+import {BattleCrySlot, randomBattleCries, seededBattleCries} from "../../social/emotes";
 
 
 const PlayerSchema = new Schema({
@@ -95,7 +95,7 @@ const PlayerSchema = new Schema({
     isBot: {type: Boolean, default: false},
     // Battle cries (src/social/emotes.ts) — preset line ids, see PlayerSchema.battleCryGreeting.
     // No Mongoose default on purpose: a doc saved before these existed loads with the field
-    // absent and falls back to the Player class default (DEFAULT_BATTLE_CRIES).
+    // absent and gets stable seeded lines on load (see getPlayerSchemaObject / seededBattleCries).
     battleCryGreeting: String,
     battleCryVictory: String,
     battleCryDefeat: String,
@@ -187,6 +187,14 @@ export function getPlayerSchemaObject(playerFromDb: any): Player {
     const { baseStats, equippedItems, talents, inventory, lockedShop, pendingPotionEffects, ...primitives } = playerFromDb;
 
     const newPlayerSchemaObject = new Player().assign(primitives);
+    // Characters/snapshots saved before battle cries existed carry no battleCry* fields — give
+    // them stable per-character lines (seeded by originalPlayerId) instead of the shared defaults.
+    if (!primitives.battleCryGreeting || !primitives.battleCryVictory || !primitives.battleCryDefeat) {
+        const seeded = seededBattleCries(primitives.originalPlayerId ?? primitives.playerId ?? 0);
+        if (!primitives.battleCryGreeting) newPlayerSchemaObject.battleCryGreeting = seeded.greeting;
+        if (!primitives.battleCryVictory) newPlayerSchemaObject.battleCryVictory = seeded.victory;
+        if (!primitives.battleCryDefeat) newPlayerSchemaObject.battleCryDefeat = seeded.defeat;
+    }
     newPlayerSchemaObject.baseStats = affectedStatsFromRaw(baseStats);
 
     // Rebuilt manually rather than left in `primitives` — same "ArraySchema must be rebuilt
@@ -277,7 +285,9 @@ function getNewPlayer(playerId: number,
         name: name,
         gold: startingGold,
         isBot: isBot,
-        ...battleCryFields(isBot ? randomBattleCries() : DEFAULT_BATTLE_CRIES),
+        // Rolled once here and persisted (copied onto every snapshot), so a character keeps its
+        // voice for the whole run — varied between characters, never re-rolled between rounds.
+        ...battleCryFields(randomBattleCries()),
         xp: 0,
         level: startingLevel,
         sessionId: sessionId,

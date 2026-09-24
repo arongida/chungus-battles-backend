@@ -89,6 +89,23 @@ export function randomBattleCries(): Record<BattleCrySlot, string> {
     return { greeting: pick('greeting'), victory: pick('victory'), defeat: pick('defeat') };
 }
 
+// Deterministic stand-in for characters (and their snapshots) saved before battle cries existed:
+// the same seed — the character's originalPlayerId, shared by every snapshot — always yields the
+// same lines, so an old ghost doesn't change its voice between rounds, yet different old
+// characters still sound different instead of all using DEFAULT_BATTLE_CRIES.
+export function seededBattleCries(seed: number): Record<BattleCrySlot, string> {
+    const pick = (slot: BattleCrySlot, salt: number) => {
+        const ids = emoteIdsForSlot(slot);
+        // Small integer hash (xorshift-multiply) — just needs to spread consecutive ids apart.
+        let h = (Math.floor(seed) ^ salt) >>> 0;
+        h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+        h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+        h = (h ^ (h >>> 16)) >>> 0;
+        return ids[h % ids.length];
+    };
+    return { greeting: pick('greeting', 0x9e37), victory: pick('victory', 0x7f4a), defeat: pick('defeat', 0x2c1b) };
+}
+
 // Per-fight limits on live reactions (FightRoom's 'emote' handler). The cap also bounds how much
 // a scripted client can add to the recorded replay and to the owner's ghost encounter doc.
 export const MAX_REACTIONS_PER_FIGHT = 5;
