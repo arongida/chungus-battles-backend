@@ -248,6 +248,9 @@ describe('bot module (headless rooms + BotRunner, driven directly against a live
 
             const runDoc = await botRunModel.findOne({ runId: result.runId }).lean();
             expect(runDoc!.policyId).toBe('learned-v1');
+            // The run records exactly which trained model played it.
+            expect((runDoc as any).modelId).toBe(model.id);
+            expect(model.id).toMatch(/^fight-v\d+@.+#[0-9a-f]+$/);
             // The runner attached a same-round opponent sample to every observation.
             expect(seen.length).toBeGreaterThan(0);
             expect(seen.every((n) => n >= 0)).toBe(true);

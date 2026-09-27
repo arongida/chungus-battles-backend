@@ -43,6 +43,7 @@ export class LearnedPolicyV1 extends HeuristicPolicyV2 {
     readonly id: string = 'learned-v1';
     readonly version: string = '1.0.0';
     readonly referenceOpponentCount = REFERENCE_OPPONENTS;
+    readonly modelId: string;
     private readonly model: FightModel;
 
     constructor(opts: LearnedPolicyV1Options = {}) {
@@ -52,6 +53,7 @@ export class LearnedPolicyV1 extends HeuristicPolicyV2 {
             throw new Error(`learned-v1: no fight model for game version ${GAME_VERSION} (expected src/bot/ml/models/fight-v${GAME_VERSION}.json)`);
         }
         this.model = model;
+        this.modelId = model.id;
     }
 
     protected makeValuer(obs: DraftObservation): BoardValuer | undefined {

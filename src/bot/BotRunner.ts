@@ -375,6 +375,7 @@ export async function runBotOnce(opts: BotRunOptions = {}): Promise<BotRunResult
         avatarUrl: identity.avatarUrl,
         archetypeId: policy.archetypeId,
         seed: policy.seed ?? seed,
+        modelId: policy.modelId,
     });
 
     let outcome: 'win' | 'dead' | 'aborted' | 'error' = 'aborted';

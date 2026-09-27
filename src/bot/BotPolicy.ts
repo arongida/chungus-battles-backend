@@ -271,6 +271,9 @@ export interface BotPolicy {
     /** How many same-round opponent builds the runner should put on each draft observation
      *  (`referenceOpponents`). Omitted = none, and no extra database read. */
     readonly referenceOpponentCount?: number;
+    /** Set only by a policy driven by a trained model: identifies the exact model file, since the
+     *  policy id/version stays the same across retrains. Recorded on the BotRun doc. */
+    readonly modelId?: string;
 
     /**
      * Plans the next chunk of the CURRENT draft phase as an ordered batch. The driver applies

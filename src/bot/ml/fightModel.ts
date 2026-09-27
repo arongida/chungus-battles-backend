@@ -27,6 +27,13 @@ export class FightModel {
         if (artifact.featureNames.length !== FEATURE_NAMES.length) throw new Error('fight model feature count mismatch');
     }
 
+    /** e.g. "fight-v27@2026-09-27T12:03:11Z#90ae0071": game version, when it was trained, and the
+     *  feature spec. Unique per export, so every retrain gets a new id. */
+    get id(): string {
+        const trainedAt = this.artifact.trainedAt.replace(/\.\d+/, '').replace('+00:00', 'Z');
+        return `fight-v${this.artifact.gameVersion}@${trainedAt}#${this.artifact.featureSpecHash}`;
+    }
+
     static load(file: string): FightModel {
         return new FightModel(JSON.parse(fs.readFileSync(file, 'utf8')) as GbdtArtifact);
     }
