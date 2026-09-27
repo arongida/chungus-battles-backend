@@ -1,4 +1,5 @@
 import { matchMaker } from '@colyseus/core';
+import { startKeepAwake } from '../common/keepAwake';
 import { randomUUID } from 'crypto';
 import { TournamentFightRoom, HeadlessFightOutcome } from './TournamentFightRoom';
 import { getPlayer, getWallOfFame, snapshotPlayer } from '../players/db/Player';
@@ -603,6 +604,8 @@ export async function executeTournament(season: number): Promise<RunTournamentRe
     }
 
     runningSeasons.add(season);
+    // Runs entirely in-process, so fly's proxy would otherwise see an idle machine and stop it.
+    const release = startKeepAwake(`tournament season ${season}`);
     try {
         let doc = await getTournamentBySeason(season);
         if (!doc) throw new Error(`No tournament doc for season ${season} — call prepareTournament first.`);
@@ -635,6 +638,7 @@ export async function executeTournament(season: number): Promise<RunTournamentRe
         await markTournamentFailed(season, err?.message ?? String(err));
         throw err;
     } finally {
+        release();
         runningSeasons.delete(season);
     }
 }

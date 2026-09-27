@@ -11,6 +11,7 @@ import { hashSeed } from './v2/rng';
 import { buildDraftObservation, buildEnemyBuildViewFromPlayer } from './observation';
 import { EnemyBuildView } from './BotPolicy';
 import { recalculatePlayerStats } from '../common/statsUtils';
+import { startKeepAwake } from '../common/keepAwake';
 import { createHeadlessClient } from '../tournament/HeadlessClient';
 import { mintBotIdentity } from './botIdentity';
 import { getPlayer, sampleSameRoundPlayers } from '../players/db/Player';
@@ -327,6 +328,8 @@ export async function executeBotBatch(
         batchId, policyId, archetypeId: opts.archetypeId,
         runsTotal: opts.runs, runsDone: 0, cancelled: false, startedAt: new Date(),
     };
+    // The batch is invisible to fly's proxy; without this the machine autostops mid-batch.
+    const release = startKeepAwake(`bot batch ${batchId}`);
     try {
         for (let i = 0; i < opts.runs; i++) {
             if (currentBatch.cancelled) break;
@@ -339,6 +342,7 @@ export async function executeBotBatch(
             currentBatch.runsDone++;
         }
     } finally {
+        release();
         currentBatch = null;
     }
 }
