@@ -59,8 +59,9 @@ import { TournamentFightRoom } from './tournament/TournamentFightRoom';
 import { BotDraftRoom } from './bot/BotDraftRoom';
 import { BotFightRoom } from './bot/BotFightRoom';
 import { executeTournament, isTournamentRunning, prepareTournament } from './tournament/TournamentRunner';
+import { KEEPALIVE_HOLD_MS } from './common/keepAwake';
 import {
-  DEFAULT_POLICY_ID, executeBotBatch, getBotBatchStatus, isBotBatchRunning, isKnownPolicyId,
+  DEFAULT_POLICY_ID, executeBotBatch, getBotBatchStatus, isBotBatchRunning, isKnownPolicyId, resolvePolicy,
   listPolicyIds, stopBotBatch,
 } from './bot/BotRunner';
 import { ARCHETYPE_IDS, ArchetypeId, isArchetypeId } from './bot/v2/archetypes';
@@ -294,6 +295,15 @@ export const server = defineServer({
         // Lets fly.io's health check (see fly.toml [[http_service.checks]]) distinguish "alive"
         // from "wedged" — mongoose.connection.readyState 1 === connected. There was previously no
         // health check at all, only a TCP probe, which can't detect a hung-but-listening process.
+        // Held open for KEEPALIVE_HOLD_MS so a running bot batch/tournament always has one request in
+        // flight through fly's proxy, which keeps the machine from being autostopped mid-work (see
+        // common/keepAwake.ts). Admin-only so it can't be used to tie up connections.
+        app.get('/admin/keepalive', (req, res) => {
+            if (!isAuthorizedAdmin(req)) return res.status(401).send({ error: 'unauthorized' });
+            const timer = setTimeout(() => res.status(204).end(), KEEPALIVE_HOLD_MS);
+            req.on('close', () => clearTimeout(timer));
+        });
+
         app.get('/health', (_req, res) => {
             const dbConnected = mongoose.connection.readyState === 1;
             res.status(dbConnected ? 200 : 503).json({ ok: dbConnected, db: mongoose.connection.readyState });
@@ -448,6 +458,13 @@ export const server = defineServer({
             }
             if (archetypeId !== undefined && !isArchetypeId(archetypeId)) {
                 return res.status(400).send({ error: `unknown archetypeId '${archetypeId}'`, known: ARCHETYPE_IDS });
+            }
+            // A known policy can still be unconstructible (learned-v1 without a committed model for
+            // this GAME_VERSION) — fail the request rather than 202 and a batch that dies at once.
+            try {
+                resolvePolicy(policyId, { seed: 0, archetypeId: archetypeId as ArchetypeId });
+            } catch (err) {
+                return res.status(400).send({ error: (err as Error).message });
             }
 
             const batchId = randomUUID();

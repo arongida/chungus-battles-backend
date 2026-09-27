@@ -1,3 +1,6 @@
+import { join as pathJoin } from 'path';
+import { FightModel } from '../src/bot/ml/fightModel';
+import { LearnedPolicyV1 } from '../src/bot/learned/LearnedPolicyV1';
 import { mulberry32 } from '../src/bot/v2/rng';
 import {
     bestSlotFor, buildDecisionContext, chooseJokerPick, chooseLossReward, chooseTalentAction,
@@ -607,6 +610,38 @@ describe('nextDraftAction convergence', () => {
             while (action.type !== 'end_draft' && steps < 40) {
                 obs = apply(obs, action);
                 action = nextDraftAction(buildDecisionContext(obs, archetype));
+                steps++;
+            }
+            if (action.type !== 'end_draft') stuck.push(`seed ${seed}: still doing ${action.type} after ${steps} steps`);
+        }
+        expect(stuck).toEqual([]);
+    });
+
+    it('converges with the learned valuer (learned-v1 on a toy model)', () => {
+        const model = FightModel.load(pathJoin(__dirname, 'fixtures', 'fightModelToy.json'));
+        const stuck: string[] = [];
+        for (let seed = 0; seed < 60; seed++) {
+            const base = randomObservation(seed);
+            const opponent = (s: number) => ({
+                avatarClass: (['rogue', 'warrior', 'merchant'] as const)[s % 3], level: base.player.level,
+                stats: { ...base.player.stats, strength: 10 + s * 3, defense: s * 4, maxHp: 300 + s * 40 },
+                equipped: { mainHand: makeWeapon({ uid: 9000 + s, itemId: 9000 + s }) }, talents: [] as TalentView[],
+            });
+            let obs: DraftObservation = {
+                ...base,
+                nextEnemyRevealLevel: 100,
+                nextEnemyBuild: opponent(seed),
+                referenceOpponents: [1, 2, 3, 4].map((k) => opponent(seed + k)),
+            };
+            const policy = new LearnedPolicyV1({ seed, model });
+            const valuer = (policy as any).makeValuer(obs);
+            expect(valuer).toBeDefined();
+            const archetype = rollArchetype(seed);
+            let steps = 0;
+            let action = nextDraftAction(buildDecisionContext(obs, archetype, undefined, undefined, valuer));
+            while (action.type !== 'end_draft' && steps < 40) {
+                obs = apply(obs, action);
+                action = nextDraftAction(buildDecisionContext(obs, archetype, undefined, undefined, valuer));
                 steps++;
             }
             if (action.type !== 'end_draft') stuck.push(`seed ${seed}: still doing ${action.type} after ${steps} steps`);

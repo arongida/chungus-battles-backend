@@ -10,6 +10,7 @@ import { Dispatcher } from '@colyseus/command';
 import { ReplayRecorder } from '../replay/ReplayRecorder';
 import { StatsSyncRecorder } from '../replay/StatsSyncRecorder';
 import { saveReplay } from '../replay/db/Replay';
+import { fightSampleFromInitialState, saveFightSample } from '../ml/db/FightSample';
 import { appendGhostEncounterEmote, saveGhostEncounter } from '../social/db/GhostEncounter';
 import { getOwnerProfileJson } from '../social/badges';
 import { randomUUID } from 'crypto';
@@ -1160,6 +1161,15 @@ export class FightRoom extends BaseRoom {
                 stats: this.fightStatsPayload ?? undefined,
                 kind: this.replayKind,
             }).catch(err => console.error('[FightRoom] replay save failed:', err));
+            // Training data for the bot's fight-outcome model — kept after the replay is pruned.
+            saveFightSample(fightSampleFromInitialState(this.recorder.initialState, {
+                replayId: this.replayId,
+                kind: this.replayKind,
+                result: this.state.fightResult,
+                durationMs: this.recorder.durationMs(),
+                gameVersion: GAME_VERSION,
+                round: this.state.player.round,
+            })).catch(err => console.error('[FightRoom] fight sample save failed:', err));
         }
         this.recordGhostEncounter();
     }

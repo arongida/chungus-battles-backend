@@ -114,6 +114,9 @@ const BotRunSchema = new Schema({
     seed: Number,
     // Identifies the tunable set, so a tuning pass is separable without bumping policyVersion.
     policyConfigHash: String,
+    // Which trained fight model played the run (learned-* policies only): the policy id/version
+    // stays the same across retrains, so this is what tells two models' batches apart.
+    modelId: String,
     startedAt: { type: Date, default: Date.now },
     finishedAt: Date,
     gameVersion: Number,
@@ -166,6 +169,7 @@ export interface CreateBotRunInput {
     avatarUrl: string;
     archetypeId?: string;
     seed?: number;
+    modelId?: string;
 }
 
 export async function createBotRunDoc(data: CreateBotRunInput): Promise<void> {

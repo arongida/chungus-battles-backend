@@ -12,6 +12,10 @@ import { waitFor } from './helpers/waitFor';
 import { isKnownPolicyId, listPolicyIds, resolvePolicy, runBotOnce } from '../src/bot/BotRunner';
 import { HeuristicPolicyV2 } from '../src/bot/v2/HeuristicPolicyV2';
 import { botRunModel } from '../src/bot/db/BotRun';
+import { fightSampleModel } from '../src/ml/db/FightSample';
+import { FightModel } from '../src/bot/ml/fightModel';
+import { LearnedPolicyV1 } from '../src/bot/learned/LearnedPolicyV1';
+import { join as pathJoin } from 'path';
 
 // Same safe speed cap TournamentRunner.DEFAULT_TIME_SCALE / room.test.ts's TEST_FIGHT_TIME_SCALE
 // use — see either's comment for why 8x is the ceiling on a shared-CPU fly.io machine.
@@ -35,11 +39,15 @@ describe('bot module (headless rooms + BotRunner, driven directly against a live
         // Best-effort cleanup of anything this suite created — matches the cleanup style of
         // room.test.ts/tournament.test.ts's throwaway characters.
         await playerModel.deleteMany({ name: /^TESTBOT/ }).catch(() => {});
+        const testReplayIds: string[] = await replayModel.distinct('replayId', { playerName: /^TESTBOT/, kind: 'bot' }).catch(() => [] as string[]);
+        await fightSampleModel.deleteMany({ replayId: { $in: testReplayIds } }).catch(() => {});
         await replayModel.deleteMany({ playerName: /^TESTBOT/, kind: 'bot' }).catch(() => {});
         await botRunModel.deleteMany({ runId: { $in: runIds } }).catch(() => {});
         const runnerCreatedIds: number[] = await botRunModel.distinct('originalPlayerId', { runId: { $in: runIds } }).catch(() => [] as number[]);
         if (runnerCreatedIds.length) {
             await playerModel.deleteMany({ originalPlayerId: { $in: runnerCreatedIds } }).catch(() => {});
+            const runnerReplayIds: string[] = await replayModel.distinct('replayId', { originalPlayerId: { $in: runnerCreatedIds } }).catch(() => [] as string[]);
+            await fightSampleModel.deleteMany({ replayId: { $in: runnerReplayIds } }).catch(() => {});
             await replayModel.deleteMany({ originalPlayerId: { $in: runnerCreatedIds } }).catch(() => {});
         }
         mongoose.disconnect();
@@ -152,6 +160,18 @@ describe('bot module (headless rooms + BotRunner, driven directly against a live
             expect(replay).not.toBeNull();
             expect(replay!.kind).toBe('bot');
             expect((replay as any).events?.length ?? 0).toBeGreaterThan(0);
+
+            // The fight also left a durable training sample, written fire-and-forget beside the replay.
+            await waitFor(async () => !!(await fightSampleModel.exists({ replayId: outcome.replayId })),
+                { timeout: 5000, interval: 100, message: 'fight sample to be written' });
+            const sample = await fightSampleModel.findOne({ replayId: outcome.replayId }).lean() as any;
+            expect(sample.kind).toBe('bot');
+            expect(sample.result).toBe(outcome.result);
+            expect(sample.aOriginalPlayerId).toBe(playerId);
+            expect(sample.a.avatarClass).toBe('warrior');
+            expect(sample.a.stats.maxHp).toBeGreaterThan(0);
+            expect(sample.a.equipped.length).toBeGreaterThan(0);
+            expect(sample.b.stats.maxHp).toBeGreaterThan(0);
         }, 30000);
     });
 
@@ -212,6 +232,31 @@ describe('bot module (headless rooms + BotRunner, driven directly against a live
             const rejected = decisions.filter((d: any) => d.rejected);
             const rejectedRate = rejected.length / decisions.length;
             expect(rejectedRate).toBeLessThan(0.05);
+        }, 120000);
+
+        it('plays 3 rounds under learned-v1 (toy model), valuing boards against sampled same-round opponents', async () => {
+            const model = FightModel.load(pathJoin(__dirname, 'fixtures', 'fightModelToy.json'));
+            const policy = new LearnedPolicyV1({ seed: 20260926, model });
+            const seen: number[] = [];
+            const decide = policy.decideDraft.bind(policy);
+            policy.decideDraft = async (obs) => { seen.push(obs.referenceOpponents?.length ?? -1); return decide(obs); };
+
+            const result = await runBotOnce({ policy, maxRounds: 3, timeScale: TEST_FIGHT_TIME_SCALE });
+            runIds.push(result.runId);
+            expect(result.outcome).toBe('aborted');
+            expect(result.finalRound).toBe(4);
+
+            const runDoc = await botRunModel.findOne({ runId: result.runId }).lean();
+            expect(runDoc!.policyId).toBe('learned-v1');
+            // The run records exactly which trained model played it.
+            expect((runDoc as any).modelId).toBe(model.id);
+            expect(model.id).toMatch(/^fight-v\d+@.+#[0-9a-f]+$/);
+            // The runner attached a same-round opponent sample to every observation.
+            expect(seen.length).toBeGreaterThan(0);
+            expect(seen.every((n) => n >= 0)).toBe(true);
+            const decisions = (runDoc!.rounds as any[]).flatMap((r) => r.decisions ?? []);
+            expect(decisions.length).toBeGreaterThan(0);
+            expect(decisions.filter((d: any) => d.rejected).length / decisions.length).toBeLessThan(0.05);
         }, 120000);
 
         it('a real client can still join draft_room normally while a bot run is in progress', async () => {

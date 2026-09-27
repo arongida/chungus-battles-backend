@@ -172,12 +172,18 @@ function buildEnemyPreviewView(nextEnemy: Player, revealLevel: number): EnemyPre
  *  (EnemyPreview.buildEnemyPreview), so this is exactly what a human sees in the scouting panel. */
 function buildEnemyBuildView(nextEnemy: Player, revealLevel: number): EnemyBuildView | null {
     if (revealLevel < EnemyRevealLevel.FULL || !nextEnemy?.name) return null;
+    return buildEnemyBuildViewFromPlayer(nextEnemy);
+}
+
+/** The combat build of any (stat-recalculated) Player — the scouted enemy, or a reference opponent
+ *  loaded from the snapshot pool. */
+export function buildEnemyBuildViewFromPlayer(player: Player): EnemyBuildView {
     return {
-        avatarClass: avatarToClass(nextEnemy.avatarUrl),
-        level: nextEnemy.level,
-        stats: statBlockOf(nextEnemy),
-        equipped: buildEquippedView(nextEnemy.equippedItems),
-        talents: nextEnemy.talents.map(buildTalentView),
+        avatarClass: avatarToClass(player.avatarUrl),
+        level: player.level,
+        stats: statBlockOf(player),
+        equipped: buildEquippedView(player.equippedItems),
+        talents: player.talents.map(buildTalentView),
     };
 }
 

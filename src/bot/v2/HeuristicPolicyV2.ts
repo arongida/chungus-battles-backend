@@ -36,6 +36,7 @@ import {
 } from './economy';
 import { ArchetypeId, ArchetypeWeights, rollClassAndArchetype } from './archetypes';
 import { ScalingNodeId } from '../../common/scalingGraph';
+import { boardFromView, CombatBoard } from '../../ml/board';
 import { TalentType } from '../../talents/types/TalentTypes';
 
 // --- tunables ---------------------------------------------------------------------------------
@@ -91,7 +92,21 @@ export interface DecisionContext {
     combatWeight: number;
     remainingFights: number;
     onUnknown?: (id: number) => void;
+    /**
+     * Optional learned board valuer (src/bot/learned/). When set, every board's `power` is the
+     * valuer's score instead of the hand-made combat model's, so all board comparisons run on the
+     * learned prediction. Undefined for heuristic-v2, which stays exactly as it was.
+     */
+    valuer?: BoardValuer;
+    /** Exchange rate from heuristic power to valuer units, measured on this board — prices the few
+     *  heuristic-only terms (potion effects, scaling-synergy bonuses) in the valuer's unit. 1 when
+     *  there is no valuer. */
+    powerToValue: number;
 }
+
+/** Scores a complete board. Must depend only on the board (plus fixed per-observation context
+ *  such as the opponent set), never on which decision is being scored. */
+export type BoardValuer = (board: CombatBoard) => number;
 
 /** Guards against a silent NaN: with strictNullChecks off, one undefined field turns a score into
  *  NaN, every comparison against it is false, and the bot quietly degrades to "always take the
@@ -105,7 +120,7 @@ function assertFinite(n: number, label: string): number {
  *  decisions (potions). */
 export function buildDecisionContext(
     obs: DraftObservation, archetype: ArchetypeWeights, onUnknown?: (id: number) => void,
-    scoutWeight?: number,
+    scoutWeight?: number, valuer?: BoardValuer,
 ): DecisionContext {
     const power = buildPowerContext(obs, scoutWeight);
     const activation = buildActivationContext(obs, power);
@@ -120,7 +135,10 @@ export function buildDecisionContext(
         combatWeight: urgency.combatWeight,
         remainingFights: remainingFights(obs.player),
         onUnknown,
+        valuer,
+        powerToValue: 1,
     };
+    if (valuer) partial.powerToValue = measurePowerToValue(partial);
     // The rate is derived from combat-only values, which must therefore be computed without it —
     // that is what keeps this from being circular.
     partial.rate = goldToPowerRate(
@@ -139,7 +157,40 @@ export function isPotion(item: ItemView): boolean {
     return item.equipOptions.includes('drink');
 }
 
-type BoardValue = ReturnType<typeof evaluateLoadout>;
+type BoardValue = ReturnType<typeof evaluateLoadout> & { heuristicPower: number };
+
+/** evaluateLoadout, with the board's power replaced by the learned valuer's score when one is set.
+ *  The heuristic power is kept alongside for the power->value exchange rate. */
+function evaluateBoard(
+    ctx: DecisionContext, equipped: DraftObservation['player']['equipped'], talents?: TalentView[],
+    extraStats?: Partial<StatBlock>,
+): BoardValue {
+    const result = evaluateLoadout(ctx.obs, equipped, ctx.archetype, talents, ctx.onUnknown, extraStats);
+    if (!ctx.valuer) return { ...result, heuristicPower: result.power };
+    const board = boardFromView({
+        avatarClass: ctx.obs.player.avatarClass, level: ctx.obs.player.level,
+        stats: result.stats, equipped, talents: talents ?? ctx.obs.player.talents,
+    });
+    return { ...result, heuristicPower: result.power, power: ctx.valuer(board) };
+}
+
+/** A balanced nudge used to read off how many valuer units one unit of heuristic power is worth
+ *  around the current board. */
+function exchangeProbe(stats: StatBlock): Partial<StatBlock> {
+    return {
+        strength: Math.max(2, stats.strength * 0.1),
+        maxHp: Math.max(20, stats.maxHp * 0.1),
+        defense: Math.max(2, stats.defense * 0.1),
+    };
+}
+
+function measurePowerToValue(ctx: DecisionContext): number {
+    const base = boardFor(ctx);
+    const probed = evaluateBoard(ctx, ctx.obs.player.equipped, undefined, exchangeProbe(base.stats));
+    const dHeuristic = probed.heuristicPower - base.heuristicPower;
+    if (!(dHeuristic > 1e-9)) return 0;
+    return Math.max(0, (probed.power - base.power) / dHeuristic);
+}
 const boardCache = new WeakMap<DecisionContext, Map<ItemView | null | undefined, Map<EquipSlotName | undefined, BoardValue>>>();
 function boardFor(ctx: DecisionContext, item?: ItemView | null, slot?: EquipSlotName): BoardValue {
     let items = boardCache.get(ctx);
@@ -148,7 +199,7 @@ function boardFor(ctx: DecisionContext, item?: ItemView | null, slot?: EquipSlot
     if (!slots) { slots = new Map(); items.set(item, slots); }
     let result = slots.get(slot);
     if (!result) {
-        result = evaluateLoadout(ctx.obs, slot ? { ...ctx.obs.player.equipped, [slot]: item } : ctx.obs.player.equipped, ctx.archetype, undefined, ctx.onUnknown);
+        result = evaluateBoard(ctx, slot ? { ...ctx.obs.player.equipped, [slot]: item } : ctx.obs.player.equipped);
         slots.set(slot, result);
     }
     return result;
@@ -169,7 +220,7 @@ function skillPowerOf(item: ItemView, ctx: DecisionContext): number {
         addStats: [skills.auraStats],
         addDamagePerFight: skills.damagePerFight,
         addEhp: skills.ehpPerFight,
-    });
+    }) * ctx.powerToValue;
 }
 
 /** The observation as it will look once `slot` is emptied into the inventory. Its live stats lose
@@ -198,7 +249,7 @@ function observationWithout(obs: DraftObservation, slot: EquipSlotName): DraftOb
  * states, and a combat-for-gold item could then look worth equipping AND worth removing.
  */
 function removalGainFor(item: ItemView, slot: EquipSlotName, ctx: DecisionContext): number {
-    const off = buildDecisionContext(observationWithout(ctx.obs, slot), ctx.archetype, ctx.onUnknown);
+    const off = buildDecisionContext(observationWithout(ctx.obs, slot), ctx.archetype, ctx.onUnknown, undefined, ctx.valuer);
     return swapGain(-equipGainFor(item, slot, off) * off.combatWeight, -equipEconomyGain(item, slot, off));
 }
 
@@ -260,7 +311,7 @@ export function itemCombatValue(item: ItemView, ctx: DecisionContext): number {
         value = equipGainFor(item, bestTotalSlot(item, ctx), ctx);
     }
 
-    value += itemScalingSynergy(item, ctx.power.stats, ctx.ownedScaling);
+    value += itemScalingSynergy(item, ctx.power.stats, ctx.ownedScaling) * ctx.powerToValue;
     // A skill this item will unlock at a higher rarity is real, but only if it gets there.
     if (!item.skillId && item.futureSkillId) value *= 1 + 0.05 * ctx.archetype.skillPremium;
     if (item.skillId) value *= 1 + 0.05 * (ctx.archetype.skillPremium - 1);
@@ -328,15 +379,15 @@ export function talentValue(talent: TalentView, ctx: DecisionContext): number | 
 
     const others = ctx.obs.player.talents.filter(t => t.talentId !== talent.talentId);
     const before = others.length === ctx.obs.player.talents.length ? boardFor(ctx)
-        : evaluateLoadout(ctx.obs, ctx.obs.player.equipped, ctx.archetype, others, ctx.onUnknown);
+        : evaluateBoard(ctx, ctx.obs.player.equipped, others);
     // Permanent accrual is folded into the evaluated board rather than priced on its own, so it
     // interacts with the rest of the build: lost income drains income scalers and eases Comrade's
     // tax, stolen strength feeds strength scalers.
-    const after = evaluateLoadout(ctx.obs, ctx.obs.player.equipped, ctx.archetype,
-        [...others, talent], ctx.onUnknown, accruedStats(behavior.statsPerFight, ctx.remainingFights));
+    const after = evaluateBoard(ctx, ctx.obs.player.equipped, [...others, talent],
+        accruedStats(behavior.statsPerFight, ctx.remainingFights));
     let value = after.power - before.power;
 
-    value += talentScalingSynergy(talent, ctx.power.stats, ctx.ownedScaling);
+    value += talentScalingSynergy(talent, ctx.power.stats, ctx.ownedScaling) * ctx.powerToValue;
 
     const gold = ((after.goldPerRound - before.goldPerRound + after.income - before.income) * ctx.remainingFights + behavior.goldOnce) * ctx.rate;
     const xp = behavior.xpPerRound * ctx.remainingFights * ctx.rate * 0.5;
@@ -378,7 +429,7 @@ export function chooseJokerPick(ctx: DecisionContext): BotAction | null {
     // v1 took the biggest number regardless of which stat it was; score them through the model.
     const scored = cards.map((card) => ({
         card,
-        value: marginalPower(ctx.power, { addStats: [{ [card.stat]: card.amount } as Partial<StatBlock>] }),
+        value: statGrantValue(ctx, { [card.stat]: card.amount } as Partial<StatBlock>),
     }));
     const best = [...scored].sort((a, b) => b.value - a.value)[0];
     return { type: 'joker_pick', stat: best.card.stat, reason: `power=${best.value.toFixed(2)}` };
@@ -445,11 +496,18 @@ export function scoreLevelUp(ctx: DecisionContext): ScoredAction | null {
     return { action: { type: 'level_up', reason: `cost=${cost}` }, score };
 }
 
+/** What a permanent stat grant adds to the current board — through the learned valuer when one is
+ *  set (so it shares the unit of every other score), the combat model otherwise. */
+function statGrantValue(ctx: DecisionContext, grant: Partial<StatBlock>): number {
+    if (!ctx.valuer) return marginalPower(ctx.power, { addStats: [grant] });
+    return evaluateBoard(ctx, ctx.obs.player.equipped, undefined, grant).power - boardFor(ctx).power;
+}
+
 /** Power (plus income, via the economy rate) of the avatar class's per-level stat grant. */
 export function classLevelUpPower(ctx: DecisionContext): number {
     const grant = ctx.ownClass ? CLASS_LEVEL_UP_STATS[ctx.ownClass] : undefined;
     if (!grant) return 0;
-    const combat = marginalPower(ctx.power, { addStats: [grant] }) * ctx.combatWeight;
+    const combat = statGrantValue(ctx, grant) * ctx.combatWeight;
     const income = (grant.income ?? 0) * ctx.remainingFights * ctx.rate * ctx.economyWeight;
     return combat + income;
 }
@@ -495,7 +553,7 @@ export function scoreDrink(ctx: DecisionContext): ScoredAction | null {
     if (potions.length === 0) return null;
     // A potion lasts one fight, so it is scored against the scouted enemy alone.
     const fightCtx = ctx.obs.nextEnemyBuild
-        ? buildDecisionContext(ctx.obs, ctx.archetype, ctx.onUnknown, 1)
+        ? buildDecisionContext(ctx.obs, ctx.archetype, ctx.onUnknown, 1, ctx.valuer)
         : ctx;
     const best = potions
         .map((item) => ({ item, value: itemCombatValue(item, fightCtx) }))
@@ -600,13 +658,13 @@ export interface HeuristicPolicyV2Options {
 }
 
 export class HeuristicPolicyV2 implements BotPolicy {
-    readonly id = 'heuristic-v2';
-    readonly version = '2.1.0';
+    readonly id: string = 'heuristic-v2';
+    readonly version: string = '2.1.0';
     readonly archetypeId: ArchetypeId;
     readonly avatarClass: BotClass;
     readonly seed: number;
 
-    private readonly archetype: ArchetypeWeights;
+    protected readonly archetype: ArchetypeWeights;
     private readonly unknownHintIds = new Set<number>();
 
     constructor(opts: HeuristicPolicyV2Options = {}) {
@@ -620,8 +678,14 @@ export class HeuristicPolicyV2 implements BotPolicy {
     }
 
     async decideDraft(obs: DraftObservation): Promise<BotAction[]> {
-        const ctx = buildDecisionContext(obs, this.archetype, (id) => this.unknownHintIds.add(id));
+        const ctx = buildDecisionContext(obs, this.archetype, (id) => this.unknownHintIds.add(id), undefined, this.makeValuer(obs));
         return [nextDraftAction(ctx)];
+    }
+
+    /** heuristic-v2 scores boards with the hand-made combat model; a subclass can swap in a
+     *  learned valuer here (see src/bot/learned/LearnedPolicyV1.ts). */
+    protected makeValuer(_obs: DraftObservation): BoardValuer | undefined {
+        return undefined;
     }
 
     async decideLossReward(obs: LossRewardObservation): Promise<LossRewardChoice> {

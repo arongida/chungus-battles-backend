@@ -16,7 +16,7 @@
  *    calls instead of one per decision.
  */
 
-export const OBSERVATION_SCHEMA_VERSION = 3 as const;
+export const OBSERVATION_SCHEMA_VERSION = 4 as const;
 
 /** A character's class is its avatar (THIEF/WARRIOR/MERCHANT), named here by the matching
  *  item/talent class tag. */
@@ -198,6 +198,9 @@ export interface DraftObservation {
     nextEnemyItemClasses: string[];
     /** Set only at a FULL reveal (nextEnemyRevealLevel >= 100). */
     nextEnemyBuild?: EnemyBuildView | null;
+    /** A sample of stored same-round builds — the field the bot will meet in later fights, not just
+     *  the next one. Filled only for a policy that asks for it (BotPolicy.referenceOpponentCount). */
+    referenceOpponents?: EnemyBuildView[];
     jokerPendingCards?: JokerPendingCard[];
 }
 
@@ -265,6 +268,12 @@ export interface BotPolicy {
     readonly seed?: number;
     /** Set only by a policy that plays a specific class — the runner creates the character with it. */
     readonly avatarClass?: BotClass;
+    /** How many same-round opponent builds the runner should put on each draft observation
+     *  (`referenceOpponents`). Omitted = none, and no extra database read. */
+    readonly referenceOpponentCount?: number;
+    /** Set only by a policy driven by a trained model: identifies the exact model file, since the
+     *  policy id/version stays the same across retrains. Recorded on the BotRun doc. */
+    readonly modelId?: string;
 
     /**
      * Plans the next chunk of the CURRENT draft phase as an ordered batch. The driver applies
