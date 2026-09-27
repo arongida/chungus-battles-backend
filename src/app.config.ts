@@ -60,7 +60,7 @@ import { BotDraftRoom } from './bot/BotDraftRoom';
 import { BotFightRoom } from './bot/BotFightRoom';
 import { executeTournament, isTournamentRunning, prepareTournament } from './tournament/TournamentRunner';
 import {
-  DEFAULT_POLICY_ID, executeBotBatch, getBotBatchStatus, isBotBatchRunning, isKnownPolicyId,
+  DEFAULT_POLICY_ID, executeBotBatch, getBotBatchStatus, isBotBatchRunning, isKnownPolicyId, resolvePolicy,
   listPolicyIds, stopBotBatch,
 } from './bot/BotRunner';
 import { ARCHETYPE_IDS, ArchetypeId, isArchetypeId } from './bot/v2/archetypes';
@@ -448,6 +448,13 @@ export const server = defineServer({
             }
             if (archetypeId !== undefined && !isArchetypeId(archetypeId)) {
                 return res.status(400).send({ error: `unknown archetypeId '${archetypeId}'`, known: ARCHETYPE_IDS });
+            }
+            // A known policy can still be unconstructible (learned-v1 without a committed model for
+            // this GAME_VERSION) — fail the request rather than 202 and a batch that dies at once.
+            try {
+                resolvePolicy(policyId, { seed: 0, archetypeId: archetypeId as ArchetypeId });
+            } catch (err) {
+                return res.status(400).send({ error: (err as Error).message });
             }
 
             const batchId = randomUUID();

@@ -5,12 +5,15 @@ import { BotFightRoom } from './BotFightRoom';
 import { BotPolicy, BotAction, DraftObservation } from './BotPolicy';
 import { HeuristicPolicy } from './HeuristicPolicy';
 import { HeuristicPolicyV2 } from './v2/HeuristicPolicyV2';
+import { LearnedPolicyV1 } from './learned/LearnedPolicyV1';
 import { ArchetypeId } from './v2/archetypes';
 import { hashSeed } from './v2/rng';
-import { buildDraftObservation } from './observation';
+import { buildDraftObservation, buildEnemyBuildViewFromPlayer } from './observation';
+import { EnemyBuildView } from './BotPolicy';
+import { recalculatePlayerStats } from '../common/statsUtils';
 import { createHeadlessClient } from '../tournament/HeadlessClient';
 import { mintBotIdentity } from './botIdentity';
-import { getPlayer } from '../players/db/Player';
+import { getPlayer, sampleSameRoundPlayers } from '../players/db/Player';
 import { GAME_VERSION, WINS_TO_WIN } from '../common/types';
 import {
     BotDecisionRecord, BotFightRecord, BotRoundRecord, BotRunEquippedSummary,
@@ -104,9 +107,10 @@ function actionTargetFields(action: BotAction): Pick<BotDecisionRecord, 'itemId'
 async function runDraftPhase(
     policy: BotPolicy, room: BotDraftRoom, client: Client, runId: string, roundRecord: BotRoundRecord,
 ): Promise<void> {
+    const referenceOpponents = await fetchReferenceOpponents(policy, room);
     let step = 0;
     while (step < MAX_DRAFT_STEPS_PER_ROUND) {
-        const obs: DraftObservation = buildDraftObservation(room.state, runId, step);
+        const obs: DraftObservation = { ...buildDraftObservation(room.state, runId, step), referenceOpponents };
         const batch = await policy.decideDraft(obs);
         if (batch.length === 0) return;
 
@@ -123,6 +127,19 @@ async function runDraftPhase(
             if (rejected || step >= MAX_DRAFT_STEPS_PER_ROUND) break; // re-observe fresh at the top of the while loop
         }
     }
+}
+
+/** Once per round, only for a policy that asks (see BotPolicy.referenceOpponentCount): a sample of
+ *  stored same-round builds, stat-recalculated the way a fight room would see them. */
+async function fetchReferenceOpponents(policy: BotPolicy, room: BotDraftRoom): Promise<EnemyBuildView[] | undefined> {
+    if (!policy.referenceOpponentCount) return undefined;
+    const me = room.state.player;
+    const players = await sampleSameRoundPlayers(me.round, GAME_VERSION, me.originalPlayerId, policy.referenceOpponentCount)
+        .catch((err): Awaited<ReturnType<typeof sampleSameRoundPlayers>> => { console.error('[BotRunner] reference opponent sample failed:', err); return []; });
+    return players.map((p) => {
+        recalculatePlayerStats(p);
+        return buildEnemyBuildViewFromPlayer(p);
+    });
 }
 
 interface FightPhaseResult {
@@ -265,6 +282,9 @@ export const DEFAULT_POLICY_ID = 'heuristic-v1';
 const POLICY_FACTORIES: Record<string, (opts: PolicyResolveOptions) => BotPolicy> = {
     'heuristic-v1': () => new HeuristicPolicy(),
     'heuristic-v2': (opts) => new HeuristicPolicyV2({ seed: opts.seed, archetypeId: opts.archetypeId }),
+    // Requires a committed model at src/bot/ml/models/fight-v<GAME_VERSION>.json; throws otherwise,
+    // which /admin/bots surfaces before starting a batch.
+    'learned-v1': (opts) => new LearnedPolicyV1({ seed: opts.seed, archetypeId: opts.archetypeId }),
 };
 
 export function listPolicyIds(): string[] {

@@ -988,6 +988,20 @@ export function pickVariedOpponent(candidates: OpponentCandidate[], recentIds: n
     return leastRecentOriginalId !== null ? byOriginal.get(leastRecentOriginalId) : null;
 }
 
+/** A random sample of stored matchmaking snapshots at `round` for `gameVersion` — the field a
+ *  character at that round can be drawn against. Used by the learned bot policy to value a build
+ *  against more than just its next opponent. $sample over a $match on a small pool, so it stays
+ *  well inside the shared-tier in-memory sort limit. */
+export async function sampleSameRoundPlayers(
+    round: number, gameVersion: number, excludeOriginalPlayerId: number, size: number,
+): Promise<Player[]> {
+    const docs = await playerModel.aggregate([
+        { $match: { round, gameVersion, originalPlayerId: { $ne: excludeOriginalPlayerId } } },
+        { $sample: { size } },
+    ]);
+    return docs.map((doc) => getPlayerSchemaObject(doc));
+}
+
 export async function getSameRoundPlayer(round: number, playerId: number, recentOpponentIds: number[] = []): Promise<Player> {
     if (round < 1) {
         const defaultPlayerClone = await playerModel

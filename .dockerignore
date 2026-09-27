@@ -19,3 +19,6 @@ build
 .claude
 *.log
 .DS_Store
+
+# Python ML workspace (training only, never needed at runtime)
+ml

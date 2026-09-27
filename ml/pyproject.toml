@@ -1,0 +1,18 @@
+[project]
+name = "chungus-ml"
+version = "0.1.0"
+description = "Fight-outcome model for the Chungus Battles bot (learning project)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pandas>=2.2",
+    "pyarrow>=17",
+    "lightgbm>=4.5",
+    "scikit-learn>=1.5",
+    "matplotlib>=3.9",
+    "jupyterlab>=4.2",
+    "pymongo>=4.18.2",
+    "python-dotenv>=1.2.3",
+]
+
+[tool.uv]
+package = false
