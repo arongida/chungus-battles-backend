@@ -19,6 +19,7 @@ cd ml && uv sync         # creates .venv with Python 3.12 + pandas/lightgbm/skle
 |---|---|---|
 | Export real fights | `npx tsx scripts/ml/exportFightDataset.ts --db prod` | `ml/data/fights-v27.csv`, `feature_spec.json` |
 | Farm matchups | `npx tsx scripts/ml/fightFarm.ts --db prod --matchups 6000 --concurrency 24` | appends to `ml/data/farm-v27.csv` |
+| Re-featurize the farm (after a feature change) | `npx tsx scripts/ml/refeaturizeFarm.ts` | rebuilds `farm-v27.csv` from `farm-v27-boards.jsonl` |
 | Notebooks | `cd ml && uv run jupyter lab` | a trained model, e.g. `ml/models/fight.txt` |
 | Export model | `cd ml && uv run python export_model.py models/fight.txt data/fights-v27.csv --out ../src/bot/ml/models/fight-v27.json --parity ../test/fixtures/fightModelParity-v27.json` | model JSON + parity fixture |
 | Check parity | `npx jest test/fightModel.test.ts` | TypeScript == Python predictions |

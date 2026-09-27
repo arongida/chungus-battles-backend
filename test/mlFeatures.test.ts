@@ -1,5 +1,6 @@
 import { boardFromView } from '../src/ml/board';
-import { FEATURE_NAMES, FEATURE_SPEC_HASH, featurize, SKILL_VOCAB, TALENT_VOCAB } from '../src/ml/features';
+import { FEATURE_NAMES, FEATURE_SPEC_HASH, featurize, SKILL_VOCAB, TALENT_VOCAB, UNIQUE_ITEM_VOCAB } from '../src/ml/features';
+import { ItemBehaviors } from '../src/items/behavior/ItemBehaviors';
 import { TalentType } from '../src/talents/types/TalentTypes';
 import { ItemSkillType } from '../src/items/types/ItemSkillTypes';
 import { makeItem, makePlayer, makeTalent, makeWeapon } from './helpers/botFixtures';
@@ -45,6 +46,14 @@ describe('featurize', () => {
             else if (name.startsWith('diff_') || name.startsWith('log_')) expect(ba[i]).toBeCloseTo(-ab[i], 9);
             else if (name === 'round') expect(ba[i]).toBe(ab[i]);
         });
+    });
+
+    it('has one unique-item column per ItemBehaviors entry, rarity-weighted', () => {
+        const behaviorIds = Object.keys(ItemBehaviors).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+        expect([...UNIQUE_ITEM_VOCAB].sort((a, b) => a - b)).toEqual(behaviorIds);
+        const withDagger = boardFromView(makePlayer({ equipped: { mainHand: makeWeapon({ uid: 7, itemId: 18, rarity: 3 }) } }));
+        expect(featurize(withDagger, rogue, 5)[idx('a_u_18')]).toBe(3);
+        expect(featurize(withDagger, rogue, 5)[idx('b_u_18')]).toBe(0);
     });
 
     it('has a stable spec hash', () => {

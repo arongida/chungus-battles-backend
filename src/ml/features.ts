@@ -15,6 +15,10 @@
  *               learn to trust or ignore
  *   talents     multi-hot over the offerable talents
  *   skills      item skills, weighted by the carrying item's rarity
+ *   uniques     unique items whose special effect is code (ItemBehaviors.ts), not stats or a skill —
+ *               Haste of Dagger's dodge counter, Dagger of Poison's stacks. Rarity-weighted, since
+ *               their effects scale with rarity. Added in spec v1.1: without them the model could
+ *               only guess these items from their stat side effects.
  * plus shared: round, A−B stat differences, and log ratios of kill time and heuristic power.
  */
 import { StatBlock } from '../bot/BotPolicy';
@@ -37,6 +41,11 @@ export const SKILL_VOCAB: number[] = Object.values(ItemSkillType)
     .filter((v): v is number => typeof v === 'number')
     .sort((a, b) => a - b);
 
+/** Items with a bespoke behavior in src/items/behavior/ItemBehaviors.ts, keyed by itemId. Kept as a
+ *  literal here because that module pulls in database code; test/mlFeatures.test.ts fails if the
+ *  two ever disagree (a new unique item needs a column, then a retrain). */
+export const UNIQUE_ITEM_VOCAB: number[] = [4, 7, 8, 14, 18, 19, 27, 47, 59, 82, 702, 703];
+
 /** Nominal fight length for effective HP (regen needs a duration). */
 const EHP_FIGHT_SECONDS = 20;
 /** Kill times are capped so a no-damage side doesn't produce Infinity. */
@@ -53,6 +62,7 @@ function sideFeatureNames(p: 'a' | 'b'): string[] {
         `${p}_heur_power`,
         ...TALENT_VOCAB.map((id) => `${p}_t_${id}`),
         ...SKILL_VOCAB.map((id) => `${p}_s_${id}`),
+        ...UNIQUE_ITEM_VOCAB.map((id) => `${p}_u_${id}`),
     ];
 }
 
@@ -138,6 +148,12 @@ function sideFeatures(board: CombatBoard, self: SideSummary, opp: SideSummary): 
         }
     }
     for (const id of SKILL_VOCAB) out.push(skillRarity.get(id) ?? 0);
+
+    const uniqueRarity = new Map<number, number>();
+    for (const item of board.equipped) {
+        uniqueRarity.set(item.itemId, (uniqueRarity.get(item.itemId) ?? 0) + item.rarity);
+    }
+    for (const id of UNIQUE_ITEM_VOCAB) out.push(uniqueRarity.get(id) ?? 0);
     return out;
 }
 

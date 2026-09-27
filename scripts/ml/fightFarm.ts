@@ -5,6 +5,11 @@
 //   npx tsx scripts/ml/fightFarm.ts --db prod --matchups 200 [--repeats 4] [--concurrency 4]
 //        [--timeScale 8] [--gameVersion 27] [--seed 1]
 //
+// Output: ml/data/farm-v<ver>.csv (features, ready for the notebooks) AND
+// ml/data/farm-v<ver>-boards.jsonl (the two raw builds + result per matchup). The boards file is
+// the durable record: after a feature change, `scripts/ml/refeaturizeFarm.ts` rebuilds the CSV
+// from it in seconds, no re-farming needed.
+//
 // Why repeat each matchup: one fight is a noisy coin flip. Four fights (two with each side as the
 // room's "player", which cancels the small player/enemy asymmetry) give a soft label — the share
 // A won — which carries far more information per matchup than a single 0/1.
@@ -14,19 +19,18 @@
 // tournament fight room (it never touches `players`, never saves replays), and connects with
 // autoIndex/autoCreate off so a read-only run can't create indexes or collections either.
 import mongoose from 'mongoose';
+import * as fs from 'fs';
 import * as path from 'path';
 import { defineRoom, defineServer, matchMaker } from 'colyseus';
-import { arg, loadDbEnv, numArg, CsvWriter, ML_DATA_DIR, writeFeatureSpec } from './common';
+import { arg, loadDbEnv, numArg, CsvWriter, FARM_META, ML_DATA_DIR, writeFeatureSpec } from './common';
 import { TournamentFightRoom } from '../../src/tournament/TournamentFightRoom';
 import { getPlayerSchemaObject, playerModel, snapshotPlayer } from '../../src/players/db/Player';
 import { recalculatePlayerStats } from '../../src/common/statsUtils';
-import { boardFromSnapshot } from '../../src/ml/board';
+import { boardFromSnapshot, CombatBoard } from '../../src/ml/board';
 import { featurize } from '../../src/ml/features';
 import { GAME_VERSION } from '../../src/common/types';
 import { mulberry32 } from '../../src/bot/v2/rng';
 
-const META = ['source', 'kind', 'round', 'gameVersion', 'createdAt', 'aOriginalPlayerId', 'bOriginalPlayerId',
-    'aIsBot', 'bIsBot', 'repeats', 'winsA', 'draws', 'label'];
 /** Human snapshots are drawn this many times more often than bot snapshots — the bot must learn
  *  to beat the builds real players make. */
 const HUMAN_WEIGHT = 3;
@@ -68,6 +72,7 @@ async function main() {
     const seed = numArg('--seed', Date.now() % 1e9);
     const rand = mulberry32(seed);
     const outFile = arg('--out') ?? path.join(ML_DATA_DIR, `farm-v${gameVersion}.csv`);
+    const boardsFile = outFile.replace(/\.csv$/, '-boards.jsonl');
 
     await mongoose.connect(process.env.DB_CONNECTION_STRING!, { autoIndex: false, autoCreate: false });
     const docs = await playerModel.find({ gameVersion, round: { $gte: 2 } }).lean();
@@ -86,7 +91,9 @@ async function main() {
     // Its own port, so a farm can run alongside the dev server (2567) and the Jest suites (2568).
     // (@colyseus/testing's boot() ignores its port argument for a Server instance.)
     await farmServer.listen(numArg('--port', 2590));
-    const out = new CsvWriter(outFile, META, true);
+    const out = new CsvWriter(outFile, FARM_META, true);
+    fs.mkdirSync(path.dirname(boardsFile), { recursive: true });
+    const boardsOut = fs.createWriteStream(boardsFile, { flags: 'a' });
     writeFeatureSpec();
 
     let next = 0;
@@ -110,6 +117,7 @@ async function main() {
             let winsA = 0;
             let draws = 0;
             let features: number[] | null = null;
+            let boards: { a: CombatBoard; b: CombatBoard } | null = null;
             for (let k = 0; k < repeats; k++) {
                 const aIsPlayer = k % 2 === 0;
                 const [p, e] = aIsPlayer ? [a, b] : [b, a];
@@ -121,17 +129,20 @@ async function main() {
                 // live fight would have recorded.
                 if (!features && aIsPlayer && outcome.replay?.initialState) {
                     const init = outcome.replay.initialState;
-                    features = featurize(boardFromSnapshot(init.player), boardFromSnapshot(init.enemy), round);
+                    boards = { a: boardFromSnapshot(init.player), b: boardFromSnapshot(init.enemy) };
+                    features = featurize(boards.a, boards.b, round);
                 }
             }
             if (!features) continue;
             const decided = repeats - draws;
-            out.write({
+            const meta = {
                 source: 'farm', kind: 'farm', round, gameVersion, createdAt: new Date().toISOString(),
                 aOriginalPlayerId: a.originalPlayerId, bOriginalPlayerId: b.originalPlayerId,
                 aIsBot: a.isBot ? 1 : 0, bIsBot: b.isBot ? 1 : 0,
                 repeats, winsA, draws, label: decided > 0 ? winsA / decided : 0.5,
-            }, features);
+            };
+            out.write(meta, features);
+            boardsOut.write(JSON.stringify({ ...meta, ...boards }) + '\n');
             if (out.count % 25 === 0) {
                 const perHour = (fights / ((Date.now() - started) / 3_600_000)).toFixed(0);
                 console.log(`[farm] ${out.count}/${matchups} matchups, ${fights} fights (${perHour} fights/h)`);
@@ -143,6 +154,7 @@ async function main() {
         await Promise.all(Array.from({ length: concurrency }, () => worker()));
     } finally {
         await out.close();
+        await new Promise((resolve) => boardsOut.end(resolve));
         await farmServer.gracefullyShutdown(false).catch(() => {});
         await mongoose.disconnect();
     }

@@ -650,6 +650,26 @@ entirely above zero.
 
 ---
 
+## Retraining after a feature change (e.g. v1.1: unique items)
+
+When `src/ml/features.ts` changes, its spec hash changes and every model trained on the old spec
+refuses to load. Both the Jest parity test and `learned-v1` say *"trained on feature spec X, but
+features.ts is now Y"*. That's the serving contract doing its job. To retrain:
+
+1. `npx tsx scripts/ml/exportFightDataset.ts --db prod` (real fights, new features).
+2. `npx tsx scripts/ml/refeaturizeFarm.ts` (farm, new features, no re-farming), if the farm
+   has a `-boards.jsonl` file. Otherwise re-farm.
+3. **Kernel → Restart Kernel and Run All Cells** in notebooks 2 and 3. Nothing in them has to change:
+   they read the column list from `feature_spec.json`.
+4. Compare with your previous model's numbers. Did the new features help? That comparison is
+   the whole point of adding them.
+
+v1.1 adds 24 columns (`a_u_<itemId>`, `b_u_<itemId>`: the 12 unique items with special effects,
+rarity-weighted), 252 features in total. The v1 data files are kept as `*-v1spec.csv` if you
+want to compare side by side.
+
+---
+
 ## Glossary
 
 - **Feature:** a number describing the input. **Label:** the answer to learn.

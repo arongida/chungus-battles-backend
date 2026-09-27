@@ -2,7 +2,11 @@
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
-import { FEATURE_NAMES, FEATURE_SPEC_HASH, SKILL_VOCAB, TALENT_VOCAB } from '../../src/ml/features';
+import { FEATURE_NAMES, FEATURE_SPEC_HASH, SKILL_VOCAB, TALENT_VOCAB, UNIQUE_ITEM_VOCAB } from '../../src/ml/features';
+
+/** Meta columns of a farm row, before the features (fightFarm.ts, refeaturizeFarm.ts). */
+export const FARM_META = ['source', 'kind', 'round', 'gameVersion', 'createdAt', 'aOriginalPlayerId', 'bOriginalPlayerId',
+    'aIsBot', 'bIsBot', 'repeats', 'winsA', 'draws', 'label'];
 
 export const ML_DATA_DIR = path.resolve(__dirname, '../../ml/data');
 
@@ -58,6 +62,6 @@ export class CsvWriter {
 export function writeFeatureSpec(): string {
     const file = path.join(ML_DATA_DIR, 'feature_spec.json');
     fs.mkdirSync(ML_DATA_DIR, { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ hash: FEATURE_SPEC_HASH, names: FEATURE_NAMES, talentVocab: TALENT_VOCAB, skillVocab: SKILL_VOCAB }, null, 2));
+    fs.writeFileSync(file, JSON.stringify({ hash: FEATURE_SPEC_HASH, names: FEATURE_NAMES, talentVocab: TALENT_VOCAB, skillVocab: SKILL_VOCAB, uniqueItemVocab: UNIQUE_ITEM_VOCAB }, null, 2));
     return file;
 }
